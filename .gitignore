@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.DS_Store
+.env
+*secret*
+*token*
+*.key
+
+# outputs and caches (~630 MB; regenerate with the scripts). Two hand-maintained inputs are versioned.
+figures/*
+!figures/soma_overrides.tsv
+!figures/glia_logistic_model.json
+
+# build / editor artifacts
+*.egg-info/
+build/
+dist/
+.ipynb_checkpoints/
+.venv/

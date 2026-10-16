@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "faab"
+version = "0.1.0"
+description = "Read-only analysis tools for the FAAB (female adult Aedes aegypti brain) connectome: photoreceptor groups, downstream-partner tables, plotting"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "scipy>=1.13",
+    "matplotlib>=3.9",
+    "networkx>=3.3",
+    "navis>=1.11",
+    "caveclient>=8.0",
+    "fafbseg>=3.2",
+    "cloud-volume>=12",
+    "neuprint-python>=0.6",
+]
+
+[project.optional-dependencies]
+flytable = ["seaserpent"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

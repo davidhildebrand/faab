@@ -1,0 +1,21 @@
+{
+ "features": [
+  "pre_per_100um",
+  "vol_per_L1"
+ ],
+ "eps": [
+  0.1,
+  1e-06
+ ],
+ "w": [
+  -7.758980877623323,
+  9.622425402017713
+ ],
+ "c": 6.045585142224619,
+ "rule": "glia if w[0]*log10(density+eps[0]) + w[1]*log10(vol_per_L1+eps[1]) + c > 0",
+ "fitted_on": 207,
+ "loo_acc": 0.9855072463768116,
+ "loo_bal": 0.9742052426101506,
+ "source": "glia_shape_l2.tsv",
+ "date": "2026-09-20"
+}

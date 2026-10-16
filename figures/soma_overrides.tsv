@@ -1,0 +1,6 @@
+root_id_curr	verdict	note	by	date
+648518347765642061	not a soma	candidate 27648, 14498, 2949 inspected: not a soma	David H.	2026-09-22
+648518347519294668	n/a (photoreceptor)	photoreceptors are not expected to have a soma/nucleus inside the imaged volume	David H.	2026-09-22
+648518347576559903	not a soma	candidate 7325, 22435, 4076 is a primary neurite; soma expected near 11196, 13193, 3230	David H.	2026-09-22
+648518347584665894	soma confirmed	soma at candidate 6303, 20061, 5344 (nucleus 6329, 20077, 5362)	David H.	2026-09-22
+648518347624865802	soma confirmed	soma at candidate 8814, 18926, 6046	David H.	2026-09-22
