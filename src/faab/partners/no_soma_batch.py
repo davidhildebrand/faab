@@ -19,7 +19,7 @@ if not hasattr(np, "row_stack"):
     np.row_stack = np.vstack
 import pandas as pd
 import caveclient
-from faab.sources.cave import DATASTACK
+from faab.clients.cave import DATASTACK
 from faab.partners.top10_xyz import VOX
 import faab.nglink as nglink
 

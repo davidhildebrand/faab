@@ -10,7 +10,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from neuprint import NeuronCriteria as NC, fetch_neurons
 from navis.interfaces import neuprint as nvneu
-from faab.sources.neuprint import client as npclient, MALE_CNS
+from faab.clients.neuprint import client as npclient, MALE_CNS
 
 OUT = os.path.join(REPO, "figures")
 CT1 = 648518347700703374

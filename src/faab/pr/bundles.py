@@ -31,7 +31,7 @@ import caveclient
 from cloudvolume import CloudVolume
 from scipy import ndimage
 from scipy.cluster.hierarchy import fcluster, linkage
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import VOX
 import faab.nglink as nglink
 

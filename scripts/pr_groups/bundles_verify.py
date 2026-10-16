@@ -23,7 +23,7 @@ import time
 import numpy as np
 import pandas as pd
 import caveclient
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")

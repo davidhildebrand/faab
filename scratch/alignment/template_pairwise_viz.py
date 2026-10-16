@@ -20,7 +20,7 @@ from navis.transforms.align import align_rigid
 import caveclient
 from fafbseg import flywire
 
-from faab.sources.cave import latest_roots, throttle, DATASTACK
+from faab.clients.cave import latest_roots, throttle, DATASTACK
 
 IDS = [648518347611904256, 648518347550912741, 648518347638273763]
 OUT = os.path.join(REPO, "figures")

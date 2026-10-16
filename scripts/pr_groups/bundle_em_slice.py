@@ -21,7 +21,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.colors import to_rgb
 
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 from faab.pr.pairing_demo import analyse_group, PAIR_COL, R7_COL, R8_COL, OUT, TMP
 from faab.nglink import IMG
 

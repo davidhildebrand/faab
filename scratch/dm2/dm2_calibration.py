@@ -22,8 +22,8 @@ from fafbseg import flywire
 from neuprint import NeuronCriteria as NC, fetch_neurons
 from navis.interfaces import neuprint as nvneu
 
-from faab.sources.cave import throttle
-from faab.sources.neuprint import client, OPTIC_LOBE, MALE_CNS
+from faab.clients.cave import throttle
+from faab.clients.neuprint import client, OPTIC_LOBE, MALE_CNS
 
 warnings.filterwarnings("ignore")
 OUT = os.path.join(REPO, "figures")

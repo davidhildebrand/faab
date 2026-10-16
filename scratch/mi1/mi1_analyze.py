@@ -16,7 +16,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.spatial import cKDTree
 
-from faab.sources.cave import throttle, DATASTACK
+from faab.clients.cave import throttle, DATASTACK
 
 OUT = os.path.join(REPO, "figures")
 CACHE = os.path.join(OUT, "mi1_dotprops.pkl")

@@ -12,7 +12,7 @@ if not hasattr(np, "row_stack"):
     np.row_stack = np.vstack
 import pandas as pd
 from fafbseg import flywire
-from faab.sources.cave import throttle
+from faab.clients.cave import throttle
 
 OUT = os.path.join(REPO, "figures")
 NSAMPLE = 150

@@ -21,7 +21,7 @@ from sklearn.metrics import adjusted_rand_score
 from fafbseg import flywire
 from neuprint import NeuronCriteria as NC, fetch_neurons
 from navis.interfaces import neuprint as nvneu
-from faab.sources.neuprint import client, MALE_CNS
+from faab.clients.neuprint import client, MALE_CNS
 
 OUT = os.path.join(REPO, "figures")
 PER_TYPE = 25

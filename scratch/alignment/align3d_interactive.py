@@ -13,7 +13,7 @@ import pickle
 import navis
 from navis.transforms.align import align_rigid
 
-from faab.sources.cave import latest_roots, throttle, DATASTACK
+from faab.clients.cave import latest_roots, throttle, DATASTACK
 
 OUT = os.path.join(REPO, "figures")
 CACHE = os.path.join(OUT, "skel_cache.pkl")

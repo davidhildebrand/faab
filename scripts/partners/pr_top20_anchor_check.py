@@ -18,7 +18,7 @@ if not hasattr(np, "row_stack"):
 import pandas as pd
 import caveclient
 from fafbseg import flywire
-from faab.sources.cave import DATASTACK
+from faab.clients.cave import DATASTACK
 from faab.partners.top10_xyz import VOX
 
 HERE = REPO

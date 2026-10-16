@@ -10,7 +10,7 @@ import pandas as pd
 import caveclient
 import seaserpent as ss
 
-from faab.sources.cave import throttle, DATASTACK
+from faab.clients.cave import throttle, DATASTACK
 
 OUT = os.path.join(REPO, "figures")
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"

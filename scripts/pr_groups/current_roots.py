@@ -15,7 +15,7 @@ if not hasattr(np, "row_stack"):
 import pandas as pd
 import caveclient
 from fafbseg import flywire
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import backbone_midpoint_nm, VOX
 
 OUT = os.path.join(REPO, "figures")

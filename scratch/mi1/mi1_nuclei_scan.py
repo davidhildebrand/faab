@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import caveclient
 from scipy.spatial import cKDTree
-from faab.sources.cave import DATASTACK
+from faab.clients.cave import DATASTACK
 
 OUT = os.path.join(REPO, "figures")
 

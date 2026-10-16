@@ -3,7 +3,7 @@ bodies per cell, and top-partner share — to compare against the aedes distribu
 import numpy as np
 import pandas as pd
 from neuprint import NeuronCriteria as NC, fetch_neurons, fetch_simple_connections
-from faab.sources.neuprint import client as npclient, MALE_CNS
+from faab.clients.neuprint import client as npclient, MALE_CNS
 
 
 def main():

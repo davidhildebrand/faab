@@ -11,7 +11,7 @@ import pandas as pd
 import caveclient
 import seaserpent as ss
 
-from faab.sources.cave import throttle, DATASTACK
+from faab.clients.cave import throttle, DATASTACK
 
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 # Exclude only clearly non-usable segments; keep partially-traced real neurons.

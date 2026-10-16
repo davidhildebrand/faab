@@ -11,7 +11,7 @@ import numpy as np
 import cloudvolume as cv
 from scipy.spatial import cKDTree, ConvexHull, Delaunay
 from caveclient import CAVEclient
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 
 OUT = os.path.join(REPO, "figures")
 GRID_UM = 2.5

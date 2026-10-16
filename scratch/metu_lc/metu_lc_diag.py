@@ -5,7 +5,7 @@ import os
 import pickle
 import numpy as np
 import caveclient
-from faab.sources.cave import DATASTACK
+from faab.clients.cave import DATASTACK
 
 OUT = os.path.join(REPO, "figures")
 

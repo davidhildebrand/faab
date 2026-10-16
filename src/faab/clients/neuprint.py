@@ -8,7 +8,7 @@ The token is a Janelia neuPrint auth token (free, from neuprint.janelia.org) and
 is SEPARATE from the CAVE/SeaTable tokens. It is stored OUTSIDE the git repo so it
 can never be committed.
 
-    from faab.sources.neuprint import client, list_datasets
+    from faab.clients.neuprint import client, list_datasets
     c = client("hemibrain:v1.2.1")
 """
 import os

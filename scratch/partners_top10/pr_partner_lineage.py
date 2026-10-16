@@ -15,7 +15,7 @@ import time
 
 import pandas as pd
 import caveclient
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 
 OUT = os.path.join(REPO, "figures")
 TSV = os.path.join(OUT, "faab_pr_top10_xyz.tsv")

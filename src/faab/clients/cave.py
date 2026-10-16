@@ -3,7 +3,7 @@
 CAVE access is strictly read-only (default token = view-only account) and throttled (>= 5 s between top-level calls,
 no fan-out). Never call edit methods. Sheet / Spelunker xyz points are 16 x 16 x 45 nm voxels (faab.config.VOX).
 
-    from faab.sources.cave import DATASTACK, throttle, client, roots_at_xyz, live_outputs
+    from faab.clients.cave import DATASTACK, throttle, client, roots_at_xyz, live_outputs
     t = throttle(0)
     roots = roots_at_xyz(["8735, 18856, 6245"]); t = throttle(t)
 """

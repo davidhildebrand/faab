@@ -5,9 +5,16 @@ whose first cell is the block key column (upstream_PR, PR_root_id), data rows, a
 so an updated copy differs only in the cells that were changed."""
 import re
 
-from faab.sources.cave import parse_xyz
+from faab.clients.cave import parse_xyz
 
 KEYS = ("upstream_PR", "PR_root_id")
+STAMP = "%Y%m%dd%H%M%St"   # + "UTC": David's datetime stamp, always in UTC (e.g. 20261016d031000tUTC)
+
+
+def utc_stamp(when=None):
+    import datetime
+    when = when or datetime.datetime.now(datetime.timezone.utc)
+    return when.astimezone(datetime.timezone.utc).strftime(STAMP) + "UTC"
 TRACK = ["annotation", "status", "pr_date", "proofreader", "chk_date", "checker", "notes", "SeaTable", "link"]
 
 
@@ -20,7 +27,7 @@ def parse_sheet(path):
         if c[0] in KEYS:
             header = c
             continue
-        if header and c[0].strip().isdigit() and len(c) >= 5:
+        if header and re.match(r"^\d{15,}(,\s*\d{15,})*$", c[0].strip()) and len(c) >= 5:
             d = dict(zip(header, c + [""] * (len(header) - len(c))))
             rows.append(dict(line=i, block_pr=d[header[0]], cells=d, header=header))
     return lines, rows
@@ -42,12 +49,13 @@ def norm_xyz(s):
     return fmt_vox(v) if v else None
 
 
-def write_blocks(path, first_line, blocks, width):
-    """blocks: list of (title or None, header list, list of row lists). Pads every line to `width` cells like the export."""
+def write_blocks(path, preamble, blocks, width):
+    """preamble: lines of text for column A ('>>> group N', notes); blocks: list of (title or None, header list, list of
+    row lists). Pads every line to `width` cells like the export."""
     def line(cells):
         cells = [str(c) for c in cells]
         return "\t".join(cells + [""] * (width - len(cells)))
-    out = [line([]), line([first_line])]
+    out = [line([])] + [line([p]) for p in ([preamble] if isinstance(preamble, str) else preamble)]
     for title, header, rows in blocks:
         if title:
             out.append(line([title]))

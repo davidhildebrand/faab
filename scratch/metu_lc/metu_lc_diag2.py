@@ -6,7 +6,7 @@ import time
 import pickle
 import numpy as np
 import caveclient
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 
 OUT = os.path.join(REPO, "figures")
 

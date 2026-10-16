@@ -14,8 +14,8 @@ import pandas as pd
 import caveclient
 import seaserpent as ss
 from neuprint import NeuronCriteria as NC, fetch_neurons, fetch_simple_connections
-from faab.sources.neuprint import client as npclient, MALE_CNS
-from faab.sources.cave import throttle, DATASTACK
+from faab.clients.neuprint import client as npclient, MALE_CNS
+from faab.clients.cave import throttle, DATASTACK
 
 OUT = os.path.join(REPO, "figures")
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"

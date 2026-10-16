@@ -5,7 +5,7 @@ import time
 import pandas as pd
 from neuprint import NeuronCriteria as NC, fetch_simple_connections
 from fafbseg import flywire
-from faab.sources.neuprint import client, MALE_CNS
+from faab.clients.neuprint import client, MALE_CNS
 
 pd.set_option("display.width", 140)
 

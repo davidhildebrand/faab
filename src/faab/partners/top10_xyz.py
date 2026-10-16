@@ -28,7 +28,7 @@ import networkx as nx
 import navis
 import caveclient
 from fafbseg import flywire
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 
 OUT = os.path.join(REPO, "figures")
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"

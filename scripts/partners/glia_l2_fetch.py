@@ -19,7 +19,7 @@ if not hasattr(np, "row_stack"):
     np.row_stack = np.vstack
 import pandas as pd
 import caveclient
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 from faab.glia.shape import (OUT, SCACHE, MIN_CABLE, PRE_CUT, SHAPE, extent_metrics, derived, evaluate,
                              best_cut, logistic2, load_sets, skeleton_metrics)
 

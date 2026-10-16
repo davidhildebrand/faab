@@ -18,8 +18,8 @@ import matplotlib.pyplot as plt
 from fafbseg import flywire
 from neuprint import NeuronCriteria as NC, fetch_neurons
 from navis.interfaces import neuprint as nvneu
-from faab.sources.neuprint import client as npclient, MALE_CNS
-from faab.sources.cave import throttle, DATASTACK
+from faab.clients.neuprint import client as npclient, MALE_CNS
+from faab.clients.cave import throttle, DATASTACK
 
 OUT = os.path.join(REPO, "figures")
 STATE_ID = 6364293577572352

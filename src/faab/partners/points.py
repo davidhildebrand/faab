@@ -11,7 +11,7 @@ if not hasattr(np, "row_stack"):
 from faab.config import DATASTACK, FIGURES, VOX
 from faab.partners.sheet import fmt_vox
 from faab.partners.top10_xyz import backbone_midpoint_nm, primary_neurite_point_nm
-from faab.sources.cave import throttle
+from faab.clients.cave import throttle
 
 SCACHE = os.path.join(FIGURES, "pr_partner_skels.pkl")
 

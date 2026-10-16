@@ -1,7 +1,7 @@
 """Aligned cross-section of ONE photoreceptor bundle, in a single self-contained script.
 
-Replaces the chain faab_pr_pairing_demo.analyse_group (frame, terminal names) -> faab_pr_bundle_track.py (cutouts) ->
-faab_pr_ring_aligned.py (rotate and overlay), which also needed five cached data files.
+Requirements: Python 3.10+, numpy, pandas, matplotlib, caveclient, fafbseg, cloud-volume, and a CAVE token with read
+access to the FAAB datastack wclee_aedes_brain (caveclient's default token file). Nothing else.
 
 Steps
  1. Members, one of:
@@ -57,8 +57,9 @@ from matplotlib.patches import Polygon
 DATASTACK = "wclee_aedes_brain"
 VOX = np.array([16.0, 16.0, 45.0])  # nm per sheet voxel
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # scripts/pr_groups/ -> repo root
-OUT = os.path.join(REPO, "figures") if os.path.isdir(os.path.join(REPO, "figures")) else os.getcwd()
 GROUPS_FILE = os.path.join(REPO, "data", "pr_groups.tsv")
+IN_REPO = os.path.exists(GROUPS_FILE)  # run from the faab repo; a copy elsewhere writes to the current folder
+OUT = os.path.join(REPO, "figures") if IN_REPO and os.path.isdir(os.path.join(REPO, "figures")) else os.getcwd()
 BOX_UM, STEP_UM, S_FROM, S_TO = 6.0, 3.0, -120.0, -20.0
 MED_MAX, RING_MAX, R8_MAX = 1.6, 2.5, 0.7
 COL = {"R1/R6": "#D85A30", "R2/R5": "#7F77DD", "R3/R4": "#1D9E75", "R7": "#A32D2D", "R8": "#0F6E56", "outer": "#888780"}

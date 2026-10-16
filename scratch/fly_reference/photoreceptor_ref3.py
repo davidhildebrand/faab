@@ -9,7 +9,7 @@ import os
 import numpy as np
 import pandas as pd
 from neuprint import NeuronCriteria as NC, fetch_neurons, fetch_simple_connections
-from faab.sources.neuprint import client as npclient, MALE_CNS, OPTIC_LOBE
+from faab.clients.neuprint import client as npclient, MALE_CNS, OPTIC_LOBE
 
 OUT = os.path.join(REPO, "figures")
 N = 25

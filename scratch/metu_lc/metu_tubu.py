@@ -14,7 +14,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from sklearn.cluster import SpectralCoclustering
 
-from faab.sources.cave import throttle, DATASTACK
+from faab.clients.cave import throttle, DATASTACK
 
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 OUT = os.path.join(REPO, "figures")

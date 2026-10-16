@@ -20,7 +20,7 @@ if not hasattr(np, "row_stack"):
 import pandas as pd
 import caveclient
 from fafbseg import flywire
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")

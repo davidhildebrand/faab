@@ -1,10 +1,10 @@
-"""Morphology fetches for NBLAST / alignment work (read-only; CAVE helpers live in faab.sources.cave)."""
+"""Morphology fetches for NBLAST / alignment work (read-only; CAVE helpers live in faab.clients.cave)."""
 import time
 
 import caveclient
 from fafbseg import flywire
 
-from faab.sources.cave import DATASTACK, latest_roots, throttle
+from faab.clients.cave import DATASTACK, latest_roots, throttle
 
 
 def fetch_dotprops_um(ids, datastack=DATASTACK, update_roots=True, max_threads=1):

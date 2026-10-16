@@ -30,7 +30,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from faab.sources.cave import DATASTACK, latest_roots, throttle
+from faab.clients.cave import DATASTACK, latest_roots, throttle
 
 OUT = os.path.join(REPO, "figures")
 A_IN = 648518347638241763

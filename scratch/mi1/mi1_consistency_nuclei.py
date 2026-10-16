@@ -16,7 +16,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from faab.sources.cave import DATASTACK
+from faab.clients.cave import DATASTACK
 
 OUT = os.path.join(REPO, "figures")
 

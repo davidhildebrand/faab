@@ -9,7 +9,7 @@ if not hasattr(np, "row_stack"):
     np.row_stack = np.vstack
 import pandas as pd
 import caveclient
-from faab.sources.cave import throttle
+from faab.clients.cave import throttle
 
 OUT = os.path.join(REPO, "figures")
 DS = "flywire_fafb_public"

@@ -15,7 +15,7 @@ if not hasattr(np, "row_stack"):
     np.row_stack = np.vstack
 import pandas as pd
 import caveclient
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")

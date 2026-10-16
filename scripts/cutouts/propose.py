@@ -30,7 +30,7 @@ if not hasattr(np, "row_stack"):
 import pandas as pd
 import caveclient
 from scipy.spatial import cKDTree
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import VOX
 
 HERE = REPO

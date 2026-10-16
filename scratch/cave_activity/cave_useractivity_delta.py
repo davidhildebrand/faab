@@ -4,7 +4,7 @@ get_delta_roots (global changed roots in a window) + get_operation_details
 import time
 import datetime as dt
 import caveclient
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 
 UTC = dt.timezone.utc
 

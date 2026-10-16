@@ -11,7 +11,7 @@ from scipy.spatial.distance import pdist
 from sklearn.metrics import adjusted_rand_score
 
 from neuprint import NeuronCriteria as NC, fetch_neurons, fetch_simple_connections
-from faab.sources.neuprint import client, MALE_CNS
+from faab.clients.neuprint import client, MALE_CNS
 
 
 def major(t):

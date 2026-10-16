@@ -78,7 +78,7 @@ def main():
     need = sorted({int(r) for cells in groups.values() for r, _ in cells if int(r) not in sk_by})
     if need:
         from fafbseg import flywire
-        from faab.sources.cave import DATASTACK
+        from faab.clients.cave import DATASTACK
         time.sleep(5)
         for s in flywire.get_l2_skeleton(need, dataset=DATASTACK, max_threads=1,
                                          omit_failures=True, progress=False):

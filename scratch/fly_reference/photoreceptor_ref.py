@@ -7,7 +7,7 @@ neuprint columns are `downstream` (output synapses) and `upstream` (input synaps
 """
 import pandas as pd
 from neuprint import NeuronCriteria as NC, fetch_neurons
-from faab.sources.neuprint import client as npclient, MALE_CNS, OPTIC_LOBE
+from faab.clients.neuprint import client as npclient, MALE_CNS, OPTIC_LOBE
 
 
 def group_of(t):

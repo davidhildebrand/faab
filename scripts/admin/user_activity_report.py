@@ -27,7 +27,7 @@ import datetime as dt
 import numpy as np
 import pandas as pd
 import caveclient
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 
 UTC = dt.timezone.utc
 OUT = os.path.join(REPO, "figures")

@@ -4,7 +4,7 @@ import time
 import datetime as dt
 import pandas as pd
 import caveclient
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 
 UTC = dt.timezone.utc
 

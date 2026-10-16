@@ -42,7 +42,7 @@ import navis
 import caveclient
 from fafbseg import flywire
 
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import VOX
 from faab.pr.bundles_pairs import analyse, NAMES, COLS, SCACHE, OUT
 from faab.pr.groups_mirror import prep as skprep

@@ -24,7 +24,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 from faab.pr.bundles import read_box
 from faab.pr.pairing_demo import analyse_group, PAIR_COL, OUT, TMP
 

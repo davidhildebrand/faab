@@ -12,7 +12,7 @@ import pandas as pd
 import caveclient
 import seaserpent as ss
 from fafbseg import flywire
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 OUT = os.path.join(REPO, "figures")

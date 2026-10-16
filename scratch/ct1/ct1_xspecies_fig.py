@@ -19,8 +19,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from faab.sources.cave import DATASTACK, latest_roots, throttle
-from faab.sources.neuprint import client as npclient, MALE_CNS
+from faab.clients.cave import DATASTACK, latest_roots, throttle
+from faab.clients.neuprint import client as npclient, MALE_CNS
 
 OUT = os.path.join(REPO, "figures")
 AEDES = {"A": 648518347638241763, "B": 648518347495933144}

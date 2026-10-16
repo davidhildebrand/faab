@@ -32,7 +32,7 @@ import pandas as pd
 import navis
 import caveclient
 from fafbseg import flywire
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import VOX
 from faab.pr.groups_mirror import prep, reflect, THETAS
 

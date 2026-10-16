@@ -14,7 +14,7 @@ import time
 import numpy as np
 import pandas as pd
 import caveclient
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import VOX
 
 HERE = REPO

@@ -3,7 +3,7 @@ Decisive checks: dataset metadata/uuid, ROI inventory, and whether identical bod
 carry identical soma coordinates in both."""
 import pandas as pd
 from neuprint import NeuronCriteria as NC, fetch_neurons
-from faab.sources.neuprint import client as npclient, MALE_CNS, OPTIC_LOBE
+from faab.clients.neuprint import client as npclient, MALE_CNS, OPTIC_LOBE
 
 
 def main():

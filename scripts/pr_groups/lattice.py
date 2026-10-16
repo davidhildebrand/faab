@@ -32,7 +32,7 @@ import pandas as pd
 import caveclient
 from fafbseg import flywire
 from scipy.spatial import ConvexHull, Delaunay
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import VOX
 import faab.nglink as nglink
 

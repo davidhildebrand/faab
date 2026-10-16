@@ -8,7 +8,7 @@ import numpy as np
 if not hasattr(np, "row_stack"):
     np.row_stack = np.vstack
 import caveclient
-from faab.sources.cave import DATASTACK, latest_roots, throttle
+from faab.clients.cave import DATASTACK, latest_roots, throttle
 import faab.nglink as nglink
 
 SEED = 648518347777360890

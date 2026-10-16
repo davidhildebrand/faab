@@ -23,7 +23,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from faab.sources.neuprint import client as np_client, MALE_CNS
+from faab.clients.neuprint import client as np_client, MALE_CNS
 import neuprint
 from faab.pr.groups_mirror import reflect, THETAS
 from faab.pr.pairing_demo import analyse_group, PAIR_COL, OUT

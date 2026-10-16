@@ -16,7 +16,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from faab.sources.cave import DATASTACK, throttle
+from faab.clients.cave import DATASTACK, throttle
 
 OUT = os.path.join(REPO, "figures")
 CANDS = [("648518347700868494", "G1"), ("648518347660289039", "G1"),

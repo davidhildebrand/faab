@@ -8,7 +8,7 @@ import numpy as np
 if not hasattr(np, "row_stack"):
     np.row_stack = np.vstack
 from fafbseg import flywire
-from faab.sources.cave import DATASTACK, latest_roots, throttle
+from faab.clients.cave import DATASTACK, latest_roots, throttle
 
 OUT = os.path.join(REPO, "figures")
 

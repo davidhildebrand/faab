@@ -2,7 +2,7 @@
 Dm2-like 'many-weak' profile?"""
 import pandas as pd
 from neuprint import NeuronCriteria as NC, fetch_simple_connections
-from faab.sources.neuprint import client, MALE_CNS
+from faab.clients.neuprint import client, MALE_CNS
 
 pd.set_option("display.width", 160)
 

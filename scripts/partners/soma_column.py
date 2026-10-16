@@ -21,7 +21,7 @@ if not hasattr(np, "row_stack"):
     np.row_stack = np.vstack
 import pandas as pd
 import caveclient
-from faab.sources.cave import DATASTACK
+from faab.clients.cave import DATASTACK
 from faab.partners.top10_xyz import VOX
 from faab.partners.no_soma_batch import local_volume, retry, vox, SOMA_UM3
 
