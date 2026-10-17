@@ -18,8 +18,8 @@ Read-only analysis tools for the FAAB connectome (female adult *Aedes aegypti* b
 ## Setup
 
 ```
-python -m venv .venv
-.venv/bin/pip install -e .
+python -m venv venv
+venv/bin/pip install -e .
 ```
 
 Tokens stay outside the repo: the CAVE token via `caveclient` (`~/.cloudvolume/secrets/`), the neuPrint token in
@@ -38,8 +38,8 @@ next to the repo).
 Aligned bundle cross-section for one bundle, from root ids or from the groups file:
 
 ```
-.venv/bin/python scripts/pr_groups/pr_ring_plot.py --roots <root ids> --r7 <R7 root id> --tag mybundle
-.venv/bin/python scripts/pr_groups/pr_ring_plot.py --group 4
+venv/bin/python scripts/pr_groups/pr_ring_plot.py --roots <root ids> --r7 <R7 root id> --tag mybundle
+venv/bin/python scripts/pr_groups/pr_ring_plot.py --group 4
 ```
 
 `pr_ring_plot.py` imports nothing from the package and needs no other file, so it can be copied and run elsewhere.
