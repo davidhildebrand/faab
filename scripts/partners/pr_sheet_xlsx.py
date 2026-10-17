@@ -11,7 +11,14 @@ Values keep the source cell's type: dates stay dates (yy-mm-dd), counts stay num
 the source tab are replaced by the updated values (rows move, so cell references would break). Only the one tab is
 written; the workbook's other tabs are left out.
 
+--like: for a sheet that never had its own tab (PRg2hop1, PRg1hop2), borrow the look of TAB instead: header, block
+title, '>>>' / note and blank lines take the styles of their first counterpart in TAB; data cells take a plain data
+row's styles by column (new columns borrow from the closest one: PR_root_id <- upstream_PR, hop1_root_id <-
+root_id_orig, hop1_nsyn <- nsyn, hop1_conv <- PR_conv); rows for cells tracked in TAB (same root_id_orig and xyz) take
+that row's styles, so e.g. a highlighted note stays highlighted.
+
 Usage: python pr_sheet_xlsx.py BOOK.xlsx TAB TAB_EXPORT.tsv UPDATED.tsv --title PRg1hop1 [--out OUT.xlsx]
+       python pr_sheet_xlsx.py BOOK.xlsx TAB TAB_EXPORT.tsv NEW.tsv --title PRg2hop1 --like
 Network-free."""
 import argparse
 import copy
@@ -46,22 +53,12 @@ def typed(text, src_value, col_kind):
     return text
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("book")
-    ap.add_argument("tab")
-    ap.add_argument("tab_export")
-    ap.add_argument("updated")
-    ap.add_argument("--title", required=True, help="name of the output tab, e.g. PRg1hop1")
-    ap.add_argument("--out")
-    a = ap.parse_args()
+ALIAS = {"PR_root_id": "upstream_PR", "hop1_root_id": "root_id_orig", "hop1_nsyn": "nsyn", "hop1_conv": "PR_conv",
+         "class": "PRtype"}
 
-    wb = openpyxl.load_workbook(a.book)
-    src = wb[a.tab]
-    s_lines, s_rows = parse_sheet(a.tab_export)
-    n_lines, n_rows = parse_sheet(a.updated)
 
-    # which source header columns are dates / numbers (dominant type of the data cells)
+def column_kinds(src, s_rows):
+    """which source header columns hold dates / numbers (dominant type of the data cells)"""
     s_header = s_rows[0]["header"]
     kind = {}
     for j, name in enumerate(s_header):
@@ -73,6 +70,103 @@ def main():
             kind[name] = "number"
         else:
             kind[name] = "text"
+    return kind
+
+
+def copy_sheet_setup(src, out):
+    out.sheet_format = copy.copy(src.sheet_format)
+    out.sheet_properties = copy.copy(src.sheet_properties)
+    out.sheet_view.showGridLines = src.sheet_view.showGridLines
+    out.sheet_view.zoomScale = src.sheet_view.zoomScale
+
+
+def build_like(wb, src, s_lines, s_rows, n_lines, n_rows, title):
+    """a new tab in the look of src (see --like in the module docstring)"""
+    s_header = s_rows[0]["header"]
+    kind = column_kinds(src, s_rows)
+    s_data = {r["line"] for r in s_rows}
+
+    def solid(r, c):
+        f = src.cell(r, c).fill
+        return f is not None and f.fill_type == "solid"
+
+    plain = next(r["line"] + 1 for r in s_rows if not any(solid(r["line"] + 1, c) for c in range(1, len(s_header) + 1)))
+    header_row = next(i + 1 for i, ln in enumerate(s_lines) if ln.split("\t")[0] in KEYS)
+    title_row = next(i + 1 for i, ln in enumerate(s_lines) if re.match(r"^\d{15,}\s+\[", ln))
+    first_row = next((i + 1 for i, ln in enumerate(s_lines) if ln.startswith(">>>")), title_row)
+    blank_row = next(i + 1 for i, ln in enumerate(s_lines) if not ln.strip() and i not in s_data)
+    tracked = {}
+    for r in s_rows:
+        c = r["cells"]
+        tracked.setdefault((c["root_id_orig"].strip(), norm_xyz(c["xyz"])), r["line"] + 1)
+
+    n_header = n_rows[0]["header"]
+    src_col = [s_header.index(ALIAS.get(h, h)) + 1 if ALIAS.get(h, h) in s_header else None for h in n_header]
+    out = wb.create_sheet(title)
+    copy_sheet_setup(src, out)
+    for j, sc in enumerate(src_col, 1):
+        d = src.column_dimensions.get(get_column_letter(sc)) if sc else None
+        if d is not None and d.width:
+            out.column_dimensions[get_column_letter(j)].width = d.width
+    if any("," in r["cells"][n_header[0]] for r in n_rows):  # PR_root_id lists several PRs
+        out.column_dimensions["A"].width = 38
+    data = {r["line"]: r for r in n_rows}
+    n_tracked = 0
+    for i, ln in enumerate(n_lines):
+        cells = ln.split("\t")
+        if i in data:
+            c = data[i]["cells"]
+            row = tracked.get((c["root_id_orig"].strip(), norm_xyz(c["xyz"])))
+            n_tracked += row is not None
+            style_row, kinds = row or plain, True
+        else:
+            first = cells[0].strip()
+            style_row = (header_row if first in KEYS else first_row if first.startswith((">>>", "note:")) else
+                         blank_row if not first else title_row)
+            kinds = False
+        for j, text in enumerate(cells):
+            name = n_header[j] if j < len(n_header) else ""
+            sc = src_col[j] if j < len(src_col) else None
+            scell = src.cell(style_row, sc) if sc else None
+            v = typed(text.strip(), scell.value if (scell is not None and kinds) else None,
+                      kind.get(ALIAS.get(name, name), "text") if kinds else "text")
+            oc = out.cell(i + 1, j + 1, v)
+            if scell is not None:
+                oc._style = copy.copy(scell._style)
+            if isinstance(v, datetime.datetime):
+                oc.number_format = 'yy"-"mm"-"dd'
+            if kinds and name == "link" and isinstance(v, str) and v.startswith("http"):
+                oc.hyperlink = v
+    return out, f"{len(n_rows)} data rows, {n_tracked} styled from their tracked row in {src.title}"
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("book")
+    ap.add_argument("tab")
+    ap.add_argument("tab_export")
+    ap.add_argument("updated")
+    ap.add_argument("--title", required=True, help="name of the output tab, e.g. PRg1hop1")
+    ap.add_argument("--like", action="store_true", help="new sheet: borrow the look of TAB instead of its rows")
+    ap.add_argument("--out")
+    a = ap.parse_args()
+
+    wb = openpyxl.load_workbook(a.book)
+    src = wb[a.tab]
+    s_lines, s_rows = parse_sheet(a.tab_export)
+    n_lines, n_rows = parse_sheet(a.updated)
+    if a.like:
+        out, msg = build_like(wb, src, s_lines, s_rows, n_lines, n_rows, a.title)
+        for ws in list(wb.worksheets):
+            if ws is not out:
+                wb.remove(ws)
+        path = a.out or os.path.join(FIGURES, f"{utc_stamp()}_FAABopticlobetargets-{a.title}.xlsx")
+        wb.save(path)
+        print(f"wrote {path}: tab {a.title}, {len(n_lines)} lines, {msg}")
+        return
+
+    s_header = s_rows[0]["header"]
+    kind = column_kinds(src, s_rows)
 
     # data rows: source row for each updated row
     by_key, by_xyz = {}, {}
@@ -107,10 +201,7 @@ def main():
     col_src += list(range(len(s_header), len(s_header) + max(0, width_extra)))
 
     out = wb.create_sheet(a.title)
-    out.sheet_format = copy.copy(src.sheet_format)
-    out.sheet_properties = copy.copy(src.sheet_properties)
-    out.sheet_view.showGridLines = src.sheet_view.showGridLines
-    out.sheet_view.zoomScale = src.sheet_view.zoomScale
+    copy_sheet_setup(src, out)
     for j, sj in enumerate(col_src):
         d = src.column_dimensions.get(get_column_letter(sj + 1))
         if d is not None and d.width:
