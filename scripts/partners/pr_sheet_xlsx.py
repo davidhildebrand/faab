@@ -14,7 +14,7 @@ written; the workbook's other tabs are left out.
 --like: for a sheet that never had its own tab (PRg2hop1, PRg1hop2), borrow the look of TAB instead: header, block
 title, '>>>' / note and blank lines take the styles of their first counterpart in TAB; data cells take a plain data
 row's styles by column (new columns borrow from the closest one: PR_root_id <- upstream_PR, hop1_root_id <-
-root_id_orig, hop1_nsyn <- nsyn, hop1_conv <- PR_conv); rows for cells tracked in TAB (same root_id_orig and xyz) take
+root_id_orig, h1_nsyn <- nsyn, h1_conv <- PR_conv); rows for cells tracked in TAB (same root_id_orig and xyz) take
 that row's styles, so e.g. a highlighted note stays highlighted.
 
 Usage: python pr_sheet_xlsx.py BOOK.xlsx TAB TAB_EXPORT.tsv UPDATED.tsv --title PRg1hop1 [--out OUT.xlsx]
@@ -53,7 +53,7 @@ def typed(text, src_value, col_kind):
     return text
 
 
-ALIAS = {"PR_root_id": "upstream_PR", "hop1_root_id": "root_id_orig", "hop1_nsyn": "nsyn", "hop1_conv": "PR_conv",
+ALIAS = {"PR_root_id": "upstream_PR", "hop1_root_id": "root_id_orig", "h1_nsyn": "nsyn", "h1_conv": "PR_conv",
          "class": "PRtype"}
 
 

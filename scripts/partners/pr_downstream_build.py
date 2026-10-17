@@ -10,7 +10,7 @@ Sheet names: PRg<N>hop1 = top-20 downstream partners of each PR of group N; PRg<
                  then lower root id;
                  skipped: the group's own photoreceptors, glia (annotation 'glia' on any row of the cell), cells whose
                  strongest row is 'stopped', and --skip ROOT=reason. Each hop-1 cell is listed once (PR_root_id and
-                 hop1_nsyn list every PR it qualifies under), followed by its top-20 downstream partners without
+                 h1_nsyn list every PR it qualifies under), followed by its top-20 downstream partners without
                  partners of nsyn < --row-min (2). --dry-run prints the counts for both rules and writes nothing.
 
 The cell of a sheet row is the root at its xyz. Partners already tracked in SHEET or a --known sheet keep that row's
@@ -34,8 +34,8 @@ from faab.partners.points import cell_points
 from faab.partners.sheet import TRACK, as_int, norm_xyz, parse_sheet, utc_stamp, write_blocks
 
 G_HEADER = ["upstream_PR", "PRtype", "root_id_orig", "root_id_curr", "xyz", "nsyn", "syn_pct", "PR_conv"] + TRACK
-H_HEADER = ["PR_root_id", "PRtype", "hop1_root_id", "hop1_nsyn", "root_id_orig", "root_id_curr", "xyz", "nsyn", "syn_pct",
-            "hop1_conv"] + TRACK
+H_HEADER = ["PR_root_id", "PRtype", "hop1_root_id", "h1_nsyn", "root_id_orig", "root_id_curr", "xyz", "nsyn", "syn_pct",
+            "h1_conv"] + TRACK
 TITLE_CLASS = {"R1-R6": "R1–R6", "R7": "R7", "R8": "R8"}
 STATUS = TRACK.index("status")
 STATUS_RANK = {"checked": 0, "proofread": 1, "adequate": 2, "in progress": 3, "new": 4}  # tie-break for hop-1 cells
@@ -236,10 +236,10 @@ def build_hop2(sheet, known_paths, cap, min_take, strong, floor, row_min, topn, 
            f"nsyn < {floor}); ties at a cut go to the better proofreading status (checked, proofread, adequate, in "
            "progress, NEW), then to the cell more group PRs synapse onto, then to the lower root id",
            "note: skipped as hop-1: the group's own photoreceptors (their targets are in PRg1hop1 already), glia, cells "
-           "whose strongest row is 'stopped'; each hop-1 cell is listed once, PR_root_id / hop1_nsyn list every PR it "
+           "whose strongest row is 'stopped'; each hop-1 cell is listed once, PR_root_id / h1_nsyn list every PR it "
            "qualifies under",
            f"note: rows = the top {topn} downstream partners of each hop-1 cell (live; ties at {topn}th go to tracked cells, "
-           f"then the lower root id), without partners of nsyn < {row_min}; hop1_conv = how many of the hop-1 cells "
+           f"then the lower root id), without partners of nsyn < {row_min}; h1_conv = how many of the hop-1 cells "
            "synapse onto the row's cell",
            "note: cells tracked in " + ", ".join(os.path.basename(p) for p in [sheet] + known_paths)
            + " keep that row's root_id_orig, xyz and tracking columns; status NEW = not tracked yet, needs proofreading"]
