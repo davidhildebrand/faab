@@ -27,7 +27,8 @@ Steps
  6. Plot: every compact slice rotated so that R7 points up, overlaid as small dots; per-cell means as large markers;
     dotted trapezoid R1/R6-R3/R4-R3/R4-R1/R6; the symmetry axis through R7 and the center.
 
-Outputs <out>/pr_ring_plot_<tag>.png, .tsv (per-slice centroids) and .json (frame, members, query time); <out> is the
+Outputs <out>/pr_ring_plot_<tag>.png, .tsv (per-slice centroids), .json (frame, members, query time) and _names.tsv
+(per member: xyz, table class, ring role, distance from the center, angle vs R7, flank margin); <out> is the
 repo's figures/ folder, or --out. --replot redraws from those files without any CAVE call. Read-only; CAVE calls are
 spaced >= 5 s apart.
 
@@ -433,6 +434,17 @@ def main():
         print(f"{r}   {A['names'][r]:6s}  {A['med_r'][r]:5.2f}          {'' if ang is None else format(ang, '+.0f')}")
     for r, why in A["dropped"]:
         print(f"{r}   left out: {why}")
+    # names table: one row per member (xyz as given, so results map back to sheet rows)
+    rows = []
+    for m in meta["members"]:
+        r = m["root"]
+        rows.append(dict(root=r, xyz=m.get("xyz", ""), label=m.get("label", ""),
+                         role=A["names"].get(r, "left out"),
+                         median_r_um=round(float(A["med_r"][r]), 2) if r in A["med_r"] else "",
+                         angle_vs_r7=round(A["rel"][r]) if r in A["rel"] else "",
+                         r7_how=A["r7_how"], flank_margin_deg=round(A["margin"]) if A["margin"] is not None else "",
+                         left_out=dict(A["dropped"]).get(r, ""), queried=meta["queried"]))
+    pd.DataFrame(rows).to_csv(os.path.join(OUT, f"pr_ring_plot_{tag}_names.tsv"), sep="\t", index=False)
     print("saved", plot(A, meta, title, a.mirror))
 
 
