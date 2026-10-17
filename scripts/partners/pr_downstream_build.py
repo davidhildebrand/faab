@@ -278,7 +278,8 @@ def main():
         pre, blocks, log, name = res
     width = max(len(b[1]) for b in blocks)
     out = os.path.join(FIGURES, f"{a.stamp or utc_stamp(now)}_FAABopticlobetargets-{name}.tsv")
-    write_blocks(out, pre, blocks, width)
+    write_blocks(out, [p for p in pre if not p.startswith("note:")], blocks, width,
+                 notes=[p for p in pre if p.startswith("note:")])
     pd.DataFrame(log).to_csv(out.replace(".tsv", "_log.tsv"), sep="\t", index=False)
     print(f"wrote {out} ({sum(len(b[2]) for b in blocks)} rows in {len(blocks)} blocks) in {time.time() - t0:.0f} s")
 

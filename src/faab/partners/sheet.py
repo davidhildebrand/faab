@@ -49,9 +49,10 @@ def norm_xyz(s):
     return fmt_vox(v) if v else None
 
 
-def write_blocks(path, preamble, blocks, width):
-    """preamble: lines of text for column A ('>>> group N', notes); blocks: list of (title or None, header list, list of
-    row lists). Pads every line to `width` cells like the export."""
+def write_blocks(path, preamble, blocks, width, notes=()):
+    """preamble: lines of text for column A at the top ('>>> group N'); blocks: list of (title or None, header list,
+    list of row lists); notes: 'note: ...' lines written below the last block (David, 2026-10-17: notes go at the end).
+    Pads every line to `width` cells like the export."""
     def line(cells):
         cells = [str(c) for c in cells]
         return "\t".join(cells + [""] * (width - len(cells)))
@@ -62,4 +63,5 @@ def write_blocks(path, preamble, blocks, width):
         out.append(line(header))
         out += [line(r) for r in rows]
         out.append(line([]))
+    out += [line([n]) for n in notes]
     open(path, "w", encoding="utf-8").write("\n".join(out) + "\n")
