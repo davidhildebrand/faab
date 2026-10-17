@@ -4,9 +4,10 @@ Sheet names: PRg<N>hop1 = top-20 downstream partners of each PR of group N; PRg<
   --group N      PRg<N>hop1: the top-20 downstream partners of each photoreceptor of group N (PRs located at their xyz
                  in data/pr_groups.tsv), same columns as PRg1hop1 (no nsyn_old)
   --hop2 SHEET   PRg<N>hop2 from the reviewed PRg<N>hop1 SHEET:
-                 hop-1 cells (David, 2026-10-15) = per PR block at least --top1 (5) cells: every cell with nsyn >=
-                 --strong (3) when a block has at least 5 of them (--rule all3; --rule top5 caps at the top 5 + ties),
-                 otherwise the top 5 with all ties at the cut, filling down to --floor (2), never nsyn 1;
+                 hop-1 cells (David, 2026-10-15) = per PR block the cells with nsyn >= --strong (3), at most --cap
+                 (5); a block with fewer than --min-take (3) such cells takes its top 3 instead, filling down to
+                 --floor (2), never nsyn 1; ties at a cut go to the better proofreading status, then higher PR_conv,
+                 then lower root id;
                  skipped: the group's own photoreceptors, glia (annotation 'glia' on any row of the cell), cells whose
                  strongest row is 'stopped', and --skip ROOT=reason. Each hop-1 cell is listed once (PR_root_id and
                  hop1_nsyn list every PR it qualifies under), followed by its top-20 downstream partners without
@@ -37,6 +38,7 @@ H_HEADER = ["PR_root_id", "PRtype", "hop1_root_id", "hop1_nsyn", "root_id_orig",
             "hop1_conv"] + TRACK
 TITLE_CLASS = {"R1-R6": "R1–R6", "R7": "R7", "R8": "R8"}
 STATUS = TRACK.index("status")
+STATUS_RANK = {"checked": 0, "proofread": 1, "adequate": 2, "in progress": 3, "new": 4}  # tie-break for hop-1 cells
 
 
 def lookup(sheet_paths, extra_points, t):
@@ -135,7 +137,7 @@ def build_group(g, known_paths, topn, ts_gen):
     return pre, blocks, log, f"PRg{g}hop1"
 
 
-def build_hop2(sheet, known_paths, top1, strong, floor, rule_used, row_min, topn, skip_extra, ts_gen, dry_run=False):
+def build_hop2(sheet, known_paths, cap, min_take, strong, floor, row_min, topn, skip_extra, ts_gen, dry_run=False):
     lines = open(sheet, encoding="utf-8").read().split("\n")
     first = next((ln.split("\t")[0] for ln in lines if ln.startswith(">>>")), ">>> group 1")
     g = int(re.search(r"group\s+(\d+)", first).group(1))
@@ -153,31 +155,35 @@ def build_hop2(sheet, known_paths, top1, strong, floor, rule_used, row_min, topn
         k = (r["upstream_PR"], r["cell"])
         if k not in best or as_int(r["nsyn"], 0) > as_int(best[k]["nsyn"], 0):
             best[k] = r
+    tracked_live = {r["cell"] for r in rows if r.get("status", "").strip().lower() != "stopped"}
     cand = []
     for (b, cell), r in best.items():
+        # 'stopped' skips only orphans: a stopped piece merged into a cell tracked elsewhere is that cell
+        stopped = r.get("status", "").strip().lower() == "stopped" and cell not in tracked_live
         why = ("photoreceptor of this group" if cell in own else "glia (annotation)" if cell in glia else
-               "status 'stopped'" if r.get("status", "").strip().lower() == "stopped" else skip_extra.get(cell, ""))
+               "status 'stopped' (orphan)" if stopped else skip_extra.get(cell, ""))
+        st = r.get("status", "").strip().lower()
         cand.append(dict(block=b, cell=cell, n=as_int(r["nsyn"], 0), orig=r["root_id_orig"].strip(),
-                         prtype=r.get("PRtype", r.get("class", "")).strip(), why=why))
+                         prtype=r.get("PRtype", r.get("class", "")).strip(), why=why,
+                         st_rank=STATUS_RANK.get(st, len(STATUS_RANK)), conv=as_int(r.get("PR_conv", ""), 0)))
     cand = pd.DataFrame(cand)
     blocks_order = list(dict.fromkeys(r["upstream_PR"] for r in rows))
 
-    def select(rule):
-        """per PR block (skips applied, nsyn >= floor): the top `top1` with all ties at the cut, so a block with fewer
-        than top1 cells at >= strong fills up with weaker cells (never below floor); rule 'all3' also keeps every cell
-        at >= strong when there are more than top1 of them"""
+    def select():
+        """per PR block (skips applied, nsyn >= floor), strongest first; ties at a cut go to the better proofreading
+        status, then higher PR_conv, then lower root id. Cells with nsyn >= strong, at most `cap`; a block with fewer
+        than `min_take` such cells takes its top `min_take` cells instead (filling down to floor)."""
         out = []
         for b in blocks_order:
-            d = cand[(cand.block == b) & (cand.why == "") & (cand.n >= floor)].sort_values("n", ascending=False)
-            if rule == "all3" and (d.n >= strong).sum() >= top1:
-                d = d[d.n >= strong]
-            elif len(d) > top1:
-                d = d[d.n >= d.n.iloc[top1 - 1]]
-            out.append(d)
+            d = cand[(cand.block == b) & (cand.why == "") & (cand.n >= floor)].sort_values(
+                ["n", "st_rank", "conv", "cell"], ascending=[False, True, False, True])
+            s = d[d.n >= strong]
+            out.append(s.head(cap) if len(s) >= min_take else d.head(min_take))
         return pd.concat(out)
 
-    sel = {r: select(r) for r in ("top5", "all3")}
-    superset = sorted(set(sel["top5"].cell) | set(sel["all3"].cell))
+    rule_used = f"cap{cap}min{min_take}"
+    sel = {rule_used: select()}
+    superset = sorted(set(sel[rule_used].cell))
     t = throttle(t)
     syn, ts = live_outputs(superset, client)
     counts = syn.groupby(["pre_pt_root_id", "post_pt_root_id"]).size().reset_index(name="n")
@@ -222,14 +228,13 @@ def build_hop2(sheet, known_paths, top1, strong, floor, rule_used, row_min, topn
         flat += rws
     t = anchor_check(flat, 5, 6, t)
     skipped = cand[(cand.why != "") & (cand.n >= floor)].sort_values(["block", "n"], ascending=[True, False])
-    rule_txt = (f"every cell with nsyn >= {strong} when there are at least {top1}, else the top {top1}" if rule_used == "all3"
-                else f"the top {top1}")
     pre = [f">>> group {g}, two hops (PR -> hop-1 -> hop-2)",
            f"note: generated {ts_gen} by faab/scripts/partners/pr_downstream_build.py --hop2 from {os.path.basename(sheet)}; "
            f"live synapses {ts:%Y-%m-%d %H:%M} UTC; the cell of each PRg{g}hop1 row is the root at its xyz",
-           f"note: hop-1 cells = per PR block of PRg{g}hop1, {rule_txt} by nsyn with all ties at the cut kept; a block "
-           f"with fewer than {top1} cells at nsyn >= {strong} is filled with weaker cells down to nsyn {floor}, never "
-           f"nsyn < {floor}",
+           f"note: hop-1 cells = per PR block of PRg{g}hop1, the cells with nsyn >= {strong}, at most {cap}; a block with "
+           f"fewer than {min_take} such cells takes its top {min_take} instead, filling with nsyn {floor} cells (never "
+           f"nsyn < {floor}); ties at a cut go to the better proofreading status (checked, proofread, adequate, in "
+           "progress, NEW), then to the cell more group PRs synapse onto, then to the lower root id",
            "note: skipped as hop-1: the group's own photoreceptors (their targets are in PRg1hop1 already), glia, cells "
            "whose strongest row is 'stopped'; each hop-1 cell is listed once, PR_root_id / hop1_nsyn list every PR it "
            "qualifies under",
@@ -249,13 +254,13 @@ def main():
     m.add_argument("--hop2", metavar="SHEET")
     ap.add_argument("--known", nargs="*", default=[], help="sheets whose rows carry tracking info for cells they contain")
     ap.add_argument("--top", type=int, default=20)
-    ap.add_argument("--top1", type=int, default=5, help="hop2: at least this many hop-1 cells per PR block")
+    ap.add_argument("--cap", type=int, default=5, help="hop2: at most this many hop-1 cells per PR block")
+    ap.add_argument("--min-take", type=int, default=3,
+                    help="hop2: a block with fewer strong cells than this takes its top min-take cells instead")
     ap.add_argument("--strong", type=int, default=3, help="hop2: nsyn of a strong hop-1 cell")
     ap.add_argument("--floor", type=int, default=2, help="hop2: never take hop-1 cells below this nsyn")
-    ap.add_argument("--rule", choices=["top5", "all3"], default="all3",
-                    help="hop2: 'all3' keeps every strong cell when a block has >= top1 of them; 'top5' caps at top1 + ties")
     ap.add_argument("--row-min", type=int, default=2, help="hop2: drop hop-2 rows with nsyn below this")
-    ap.add_argument("--dry-run", action="store_true", help="hop2: print the selection counts for both rules and stop")
+    ap.add_argument("--dry-run", action="store_true", help="hop2: print the selection counts and stop")
     ap.add_argument("--skip", action="append", default=[], metavar="ROOT=REASON", help="hop2: skip this hop-1 cell")
     ap.add_argument("--stamp", help="file-name stamp (default: now, YYYYMMDDdHHMMSStUTC)")
     a = ap.parse_args()
@@ -266,7 +271,8 @@ def main():
         pre, blocks, log, name = build_group(a.group, a.known, a.top, ts_gen)
     else:
         skip = {int(k): v for k, v in (s.split("=", 1) for s in a.skip)}
-        res = build_hop2(a.hop2, a.known, a.top1, a.strong, a.floor, a.rule, a.row_min, a.top, skip, ts_gen, a.dry_run)
+        res = build_hop2(a.hop2, a.known, a.cap, a.min_take, a.strong, a.floor, a.row_min, a.top, skip, ts_gen,
+                         a.dry_run)
         if res is None:
             return
         pre, blocks, log, name = res
