@@ -53,7 +53,8 @@ warnings.filterwarnings("ignore")
 navis.set_pbars(hide=True)
 RDIR = os.path.join(OUT, "refine")
 os.makedirs(RDIR, exist_ok=True)
-PASTES = ["pr_bundles_pairs_paste.tsv", "pr_bundles_pairs_paste_extra.tsv", "refine/new_groups.tsv"]  # last: split-off groups
+PASTES = ["pr_bundles_pairs_paste.tsv", "pr_bundles_pairs_paste_extra.tsv", "refine/new_groups.tsv",  # split-off groups
+          "refine/regroup.tsv"]  # 2026-10-17: one group per bundle (groups_regroup.py); 'group N removed' drops a group
 SECOND = os.path.join(OUT, "refine", "second_bundles.json")
 STATE = os.path.join(RDIR, "state.json")
 PRESYN = os.path.join(RDIR, "presyn.tsv")
@@ -73,6 +74,10 @@ def load_groups():
         g, header = None, None
         for ln in open(os.path.join(OUT, fn)).read().split("\n"):
             cells = ln.split("\t")
+            if ln.startswith("group ") and " removed" in cells[0]:
+                groups.pop(int(cells[0].split()[1]), None)
+                g = None
+                continue
             if ln.startswith("group "):
                 g = int(cells[0].split()[1])
                 groups[g] = []
@@ -95,6 +100,8 @@ def load_groups():
 def select(groups, spec):
     if not spec:
         return sorted(groups)
+    if "," in spec:
+        return [g for g in sorted(groups) if g in {int(x) for x in spec.split(",")}]
     lo, hi = (int(x) for x in spec.split("-")) if "-" in spec else (int(spec), int(spec))
     return [g for g in sorted(groups) if lo <= g <= hi]
 
@@ -559,6 +566,56 @@ def cmd_refine(groups, sel):
         outer.sort(key=lambda r: (is_listed_r16(r), npre[r] >= 10, float(st.loc[int(r), "frac"]), -med[r]), reverse=True)
         extras = outer[6:]
         outer = outer[:6]
+        # 2026-10-17 (David: groups should come out as 6 outer + R7 + R8). The ring fit cannot choose among candidates
+        # (best and second-best options differ by 0-2 deg), so:
+        # R7 without medulla synapses = the ring cell with clearly the fewest lamina outputs (R7 passes the lamina with
+        # few synapses; 9 of 10 seven-cell groups show one cell at <= half the next-lowest count)
+        cands = [r for r in prset if r not in (r7, r8)]
+        select_note = ""
+        closer = {r: [h for h, Q in results.items() if h != g and Q.get("status") == "ok" and r in Q["core"]
+                      and int(r) in Q["stats"].index and float(Q["stats"].loc[int(r), "med_r"]) < med[r]] for r in cands}
+        if not r7 and len(cands) >= 6:
+            low = sorted([r for r in cands if not closer[r]], key=lambda r: npre[r])
+            if len(low) >= 2 and npre[low[0]] <= 70 and npre[low[0]] <= 0.5 * npre[low[1]]:
+                r7 = low[0]
+                r7_how = (f"few lamina outputs: {npre[r7]} vs >= {npre[low[1]]} for the other ring cells (R7 passes the "
+                          f"lamina with few synapses; its medulla part was not found - check that it reaches the medulla)")
+                cands.remove(r7)
+        # more than six outer candidates: drop those that run closer to another group's center, then cells not listed
+        # in this group, then the most peripheral
+        if len(cands) > 6:
+            rank = sorted(cands, key=lambda r: (bool(closer[r]), r not in rowcls, med[r]))
+            outer, extras = rank[:6], rank[6:]
+            select_note = (f"six outer axons kept from {len(cands)} candidates (left out first: axons closer to another "
+                           f"group's center, then unlisted axons, then the most peripheral)")
+        else:
+            outer, extras = cands, []
+        # a group without a central R8: the most central axon left over by the ring fit, if it runs near the center
+        if not r8 and extras:
+            e = min(extras, key=lambda r: med[r])
+            if med[e] <= 0.9:
+                r8, r8_how = e, f"most central axon left over by the ring fit ({med[e]:.1f} um from the center)"
+                extras.remove(e)
+        extra_why = {}
+        for r in extras:
+            others = closer.get(r, [])
+            if role[r].startswith("in group"):
+                extra_why[r] = f"{role[r][3:]} (listed there); left out of this group's six"
+            elif others:
+                extra_why[r] = f"runs closer to the center of group {', '.join(map(str, others))}; left out of this group's six"
+            elif r not in rowcls:
+                extra_why[r] = "not listed in this group; seventh lamina-ending axon in the core (proofreading lead)"
+            else:
+                extra_why[r] = (f"most peripheral of seven lamina-ending axons ({med[r]:.1f} um from the center); "
+                                "neighbor-bundle axon or misassigned (proofreading lead)")
+        # pieces of missing members: axon-sized partial axons in the core region, in no group's core (top 5)
+        piece_leads = []
+        if len(outer) < 6 or not r7 or not r8:
+            in_cores = {x for h, Q in results.items() if Q.get("status") == "ok" for x in Q["core"]}
+            core_vox = float(np.median([st.loc[int(r), "vox"] for r in prset if int(r) in st.index])) if prset else 0.0
+            pl = st[(st.frac >= 0.3) & (st.frac < CORE_FRAC) & (st.med_r <= 1.5) & (st.vox >= 0.3 * core_vox)]
+            piece_leads = [str(r) for r in pl.sort_values("frac", ascending=False).index
+                           if str(r) not in in_cores and str(r) not in R["listed"]][:5]
         # shell: listed lamina-ending axons that co-travel just outside the core (>= 90% of slices, 1.7-2.4 um);
         # admitted only when they exactly fill the missing outer places (otherwise they may be a neighbor bundle)
         shell = [r for r in sorted(R["listed"] - R["core"]) if int(r) in st.index and r not in R["second"]
@@ -571,7 +628,8 @@ def cmd_refine(groups, sel):
         acc_all.update(shell_added)
         R.update(role=role, add=add, prset=prset, r7=r7, r7_how=r7_how if r7 else "", r8=r8, r8_how=r8_how if r8 else "",
                  outer=outer, extras=extras, shell=shell, shell_added=shell_added,
-                 npre=npre, lam_s=lam_s, off=sorted(R["listed"] - R["core"]))
+                 npre=npre, lam_s=lam_s, off=sorted(R["listed"] - R["core"]),
+                 select_note=select_note, extra_why=extra_why, piece_leads=piece_leads)
     # ---- skeletons of all core photoreceptors, then the two tests on the refined membership
     sk, t = fetch_skeletons(sorted(acc_all), t, label=" (core photoreceptors)")
     for g, R in results.items():
@@ -760,7 +818,10 @@ def write_outputs(groups, sel, results, state):
                     bits.append(f"reclassified from {was}: lamina-ending axon on the ring of the bundle")
                 if r in R["extras"]:
                     cls = "R1-R6?"
-                    bits.append("extra lamina-ending axon in the core beyond six: not paired (neighbor bundle or second piece?)")
+                    bits.append("extra lamina-ending axon in the core beyond six: " +
+                                R.get("extra_why", {}).get(r, "not paired (neighbor bundle or second piece?)"))
+                if r in R["outer"] and R.get("select_note"):
+                    bits.append(R["select_note"])
                 if x and r == R["r8"] and x["cls"] != "R7/R8":
                     bits.append(f"listed as {x['cls']} but runs at the center of the bundle")
                 if r in R["core"]:
@@ -807,8 +868,13 @@ def write_outputs(groups, sel, results, state):
             summ.append(dict(group=g, status="ok", listed=len(R["listed"]), core_PR=len(R["prset"]),
                              off_bundle=len(set(R["off"]) - set(R["shell_added"]) - set(R["second"])), shell=len(R["shell_added"]),
                              second_bundle=len(R["second"]), added=len(R["add"]), outer=len(R["outer"]), extras=len(R["extras"]),
-                             R7=("medulla synapses" if R["r7_how"].startswith("output") else "table") if R["r7"] else "-",
-                             R8=("central" if R["r8_how"].startswith("central") else "table") if R["r8"] else "-",
+                             R7=("medulla synapses" if R["r7_how"].startswith("output") else
+                                 "few lamina outputs" if R["r7_how"].startswith("few lamina") else "table") if R["r7"] else "-",
+                             R8=("central" if R["r8_how"].startswith("central") else
+                                 "ring leftover" if R["r8_how"].startswith("most central axon left") else "table") if R["r8"] else "-",
+                             members=len(R["outer"]) + bool(R["r7"]) + bool(R["r8"]),
+                             selected_by_ring=bool(R.get("select_note")),
+                             piece_leads=", ".join(R.get("piece_leads", [])),
                              ring=R["ring"]["status"],
                              confirmed=sum(1 for x in v if x.startswith("confirmed") or x.startswith("pair confirmed")),
                              conflict=sum(1 for x in v if x.startswith("conflict")),
