@@ -7,9 +7,9 @@ Read-only analysis tools for the FAAB connectome (female adult *Aedes aegypti* b
 
 | path | contents |
 |---|---|
-| `src/faab/` | importable library: `config` (paths, datastack), `clients/` (read-only clients for external data: `cave` throttled CAVE helpers, `neuprint`), `morph` (dotprops for NBLAST), `nglink` (Spelunker links), `pr/` (PR group frames, bundles, pairing), `partners/` (partner xyz points, soma checks), `glia/` (shape metrics) |
+| `src/faab/` | importable library: `config` (paths, datastack), `clients/` (read-only clients for external data: `cave` throttled CAVE helpers, `neuprint`), `morph` (dotprops for NBLAST), `nglink` (Spelunker links), `pr/` (PR group frames, bundles, pairing; `prs_tab` = layout, member order and formatting of the sheet's PRs tab), `partners/` (partner xyz points, soma checks), `glia/` (shape metrics) |
 | `scripts/partners/` | the PR-downstream sheet pipeline (top-20 update, xyz anchor check, glia flags, p_glia, soma column, render) |
-| `scripts/pr_groups/` | PR group finding, bundle tracking, two-criterion pairing, ring plots, schematics |
+| `scripts/pr_groups/` | PR group finding, bundle tracking, two-criterion pairing, ring plots, schematics; `prs_tab.py` edits the PRs tab (.xlsx) in place |
 | `scripts/cutouts/`, `scripts/metu/`, `scripts/admin/` | synapse cutouts, PR-to-MeTu bridge analyses, CAVE activity report |
 | `scratch/<topic>/` | earlier explorations and superseded versions (Dm2, CT1, MeTu/LC, Mi1, fly references, top-10 era) |
 | `data/` | small versioned inputs: `pr_groups.tsv` (canonical PR groups), Drosophila reference CSVs |
@@ -43,3 +43,13 @@ venv/bin/python scripts/pr_groups/pr_ring_plot.py --group 4
 ```
 
 `pr_ring_plot.py` imports nothing from the package and needs no other file, so it can be copied and run elsewhere.
+
+The PRs tab of the sheet, downloaded as .xlsx: refresh its root ids, check them, and list any convention breaks.
+Each writer saves the PRs tab alone as `figures/<UTC stamp>_FAABopticlobetargets-PRs.xlsx`, with formatting kept
+(`--help` lists all subcommands):
+
+```
+venv/bin/python scripts/pr_groups/prs_tab.py refresh-roots <PRs.xlsx>
+venv/bin/python scripts/pr_groups/prs_tab.py verify <PRs.xlsx>
+venv/bin/python scripts/pr_groups/prs_tab.py lint <PRs.xlsx>
+```
