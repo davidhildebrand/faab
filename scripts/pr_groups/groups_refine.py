@@ -779,6 +779,28 @@ def confidence(verdict, tm, rm, unit):
     return "weak" if verdict else ""
 
 
+PAIR_RANK = {"R1/R6": 0, "R2/R5": 1, "R3/R4": 2, "R1/R6 or R3/R4": 3}
+
+
+def order_members(rows):
+    """David 2026-10-18: a group's rows as R1-R6 sorted by pairing (R1/R6, R2/R5, R3/R4, partners on adjacent rows;
+    unpaired R1-R6 after), then R7, then R8, then everything else in its original order (extras, fragments; OFF-BUNDLE
+    and SECOND BUNDLE rows last). Rows are sheet rows: class at [1], root at [2], notes at [9], fly_pair at [13],
+    partner root at [15]."""
+    member = lambda x: "OFF-BUNDLE" not in x[9] and "SECOND BUNDLE" not in x[9]  # notes at [9]
+    r16 = [x for x in rows if x[1] == "R1-R6" and member(x)]
+    by_root = {x[2]: x for x in r16}
+    done, paired = set(), []
+    for x in sorted(r16, key=lambda x: (PAIR_RANK.get(x[13], 9), x[2])):
+        mate = by_root.get(x[15]) if x[15] else None  # a pair without a fly name yet still sits together (rank 9)
+        if x[2] not in done and mate is not None and mate[2] not in done and mate[15] == x[2]:
+            paired += [x, mate]
+            done |= {x[2], mate[2]}
+    rank = {"R7": 0, "R8": 1}
+    rest = sorted((x for x in rows if x not in r16), key=lambda x: rank.get(x[1], 2) if member(x) else 3)  # stable
+    return paired + [x for x in r16 if x[2] not in done] + rest
+
+
 def write_outputs(groups, sel, results, state):
     lines, summ = [], []
     for g in sel:
@@ -864,6 +886,7 @@ def write_outputs(groups, sel, results, state):
                                "" if np.isnan(ms) or np.isnan(mn) else f"{ms - mn:.2f}", "" if np.isnan(ts) else f"{ts:.2f}", ""]
                 out.append([x["root_orig"] if x else r, cls, r, xyz_of.get(r, ""), x["status"] if x else "candidate",
                             "", "", "", "", note, "", ""] + pairing)
+            out = order_members(out)
             v = [R["final"][r][2] for r in R["outer"]]
             summ.append(dict(group=g, status="ok", listed=len(R["listed"]), core_PR=len(R["prset"]),
                              off_bundle=len(set(R["off"]) - set(R["shell_added"]) - set(R["second"])), shell=len(R["shell_added"]),
