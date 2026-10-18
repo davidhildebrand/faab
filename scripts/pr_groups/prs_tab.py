@@ -5,13 +5,15 @@ Every writer reads IN.xlsx, changes only what it says, keeps each cell's formatt
 (the conventions are listed in src/faab/pr/prs_tab.py). Import the output with File > Import > "Insert new sheet(s)".
 
 network-free
+  tidy IN                   every mechanical convention fix at once: dates, strip-notes, order, bold
+  dates IN                  text dates in pr_date / chk_date -> real dates shown as yy-mm-dd
   order IN                  members in David's order (R1-R6 by pairing, R7, R8, rest); rows move with their formatting
   bold IN                   'group N' lines and header rows bold
   strip-notes IN            remove '<tag> YYYY-MM-DD: ...' note segments (--tag, default regroup)
   add-note IN G:ROOT=TEXT   append TEXT to the notes of the row with root_id_orig ROOT in group G (repeatable)
   apply-refine IN PASTE     rewrite the leads section (groups 9+) from a groups_refine.py paste
                             (figures/pr_groups9plus_refined_paste.tsv); a row keeps its own formatting and tracking
-                            values; then strips regroup notes (unless --keep-regroup-notes), orders members, bolds
+                            values; then tidy (regroup notes kept with --keep-regroup-notes)
   export-groups IN OUT.tsv  groups as a tidy TSV for pr_ring_plot.py --groups-file (the targets unless --all)
   ring IN                   ring-naming check of the targets (figures/pr_ring_plot_g<g>_names.tsv) into the
                             'ring_check (<date>)' column; --run first runs pr_ring_plot.py per group (CAVE, serial)
@@ -19,15 +21,17 @@ network-free
   lint IN                   list convention breaks
   diff A B                  what changed between two PRs tabs (member rows matched by group + root_id_orig)
 read-only CAVE, calls >= 5 s apart
+  update IN                 tidy + refresh-roots: the usual update of a freshly downloaded PRs tab
   refresh-roots IN          root_id_curr / partner_root_id_curr <- the root at xyz / partner_xyz now
   verify IN                 every root pair lies on its point, is current and descends from root_id_orig
   fix-points IN G:ROOT ...  move these rows' xyz onto their own axon (nearest L2 chunk); mirror into partner columns
 
-Usual refresh: refresh-roots, then verify. After a groups 9+ refinement: apply-refine, then verify.
+Usual update: update, then verify. After a groups 9+ refinement: apply-refine, then verify.
 Example: venv/bin/python scripts/pr_groups/prs_tab.py order figures/<stamp>_FAABopticlobetargets-PRs.xlsx"""
 import argparse
 import copy
 import datetime
+import difflib
 import json
 import os
 import re
@@ -68,6 +72,26 @@ def row_of(ws, spec):
 
 
 # ---------------------------------------------------------------- network-free
+def report_tidy(s):
+    print(f"tidy: {s['dates_converted']} text dates converted"
+          f"{' (left as text, not a date: ' + ', '.join(s['date_text_left']) + ')' if s['date_text_left'] else ''}; "
+          f"tagged notes removed from {s['notes_stripped']} cells; members reordered in {s['groups_reordered']} groups "
+          f"({s['rows_moved']} rows moved); {s['cells_bolded']} title/header cells made bold")
+
+
+def cmd_tidy(a):
+    wb, ws = T.load(a.book)
+    report_tidy(T.tidy(ws))
+    finish(wb, ws, a)
+
+
+def cmd_dates(a):
+    wb, ws = T.load(a.book)
+    n, left = T.convert_text_dates(ws)
+    print(f"{n} text dates converted to dates; text left alone (not a date): {left or 'none'}")
+    finish(wb, ws, a)
+
+
 def cmd_order(a):
     wb, ws = T.load(a.book)
     nb, nr = T.order_blocks(ws)
@@ -190,10 +214,7 @@ def cmd_apply_refine(a):
     n_data = sum(k[0] == "data" for k in new)
     print(f"leads section rows {start}-{end} -> {start}-{last}; {n_data} member rows, "
           f"{sum(k[0] == 'data' and k[3] for k in new)} styled from their own tab row; tab tracking values kept: {kept}")
-    if not a.keep_regroup_notes:
-        print(f"regroup note segments removed from {T.strip_tagged_notes(ws, ('regroup',))} cells")
-    nb, nr = T.order_blocks(ws)
-    print(f"members ordered in {nb} groups ({nr} rows moved); {T.bold_titles(ws)} title/header cells made bold")
+    report_tidy(T.tidy(ws, () if a.keep_regroup_notes else ("regroup",)))
     finish(wb, ws, a)
 
 
@@ -355,7 +376,14 @@ def cmd_diff(a):
     oa, ob = others(A), others(B)
     W = max(A.max_column, B.max_column)
     sig = lambda ws, r: [(norm(ws.cell(r, c).value), style_sig(ws.cell(r, c))) for c in range(1, W + 1)]
-    odiff = [(ra, rb) for ra, rb in zip(oa, ob) if sig(A, ra) != sig(B, rb)]
+    key = lambda ws, r: tuple(norm(ws.cell(r, c).value) for c in range(1, W + 1))
+    odiff, only_a, only_b = [], [], []  # lines aligned by content, so an inserted line does not shift the rest
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, [key(A, r) for r in oa], [key(B, r) for r in ob],
+                                                       autojunk=False).get_opcodes():
+        if tag == "equal" or (tag == "replace" and i2 - i1 == j2 - j1):
+            odiff += [(ra, rb) for ra, rb in zip(oa[i1:i2], ob[j1:j2]) if sig(A, ra) != sig(B, rb)]
+        else:
+            only_a, only_b = only_a + oa[i1:i2], only_b + ob[j1:j2]
     print(f"member rows: {sum(map(len, ia.values()))} -> {sum(map(len, ib.values()))}; matched rows at a new position: "
           f"{moved}; removed {len(gone)} {gone[:6]}; added {len(added)} {added[:6]}")
     print(f"value changes by column: {dict(val) or 'none'}")
@@ -363,13 +391,25 @@ def cmd_diff(a):
     if ex:
         print("\n".join(ex))
     print(f"other lines (group lines, headers, titles): {len(oa)} -> {len(ob)}; changed: "
-          f"{len(odiff)} {[f'{x}->{y}' for x, y in odiff[:8]]}")
+          f"{len(odiff)} {[f'{x}->{y}' for x, y in odiff[:8]]}; only in A: rows {only_a[:8]}; only in B: rows {only_b[:8]}")
 
 
 # ---------------------------------------------------------------- read-only CAVE
 def cmd_refresh_roots(a):
-    from faab.clients.cave import parse_xyz, roots_at_xyz
     wb, ws = T.load(a.book)
+    refresh_roots(ws)
+    finish(wb, ws, a)
+
+
+def cmd_update(a):
+    wb, ws = T.load(a.book)
+    report_tidy(T.tidy(ws))
+    refresh_roots(ws)
+    finish(wb, ws, a)
+
+
+def refresh_roots(ws):
+    from faab.clients.cave import parse_xyz, roots_at_xyz
     todo = []
     for b in T.blocks(ws):
         for r in b.rows:
@@ -390,11 +430,10 @@ def cmd_refresh_roots(a):
             changed[(b.section, cell.column_letter)] += 1
             if len(ex) < 12:
                 ex.append(f"  group {b.group} {cell.coordinate}: {old} -> {root}")
-    print("cells changed (section, column):", dict(changed) or "none")
+    print("root cells changed (section, column):", dict(changed) or "none")
     if ex:
         print("\n".join(ex))
     print("points with no segment (left alone):", zero or "none")
-    finish(wb, ws, a)
 
 
 def cmd_verify(a):
@@ -516,6 +555,8 @@ def main():
         p.set_defaults(fn=fn)
         return p
 
+    cmd("tidy", cmd_tidy)
+    cmd("dates", cmd_dates)
     cmd("order", cmd_order)
     cmd("bold", cmd_bold)
     cmd("strip-notes", cmd_strip_notes).add_argument("--tag", action="append", default=None,
@@ -540,6 +581,7 @@ def main():
     p.add_argument("a")
     p.add_argument("b")
     p.add_argument("--examples", type=int, default=12)
+    cmd("update", cmd_update)
     cmd("refresh-roots", cmd_refresh_roots)
     cmd("verify", cmd_verify, writes=False)
     cmd("fix-points", cmd_fix_points).add_argument("cells", nargs="+", metavar="G:ROOT")

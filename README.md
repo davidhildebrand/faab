@@ -44,12 +44,13 @@ venv/bin/python scripts/pr_groups/pr_ring_plot.py --group 4
 
 `pr_ring_plot.py` imports nothing from the package and needs no other file, so it can be copied and run elsewhere.
 
-The PRs tab of the sheet, downloaded as .xlsx: refresh its root ids, check them, and list any convention breaks.
-Each writer saves the PRs tab alone as `figures/<UTC stamp>_FAABopticlobetargets-PRs.xlsx`, with formatting kept
-(`--help` lists all subcommands):
+The PRs tab of the sheet, downloaded as .xlsx. `update` applies the tab's conventions (text dates converted to dates,
+member order, bold group lines and headers) and refreshes its root ids. `verify` then checks the roots against the
+points and lineage, and `lint` lists any convention breaks. Each writer saves the PRs tab alone as
+`figures/<UTC stamp>_FAABopticlobetargets-PRs.xlsx`, with formatting kept (`--help` lists all subcommands):
 
 ```
-venv/bin/python scripts/pr_groups/prs_tab.py refresh-roots <PRs.xlsx>
+venv/bin/python scripts/pr_groups/prs_tab.py update <download.xlsx>
 venv/bin/python scripts/pr_groups/prs_tab.py verify <PRs.xlsx>
 venv/bin/python scripts/pr_groups/prs_tab.py lint <PRs.xlsx>
 ```

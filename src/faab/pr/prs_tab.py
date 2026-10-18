@@ -9,10 +9,12 @@ David's conventions, applied by the writers in scripts/pr_groups/prs_tab.py and 
     unpaired R1-R6 after), then R7, then R8, then everything else in its order (OFF-BUNDLE / SECOND BUNDLE rows last);
   - 'group N' lines and header rows bold;
   - no 'regroup YYYY-MM-DD: ...' notes;
-  - root ids stored as text, dates as dates, scores as numbers; rows move with their styles, links and heights;
+  - dates are real dates shown as yy-mm-dd, never text (David, 2026-10-18); root ids stored as text, scores as numbers;
+    rows move with their styles, links and heights;
   - outputs hold the PRs tab alone and are named with the UTC stamp (faab.partners.sheet.utc_stamp).
 Network-free."""
 import copy
+import datetime
 import os
 import re
 from dataclasses import dataclass, field
@@ -28,6 +30,13 @@ PAIR_RANK = {"R1/R6": 0, "R2/R5": 1, "R3/R4": 2, "R1/R6 or R3/R4": 3}
 ASIDE = ("OFF-BUNDLE", "SECOND BUNDLE")  # rows with these notes are not members of the bundle
 ID_COLS = ("root_id_orig", "root_id_curr", "partner_root_id_orig", "partner_root_id_curr")
 DEFAULT_OUT = os.path.join(FIGURES, "{stamp}_FAABopticlobetargets-PRs.xlsx")
+DATE_FMT = 'yy"-"mm"-"dd'  # how the sheet shows dates
+DATE_TEXT = [  # text forms of a date -> (year, month, day)
+    (re.compile(r"(\d\d)-(\d\d)-(\d\d)"), lambda m: (2000 + int(m[1]), int(m[2]), int(m[3]))),  # yy-mm-dd, as shown
+    (re.compile(r"(\d{4})-(\d\d)-(\d\d)"), lambda m: (int(m[1]), int(m[2]), int(m[3]))),
+    (re.compile(r"(\d{1,2})/(\d{1,2})/(\d\d|\d{4})"),
+     lambda m: (int(m[3]) + (2000 if len(m[3]) == 2 else 0), int(m[1]), int(m[2]))),  # m/d/yy, m/d/yyyy
+]
 
 
 @dataclass
@@ -170,10 +179,58 @@ def strip_tagged_notes(ws, tags=("regroup",)):
     return n
 
 
+def as_date(s):
+    """a date written as text -> datetime (None if s is not a valid date in one of the DATE_TEXT forms)"""
+    for p, ymd in DATE_TEXT:
+        m = p.fullmatch(str(s).strip())
+        if m:
+            try:
+                return datetime.datetime(*ymd(m))
+            except ValueError:
+                return None
+    return None
+
+
+def date_cols(b):
+    return [c for name, c in b.cols.items() if name.endswith("date")]
+
+
+def convert_text_dates(ws):
+    """text dates in the date columns (header ending in 'date') -> real dates shown as yy-mm-dd, cell style otherwise
+    kept; returns (cells converted, [cells holding text that is not a date, left alone])"""
+    n, left = 0, []
+    for b in blocks(ws):
+        for c in date_cols(b):
+            for r in b.rows:
+                x = ws.cell(r, c)
+                if isinstance(x.value, str) and x.value.strip():
+                    d = as_date(x.value)
+                    if d is None:
+                        left.append(x.coordinate)
+                    else:
+                        x.value, x.number_format, n = d, DATE_FMT, n + 1
+    return n, left
+
+
+def tidy(ws, tags=("regroup",)):
+    """apply every convention that can be fixed mechanically: dates, tagged notes, member order, bold titles"""
+    n_dates, left = convert_text_dates(ws)
+    n_notes = strip_tagged_notes(ws, tags) if tags else 0
+    nb, nr = order_blocks(ws)
+    return dict(dates_converted=n_dates, date_text_left=left, notes_stripped=n_notes, groups_reordered=nb,
+                rows_moved=nr, cells_bolded=bold_titles(ws))
+
+
 def lint(ws, tags=("regroup",)):
     """{issue: [where, ...]} for every convention the tab breaks (empty dict = all good)"""
     out = {}
     add = lambda k, v: out.setdefault(k, []).append(v)
+    for b in blocks(ws):
+        for c in date_cols(b):
+            for r in b.rows:
+                v = ws.cell(r, c).value
+                if isinstance(v, str) and v.strip():
+                    add("date stored as text" if as_date(v) else "date column holds text", ws.cell(r, c).coordinate)
     for r in title_rows(ws):
         if any(ws.cell(r, c).value not in (None, "") and not ws.cell(r, c).font.b for c in range(1, ws.max_column + 1)):
             add("group line / header not bold", f"row {r}")
@@ -200,7 +257,8 @@ def lint(ws, tags=("regroup",)):
 def lint_line(ws):
     issues = lint(ws)
     if not issues:
-        return "lint: ok (members in order, group lines and headers bold, no regroup notes, ids text, xyz readable)"
+        return ("lint: ok (members in order, group lines and headers bold, no regroup notes, dates are dates, ids text, "
+                "xyz readable)")
     return "lint: " + "; ".join(f"{k}: {len(v)} ({', '.join(v[:4])}{', ...' if len(v) > 4 else ''})"
                                 for k, v in issues.items())
 
