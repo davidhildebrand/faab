@@ -40,6 +40,12 @@ CLS = ("superclass", "class", "subclass", "subsubclass", "type")
 PR_RE = r"R1-6|R7-8|photoreceptor"
 CACHE = os.path.join(TMP, "paths_cache")
 LIMIT = 500000  # the materialization server caps a live query at this many rows (warning "201 - Limited query")
+STAGE_SHADES = {  # Spelunker layer colors by stage along a path (sources light -> targets dark), by path length
+    1: ["#f7c873", "#7a1010"],
+    2: ["#f7c873", "#d9742b", "#7a1010"],
+    3: ["#f7c873", "#e9953a", "#c4552a", "#7a1010"],
+    4: ["#f7c873", "#eca240", "#d9742b", "#b2412a", "#7a1010"],
+}
 _t = [0.0]
 
 
@@ -153,7 +159,7 @@ def main():
     ap.add_argument("--thr", type=int, nargs="+", default=[5, 3], help="synapses per edge; each is reported")
     ap.add_argument("--tag", required=True)
     ap.add_argument("--max-paths", type=int, default=3000, help="paths kept per threshold in paths.tsv")
-    ap.add_argument("--link-paths", type=int, default=10, help="strongest paths shown in the Spelunker link")
+    ap.add_argument("--link-paths", type=int, default=10, help="strongest paths shown in the Spelunker link (0 = all of the shortest length)")
     ap.add_argument("--fresh", action="store_true", help="ignore cached edge tables")
     ap.add_argument("--redo", nargs="+", default=[], metavar="STAGE", help="requery these stages (F1 B1 B2 M)")
     a = ap.parse_args()
@@ -283,7 +289,7 @@ def main():
                                       roles="+".join(sorted(b["roles"])), paths=b["paths"], best_min_nsyn=b["best_min"],
                                       in_D1=c in d1, in_U1=c in u1, in_U2=c in u2))
             if best_link is None:
-                best_link = (thr, shortest, ranked[:a.link_paths])
+                best_link = (thr, shortest, ranked[:a.link_paths] if a.link_paths else ranked)
         print(line, flush=True)
         summary.append(line)
 
@@ -298,17 +304,24 @@ def main():
             f"set sizes at >= {lo}: D1 {len(D1)}, U1 {len(U1)}, U2 {len(U2)}; M edges {len(M)}"]
     if best_link:
         thr, k, ranked = best_link
-        mids = sorted({c for p in ranked for c in p[0][1:-1]})
-        spec = {"meshes": [{"kind": "brain", "alpha": 1.0}],
-                "neurons": [{"name": f"sources ({len({p[0][0] for p in ranked})})", "color": "#f0a030",
-                             "ids": sorted({str(p[0][0]) for p in ranked})},
-                            {"name": f"intermediates ({len(mids)}, {k - 1} per path)", "color": "#3b6fb0", "ids": [str(c) for c in mids]},
-                            {"name": f"targets {a.target}", "color": "#e6194b", "ids": sorted({str(p[0][-1]) for p in ranked})}],
-                "view": "anterior", "layout": "3d", "select": f"intermediates ({len(mids)}, {k - 1} per path)", "image": True}
+        # one layer per stage of the paths, shaded light (sources) to dark (targets); a cell that sits at two stages in
+        # different paths takes its earliest
+        stage_of = {}
+        for cells, _ in ranked:
+            for i, c in enumerate(cells):
+                stage_of[c] = min(i, stage_of.get(c, i))
+        names = ["sources"] + [f"hop {i}" for i in range(1, k)] + [f"targets {a.target}"]
+        layers = []
+        for i, name in enumerate(names):
+            ids = sorted(str(c) for c, st in stage_of.items() if st == i)
+            layers.append({"name": f"{i}: {name} ({len(ids)})", "color": STAGE_SHADES[k][i], "ids": ids})
+        spec = {"meshes": [{"kind": "brain", "alpha": 1.0}], "neurons": layers, "view": "anterior", "layout": "3d",
+                "select": layers[1]["name"], "image": True}
         json.dump(spec, open(base + "_spec.json", "w"), indent=1)
         url = nglink.to_url(nglink.build(spec))
         open(base + "_ng.txt", "w").write(url + "\n")
-        head.append(f"Spelunker link: the {len(ranked)} strongest paths of {k} connections at >= {thr} ({base}_ng.txt)")
+        head.append(f"Spelunker link: the {len(ranked)} strongest paths of {k} connections at >= {thr}, one layer per stage "
+                    f"({', '.join(l['name'] for l in layers)}) ({base}_ng.txt)")
     open(base + "_summary.txt", "w").write("\n".join(head + summary) + "\n")
     print("\n".join(head), flush=True)
     print(f"wrote {base}_summary.txt / _paths.tsv / _cells.tsv; {time.time() - t0:.0f} s", flush=True)
