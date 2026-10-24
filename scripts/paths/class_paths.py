@@ -52,7 +52,8 @@ def s(v):
 
 
 def flytable(client):
-    """root -> (label, side, is_glia) for every aedes_main row, resolved fresh (one get_roots call)"""
+    """root -> (label, side, is_glia, point_xyz voxels or None) for every aedes_main row, resolved fresh (one get_roots
+    call)"""
     import seaserpent as ss
     meta = ss.Table("aedes_main", server=SERVER).to_frame()
     meta.columns = [str(c) for c in meta.columns]
@@ -63,20 +64,49 @@ def flytable(client):
     info = {}
     for (_, row), r in zip(meta[ok].iterrows(), roots):
         label = " / ".join(x for x in (s(row.get(c)) for c in CLS) if x)
-        info[int(r)] = (label, s(row.get("side")), "glia" in s(row.get("superclass")).lower())
+        p = re.findall(r"-?\d+(?:\.\d+)?", s(row.get("point_xyz")))
+        info[int(r)] = (label, s(row.get("side")), "glia" in s(row.get("superclass")).lower(),
+                        np.array([float(v) for v in p]) if len(p) == 3 else None)
     print(f"FlyTable aedes_main: {len(info)} labeled current roots", flush=True)
     return info
 
 
+def side_axis(info, source_re):
+    """(midpoint, unit vector toward side R) from the FlyTable sources with a side and a point: left and right eyes
+    are far apart, so a point's side is the sign of its projection onto the R-L axis"""
+    pts = {sd: np.array([p for lab, s_, _, p in info.values() if re.search(source_re, lab, re.I) and s_ == sd
+                         and p is not None]) for sd in ("R", "L")}
+    if min(len(v) for v in pts.values()) < 3:
+        raise SystemExit("not enough sided FlyTable sources with points to define the R-L axis")
+    cr, cl = pts["R"].mean(0), pts["L"].mean(0)
+    sep = [float(np.dot(p - (cr + cl) / 2, (cr - cl) / np.linalg.norm(cr - cl))) for sd in ("R", "L") for p in pts[sd]]
+    print(f"R-L axis from {len(pts['R'])} R and {len(pts['L'])} L FlyTable sources; centroid separation "
+          f"{np.linalg.norm(cr - cl) / 62.5:.0f} um (x16 nm voxels), smallest |offset| {min(abs(v) for v in sep):.0f} vox",
+          flush=True)
+    return (cr + cl) / 2, (cr - cl) / np.linalg.norm(cr - cl)
+
+
 def query(client, now, tag, **filters):
     """edge table (pre, post, n) of the live synapses matching the filters, chunked (<= 300 pre / 2000 post ids per
-    call) and cached by tag in ../tmp/paths_cache"""
-    path = os.path.join(CACHE, f"{tag}.tsv")
+    call) and cached by tag in ../tmp/paths_cache. A cached table is reused when the ids it was queried with (sidecar
+    <tag>_ids.json) cover the request, filtered to the requested ids; a cache without a sidecar is assumed to cover it."""
+    path, side = os.path.join(CACHE, f"{tag}.tsv"), os.path.join(CACHE, f"{tag}_ids.json")
+    pre, post = filters.get("pre_pt_root_id"), filters.get("post_pt_root_id")
     if os.path.exists(path):
         e = pd.read_csv(path, sep="\t", dtype={"pre": np.int64, "post": np.int64, "n": int})
-        print(f"  {tag}: {len(e)} edges (cached)", flush=True)
-        return e
-    pre, post = filters.get("pre_pt_root_id"), filters.get("post_pt_root_id")
+        had = json.load(open(side)) if os.path.exists(side) else None
+        covers = had is None or all(not ids or set(ids) <= set(had.get(k, []))
+                                    for k, ids in (("pre", pre), ("post", post)))
+        if covers:
+            if had is None:  # record what the cache covers: the request plus every id that appears in it
+                had = {k: sorted(set(ids or []) | set(e[k].tolist())) for k, ids in (("pre", pre), ("post", post))}
+                json.dump(had, open(side, "w"))
+            for k, ids in (("pre", pre), ("post", post)):
+                if ids:
+                    e = e[e[k].isin(set(ids))]
+            print(f"  {tag}: {len(e)} edges (cached; filtered to the requested ids)", flush=True)
+            return e
+        print(f"  {tag}: cache does not cover the request; requerying", flush=True)
     pre_chunks = [pre[i:i + 300] for i in range(0, len(pre), 300)] if pre else [None]
     post_chunks = [post[i:i + 2000] for i in range(0, len(post), 2000)] if post else [None]
     parts, stats = [], dict(rows=0, calls=0, splits=0)
@@ -107,6 +137,7 @@ def query(client, now, tag, **filters):
     e = pd.concat(parts).groupby(level=[0, 1]).sum().rename("n").reset_index()
     e.columns = ["pre", "post", "n"]
     e.to_csv(path, sep="\t", index=False)
+    json.dump({"pre": sorted(pre or []), "post": sorted(post or [])}, open(side, "w"))
     print(f"  {tag}: {stats['rows']} synapses in {stats['calls']} calls ({stats['splits']} chunks split at the row cap) "
           f"-> {len(e)} edges", flush=True)
     return e
@@ -117,6 +148,8 @@ def main():
     ap.add_argument("--source", default=PR_RE, help=f"regex on the FlyTable label of the sources (default {PR_RE!r})")
     ap.add_argument("--target", required=True, help="regex on the FlyTable label of the targets, e.g. DNp01")
     ap.add_argument("--pr-groups", action="store_true", help="add the photoreceptors of data/pr_groups.tsv as sources")
+    ap.add_argument("--side", choices=["R", "L"], help="only sources on this side (FlyTable side column; pr_groups.tsv "
+                    "cells by their point's side of the R-L axis through the FlyTable sources)")
     ap.add_argument("--thr", type=int, nargs="+", default=[5, 3], help="synapses per edge; each is reported")
     ap.add_argument("--tag", required=True)
     ap.add_argument("--max-paths", type=int, default=3000, help="paths kept per threshold in paths.tsv")
@@ -134,28 +167,39 @@ def main():
     client = cave_client()
     now = datetime.datetime.now(datetime.timezone.utc)
     info = flytable(client)
-    label = lambda r: info.get(r, ("", "", False))[0]
-    glia = {r for r, (_, _, g) in info.items() if g}
+    label = lambda r: info.get(r, ("", "", False, None))[0]
+    glia = {r for r, (_, _, g, _) in info.items() if g}
+    axis = side_axis(info, a.source) if a.side else None
+    side_of = lambda p: ("R" if np.dot(p - axis[0], axis[1]) > 0 else "L") if p is not None else ""
 
-    src_class = {r: lab for r, (lab, _, _) in info.items() if re.search(a.source, lab, re.I)}
+    src_class = {r: lab for r, (lab, sd, _, _) in info.items() if re.search(a.source, lab, re.I)
+                 and (not a.side or sd == a.side)}
+    n_ft = len(src_class)
     if a.pr_groups:
         g = pd.read_csv(os.path.join(DATA, "pr_groups.tsv"), sep="\t", dtype=str)
         wait()
         at = roots_at_xyz(list(g.xyz))
-        n_new = 0
+        n_new, n_side, groups_side = 0, defaultdict(int), defaultdict(set)
         for row, r in zip(g.itertuples(), at):
             r = int(r) if int(r) > 0 else int(row.root_id_curr)
-            if r not in src_class:
+            sd = side_of(np.array([float(v) for v in row.xyz.split(",")])) if a.side else ""
+            n_side[sd] += 1
+            groups_side[sd].add(int(row.group))
+            if r not in src_class and (not a.side or sd == a.side):
                 src_class[r] = f"pr_groups.tsv group {row.group} {row._2}"
                 n_new += 1
-        print(f"sources: {len(src_class) - n_new} FlyTable + {n_new} from pr_groups.tsv", flush=True)
-    targets = {r: lab for r, (lab, _, _) in info.items() if re.search(a.target, lab, re.I)}
+        if a.side:
+            both = sorted(groups_side["R"] & groups_side["L"])
+            print(f"\npr_groups.tsv cells by side: {dict(n_side)}; groups with cells on both sides: {both or 'none'}", flush=True)
+        print(f"sources: {n_ft} FlyTable + {n_new} from pr_groups.tsv" + (f" (side {a.side} only)" if a.side else ""), flush=True)
+    targets = {r: lab for r, (lab, _, _, _) in info.items() if re.search(a.target, lab, re.I)}
     print(f"sources {len(src_class)}; targets {len(targets)}: " +
           "; ".join(f"{r} ({lab}, side {info[r][1]})" for r, lab in targets.items()), flush=True)
     if not targets or not src_class:
         raise SystemExit("no sources or no targets")
     sources, tgt = sorted(src_class), sorted(targets)
     lo = min(a.thr)
+    out_tag = a.tag + (f"_sources{a.side}" if a.side else "")
 
     # ---- query stages, at the lowest threshold
     print("F1: synapses out of the sources", flush=True)
@@ -235,7 +279,7 @@ def main():
                     b["best_min"] = max(b["best_min"], min(ns))
                     b["roles"].add(f"hop{k}")
             for c, b in sorted(best.items(), key=lambda kv: (-kv[1]["best_min"], -kv[1]["paths"])):
-                cell_rows.append(dict(thr=thr, connections=shortest, cell=c, label=label(c), side=info.get(c, ("", "", 0))[1],
+                cell_rows.append(dict(thr=thr, connections=shortest, cell=c, label=label(c), side=info.get(c, ("", "", 0, 0))[1],
                                       roles="+".join(sorted(b["roles"])), paths=b["paths"], best_min_nsyn=b["best_min"],
                                       in_D1=c in d1, in_U1=c in u1, in_U2=c in u2))
             if best_link is None:
@@ -244,10 +288,11 @@ def main():
         summary.append(line)
 
     # ---- outputs
-    base = os.path.join(FIGURES, f"{stamp}_paths_{a.tag}")
+    base = os.path.join(FIGURES, f"{stamp}_paths_{out_tag}")
     pd.DataFrame(out_rows).to_csv(base + "_paths.tsv", sep="\t", index=False)
     pd.DataFrame(cell_rows).to_csv(base + "_cells.tsv", sep="\t", index=False)
-    head = [f"paths {a.tag}: sources /{a.source}/ ({len(sources)} cells{' incl. pr_groups.tsv' if a.pr_groups else ''}) -> "
+    head = [f"paths {out_tag}: sources /{a.source}/ ({len(sources)} cells{' incl. pr_groups.tsv' if a.pr_groups else ''}"
+            f"{', side ' + a.side + ' only' if a.side else ''}) -> "
             f"targets /{a.target}/ ({len(tgt)}); live synapses at {now:%Y-%m-%d %H:%M} UTC; edges = cell pairs with >= thr "
             f"synapses; glia (FlyTable) never intermediates; self synapses dropped",
             f"set sizes at >= {lo}: D1 {len(D1)}, U1 {len(U1)}, U2 {len(U2)}; M edges {len(M)}"]

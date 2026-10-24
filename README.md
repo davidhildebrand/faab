@@ -49,7 +49,10 @@ Shortest paths from the photoreceptors to a FlyTable-labeled target class, with 
 
 ```
 venv/bin/python scripts/paths/class_paths.py --target DNp01 --pr-groups --thr 5 3 --tag pr_to_DNp01
+venv/bin/python scripts/paths/class_paths.py --target DNp01 --pr-groups --side R --thr 5 3 --tag pr_to_DNp01
 ```
+
+The second run keeps only right-side sources and reuses the first run's cached synapses (no new queries).
 
 The PRs tab of the sheet, downloaded as .xlsx. `update` applies the tab's conventions (text dates converted to dates,
 member order, bold group lines and headers) and refreshes its root ids. `verify` then checks the roots against the
