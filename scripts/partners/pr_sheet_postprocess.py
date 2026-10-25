@@ -175,66 +175,53 @@ def main():
 
     allrows = [r for s in sheets.values() for r in rows_of(s)]
 
-    # ---- same cell within a block: the largest-nsyn row is the record, the rest NEW-DUP
-    n_dup = 0
-    for s in sheets.values():
-        groups = defaultdict(list)
-        for r in rows_of(s):
-            if r["cell"].isdigit() and r["role"] != "is a PR of this group" and not r["flag"]:
-                groups[(r["block"], r["cell"])].append(r)
-        for (_, cell), g in groups.items():
-            if len(g) < 2:
-                continue
-            g.sort(key=lambda r: -as_int(r["cells"]["nsyn"], 0))
-            main = g[0]
-            mc = main["cells"]
-            # the record inherits the best status and every name of its duplicates (David: two names are fine)
-            real = [r for r in g if r["cells"]["status"] not in ("", "NEW", "NEW-DUP")]
-            if real:
-                mc["status"] = min(real, key=lambda r: RANK.get(r["cells"]["status"], 7))["cells"]["status"]
-            mc["proofreader"] = "; ".join(dict.fromkeys(n for r in g for n in clauses(r["cells"]["proofreader"])))
-            mc["checker"] = "; ".join(dict.fromkeys(n for r in g for n in clauses(r["cells"]["checker"])))
-            mc["pr_date"] = mc["pr_date"] or next((r["cells"]["pr_date"] for r in g if r["cells"]["pr_date"]), "")
-            mc["chk_date"] = mc["chk_date"] or next((r["cells"]["chk_date"] for r in g if r["cells"]["chk_date"]), "")
-            mc["annotation"] = join_unique(*(r["cells"]["annotation"] for r in g))
-            mc["notes"] = join_unique(*(r["cells"]["notes"] for r in g))
-            for r in g[1:]:
-                c = r["cells"]
-                was = f"{c['status'] or '-'}" + (f" ({c['proofreader']})" if c["proofreader"] else "")
-                c["notes"] = join_unique(c["notes"], f"duplicate target of {mc['root_id_orig']} (now {cell}); was {was}")
-                c["status"] = "NEW-DUP"
-                r["dup"] = True
-                n_dup += 1
-    print(f"within-block duplicates set to NEW-DUP: {n_dup}", flush=True)
-
-    # ---- same cell across blocks / sheets: unify the tracking columns
+    # ---- every row of the same live cell, across blocks and sheets (David, 2026-10-25):
+    #   a proofreading status anywhere -> all rows share the best status, every name, the dates, the merged notes; a
+    #       smaller twin inside the same block gets 'merged into <record>'; nothing with a status ever becomes NEW-DUP
+    #   no status anywhere -> the row of the subtable with the most nsyn keeps NEW, the others become NEW-DUP
     by_cell = defaultdict(list)
     for r in allrows:
-        if r["cell"].isdigit() and not r.get("dup") and not r["flag"] and r["role"] != "is a PR of this group":
+        if r["cell"].isdigit() and not r["flag"] and r["role"] != "is a PR of this group":
             by_cell[r["cell"]].append(r)
-    n_uni, merged_notes = 0, 0
+    n_uni = n_dup = n_merged = 0
     for cell, g in by_cell.items():
         if len(g) < 2:
             continue
-        g.sort(key=lambda r: (RANK.get(r["cells"]["status"], 7), -as_int(r["cells"]["nsyn"], 0)))
-        lead = g[0]["cells"]
-        status = lead["status"]
-        names_p = list(dict.fromkeys(n for r in g for n in clauses(r["cells"]["proofreader"])))
-        names_c = list(dict.fromkeys(n for r in g for n in clauses(r["cells"]["checker"])))
-        pr_date = next((r["cells"]["pr_date"] for r in g if r["cells"]["pr_date"]), "")
-        chk_date = next((r["cells"]["chk_date"] for r in g if r["cells"]["chk_date"]), "")
-        annotation = join_unique(*(r["cells"]["annotation"] for r in g))
-        notes = join_unique(*(r["cells"]["notes"] for r in g))
+        nsyn = lambda r: as_int(r["cells"]["nsyn"], 0)
+        record = max(g, key=nsyn)
+        real = [r for r in g if r["cells"]["status"] not in ("", "NEW", "NEW-DUP")]
+        if not real:
+            for r in g:
+                if r is not record:
+                    c = r["cells"]
+                    c["status"] = "NEW-DUP"
+                    c["notes"] = join_unique(c["notes"], f"duplicate target of {record['cells']['root_id_orig']} (now {cell})")
+                    n_dup += 1
+            continue
+        best = min(real, key=lambda r: (RANK.get(r["cells"]["status"], 7), -nsyn(r)))
+        status = best["cells"]["status"]
+        order = [best] + [r for r in g if r is not best]
+        names_p = list(dict.fromkeys(n for r in order for n in clauses(r["cells"]["proofreader"])))
+        names_c = list(dict.fromkeys(n for r in order for n in clauses(r["cells"]["checker"])))
+        pr_date = next((r["cells"]["pr_date"] for r in order if r["cells"]["pr_date"]), "")
+        chk_date = next((r["cells"]["chk_date"] for r in order if r["cells"]["chk_date"]), "")
+        annotation = join_unique(*(r["cells"]["annotation"] for r in order))
+        notes = join_unique(*(r["cells"]["notes"] for r in order))
+        if any(r["cells"]["status"] == "stopped" for r in g) and status != "stopped":
+            notes = join_unique(notes, f"fragment merged into {cell}")
         for r in g:
             c = r["cells"]
             before = dict(c)
-            if c["status"] == "stopped" and status not in ("stopped", "", "NEW"):
-                notes = join_unique(notes, f"fragment merged into {cell}")
             c.update(status=status, proofreader="; ".join(names_p), checker="; ".join(names_c), pr_date=c["pr_date"] or pr_date,
                      chk_date=c["chk_date"] or chk_date, annotation=annotation, notes=notes)
+            twins = [x for x in g if (x["tab"], x["block"]) == (r["tab"], r["block"])]
+            if len(twins) > 1 and r is not max(twins, key=nsyn):  # a smaller twin inside the same block
+                c["notes"] = join_unique(c["notes"], f"merged into {max(twins, key=nsyn)['cells']['root_id_orig']} (same cell {cell})")
+                n_merged += 1
             if any(before[k] != c[k] for k in TRACKED):
                 n_uni += 1
-    print(f"rows changed by cross-block unification: {n_uni} (cells with several rows: {sum(len(g) > 1 for g in by_cell.values())})", flush=True)
+    print(f"cells with several rows: {sum(len(g) > 1 for g in by_cell.values())}; rows unified {n_uni}; same-block twins noted "
+          f"'merged into' {n_merged}; status-less duplicates set to NEW-DUP {n_dup}", flush=True)
 
     # ---- write each sheet: data lines rebuilt from the row dicts (an inserted row right after its parent), other lines verbatim
     flagged = []
