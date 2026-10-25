@@ -92,6 +92,23 @@ def side_axis(info, source_re):
     return (cr + cl) / 2, (cr - cl) / np.linalg.norm(cr - cl)
 
 
+def refresh_roots(client, ids, what):
+    """{id: [current root ids]}: an expired id (edited since it was listed) is replaced by its current descendants, since
+    a live query rejects expired ids. One is_latest_roots call, then one call per expired id."""
+    ids = sorted(set(int(i) for i in ids))
+    wait()
+    ok = np.asarray(client.chunkedgraph.is_latest_roots(ids)).astype(bool)
+    out = {r: [r] for r, good in zip(ids, ok) if good}
+    stale = [r for r, good in zip(ids, ok) if not good]
+    for r in stale:
+        wait()
+        out[r] = [int(x) for x in np.atleast_1d(client.chunkedgraph.get_latest_roots(r))]
+    if stale:
+        print(f"  {what}: {len(stale)} expired ids -> {sum(len(out[r]) for r in stale)} current roots "
+              f"({', '.join(str(r) for r in stale[:5])}{', ...' if len(stale) > 5 else ''})", flush=True)
+    return out
+
+
 def query(client, now, tag, **filters):
     """edge table (pre, post, n) of the live synapses matching the filters, chunked (<= 300 pre / 2000 post ids per
     call) and cached by tag in ../tmp/paths_cache. A cached table is reused when the ids it was queried with (sidecar
@@ -152,7 +169,11 @@ def query(client, now, tag, **filters):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--source", default=PR_RE, help=f"regex on the FlyTable label of the sources (default {PR_RE!r})")
-    ap.add_argument("--target", required=True, help="regex on the FlyTable label of the targets, e.g. DNp01")
+    ap.add_argument("--target", help="regex on the FlyTable label of the targets, e.g. DNp01")
+    ap.add_argument("--source-ids", metavar="FILE", help="root ids (one per line) used as sources instead of --source")
+    ap.add_argument("--target-ids", metavar="FILE", help="root ids (one per line) used as targets instead of --target")
+    ap.add_argument("--max-connections", type=int, default=4, choices=[1, 2, 3, 4],
+                    help="longest path searched; stages beyond it are not queried (2 = F1 + B1 only)")
     ap.add_argument("--pr-groups", action="store_true", help="add the photoreceptors of data/pr_groups.tsv as sources")
     ap.add_argument("--side", choices=["R", "L"], help="only sources on this side (FlyTable side column; pr_groups.tsv "
                     "cells by their point's side of the R-L axis through the FlyTable sources)")
@@ -182,8 +203,14 @@ def main():
     axis = side_axis(info, a.source) if a.side else None
     side_of = lambda p: ("R" if np.dot(p - axis[0], axis[1]) > 0 else "L") if p is not None else ""
 
-    src_class = {r: lab for r, (lab, sd, _, _) in info.items() if re.search(a.source, lab, re.I)
-                 and (not a.side or sd == a.side)}
+    read_ids = lambda path: [int(x) for x in open(path).read().split() if x.strip().isdigit()]
+    if a.source_ids:
+        src_class = {r: (label(r) or "listed") for r in read_ids(a.source_ids)
+                     if not a.side or info.get(r, ("", a.side, 0, 0))[1] in (a.side, "")}
+        print(f"sources from {a.source_ids}: {len(src_class)} cells", flush=True)
+    else:
+        src_class = {r: lab for r, (lab, sd, _, _) in info.items() if re.search(a.source, lab, re.I)
+                     and (not a.side or sd == a.side)}
     n_ft = len(src_class)
     if a.pr_groups:
         g = pd.read_csv(os.path.join(DATA, "pr_groups.tsv"), sep="\t", dtype=str)
@@ -202,11 +229,21 @@ def main():
             both = sorted(groups_side["R"] & groups_side["L"])
             print(f"\npr_groups.tsv cells by side: {dict(n_side)}; groups with cells on both sides: {both or 'none'}", flush=True)
         print(f"sources: {n_ft} FlyTable + {n_new} from pr_groups.tsv" + (f" (side {a.side} only)" if a.side else ""), flush=True)
-    targets = {r: lab for r, (lab, _, _, _) in info.items() if re.search(a.target, lab, re.I)}
-    print(f"sources {len(src_class)}; targets {len(targets)}: " +
-          "; ".join(f"{r} ({lab}, side {info[r][1]})" for r, lab in targets.items()), flush=True)
+    if a.target_ids:
+        targets = {r: (label(r) or "listed") for r in read_ids(a.target_ids)}
+    elif a.target:
+        targets = {r: lab for r, (lab, _, _, _) in info.items() if re.search(a.target, lab, re.I)}
+    else:
+        raise SystemExit("give --target or --target-ids")
+    print(f"sources {len(src_class)}; targets {len(targets)}" +
+          (": " + "; ".join(f"{r} ({lab}, side {info.get(r, ('', '', 0, 0))[1]})" for r, lab in targets.items())
+           if len(targets) <= 6 else ""), flush=True)
+    target_re = a.target or os.path.basename(a.target_ids)
     if not targets or not src_class:
         raise SystemExit("no sources or no targets")
+    cur = refresh_roots(client, list(src_class) + list(targets), "sources + targets")
+    src_class = {n: v for r, v in src_class.items() for n in cur[r]}
+    targets = {n: v for r, v in targets.items() for n in cur[r]}
     sources, tgt = sorted(src_class), sorted(targets)
     lo = min(a.thr)
     out_tag = a.tag + (f"_sources{a.side}" if a.side else "")
@@ -214,18 +251,24 @@ def main():
     # ---- query stages, at the lowest threshold
     print("F1: synapses out of the sources", flush=True)
     F1 = query(client, now, f"{a.tag}_F1", pre_pt_root_id=sources)
-    print("B1: synapses into the targets", flush=True)
-    B1 = query(client, now, f"{a.tag}_B1", post_pt_root_id=tgt)
+    empty = F1.iloc[:0]
+    B1 = B2 = M = empty
     D1 = sorted(set(F1[F1.n >= lo].post) - set(sources) - glia)
-    U1 = sorted(set(B1[B1.n >= lo].pre) - set(tgt) - glia)
-    print(f"  D1 (>= {lo} from a source): {len(D1)} cells (glia dropped: {len(set(F1[F1.n >= lo].post) & glia)}); "
-          f"U1 (>= {lo} onto a target): {len(U1)} cells (glia dropped: {len(set(B1[B1.n >= lo].pre) & glia)})", flush=True)
-    print("B2: synapses into U1", flush=True)
-    B2 = query(client, now, f"{a.tag}_B2", post_pt_root_id=U1)
-    U2 = sorted(set(B2[B2.n >= lo].pre) - set(U1) - set(tgt) - glia)
-    print(f"  U2 (>= {lo} onto a U1 cell, new): {len(U2)} cells", flush=True)
-    print("M: synapses from D1 onto U2", flush=True)
-    M = query(client, now, f"{a.tag}_M", pre_pt_root_id=D1, post_pt_root_id=U2) if D1 and U2 else F1.iloc[:0]
+    U1 = U2 = []
+    if a.max_connections >= 2:
+        print("B1: synapses into the targets", flush=True)
+        B1 = query(client, now, f"{a.tag}_B1", post_pt_root_id=tgt)
+        U1 = sorted(set(B1[B1.n >= lo].pre) - set(tgt) - glia)
+        print(f"  D1 (>= {lo} from a source): {len(D1)} cells (glia dropped: {len(set(F1[F1.n >= lo].post) & glia)}); "
+              f"U1 (>= {lo} onto a target): {len(U1)} cells (glia dropped: {len(set(B1[B1.n >= lo].pre) & glia)})", flush=True)
+    if a.max_connections >= 3:
+        print("B2: synapses into U1", flush=True)
+        B2 = query(client, now, f"{a.tag}_B2", post_pt_root_id=U1)
+        U2 = sorted(set(B2[B2.n >= lo].pre) - set(U1) - set(tgt) - glia)
+        print(f"  U2 (>= {lo} onto a U1 cell, new): {len(U2)} cells", flush=True)
+    if a.max_connections >= 4:
+        print("M: synapses from D1 onto U2", flush=True)
+        M = query(client, now, f"{a.tag}_M", pre_pt_root_id=D1, post_pt_root_id=U2) if D1 and U2 else empty
 
     # ---- paths per threshold
     def adj(e, thr):
@@ -288,16 +331,24 @@ def main():
                     row[f"n{j - 1}{j}"] = ns[j - 1] if j - 1 < len(ns) else ""
                 row.update(target=cells[-1], target_label=targets[cells[-1]], n_to_target=ns[-1])
                 out_rows.append(row)
-            best = defaultdict(lambda: dict(paths=0, best_min=0, roles=set()))
+            best = defaultdict(lambda: dict(paths=0, best_min=0, roles=set(), srcs=set(), tgts=set(), syn_in={}, syn_out={}))
             for cells, ns in ranked:
                 for h, c in enumerate(cells[1:-1], 1):  # h = hop index (k is the path length)
                     b = best[c]
                     b["paths"] += 1
                     b["best_min"] = max(b["best_min"], min(ns))
                     b["roles"].add(f"hop{h}")
-            for c, b in sorted(best.items(), key=lambda kv: (-kv[1]["best_min"], -kv[1]["paths"])):
+                    b["srcs"].add(cells[0])
+                    b["tgts"].add(cells[-1])
+                    b["syn_in"][cells[h - 1]] = ns[h - 1]   # synapses from the cell before it on the path
+                    b["syn_out"][cells[h + 1]] = ns[h]      # synapses onto the cell after it
+            for c, b in sorted(best.items(), key=lambda kv: (-len(kv[1]["srcs"]), -kv[1]["best_min"], -kv[1]["paths"])):
                 cell_rows.append(dict(thr=thr, connections=k, cell=c, label=label(c), side=info.get(c, ("", "", 0, 0))[1],
                                       roles="+".join(sorted(b["roles"])), paths=b["paths"], best_min_nsyn=b["best_min"],
+                                      n_sources=len(b["srcs"]), n_targets=len(b["tgts"]),
+                                      syn_from_prev=sum(b["syn_in"].values()), syn_to_next=sum(b["syn_out"].values()),
+                                      targets=";".join(f"{t}:{n}" for t, n in sorted(b["syn_out"].items(), key=lambda kv: -kv[1])[:6])
+                                      if k == 2 else "",
                                       in_D1=c in d1, in_U1=c in u1, in_U2=c in u2))
             if best_link is None and k == want_k:  # the link: highest threshold with paths of the wanted length
                 strong = [p for p in ranked if min(p[1]) >= a.link_min]
@@ -310,9 +361,10 @@ def main():
     base = os.path.join(FIGURES, f"{stamp}_paths_{out_tag}")
     pd.DataFrame(out_rows).to_csv(base + "_paths.tsv", sep="\t", index=False)
     pd.DataFrame(cell_rows).to_csv(base + "_cells.tsv", sep="\t", index=False)
-    head = [f"paths {out_tag}: sources /{a.source}/ ({len(sources)} cells{' incl. pr_groups.tsv' if a.pr_groups else ''}"
-            f"{', side ' + a.side + ' only' if a.side else ''}) -> "
-            f"targets /{a.target}/ ({len(tgt)}); live synapses at {now:%Y-%m-%d %H:%M} UTC; edges = cell pairs with >= thr "
+    head = [f"paths {out_tag}: sources {a.source_ids or '/' + a.source + '/'} ({len(sources)} cells"
+            f"{' incl. pr_groups.tsv' if a.pr_groups else ''}{', side ' + a.side + ' only' if a.side else ''}) -> "
+            f"targets {a.target_ids or '/' + a.target + '/'} ({len(tgt)}); live synapses at {now:%Y-%m-%d %H:%M} UTC; "
+            f"edges = cell pairs with >= thr "
             f"synapses; glia (FlyTable) never intermediates; self synapses dropped",
             f"set sizes at >= {lo}: D1 {len(D1)}, U1 {len(U1)}, U2 {len(U2)}; M edges {len(M)}"]
     if best_link:
@@ -323,7 +375,7 @@ def main():
         for cells, _ in ranked:
             for i, c in enumerate(cells):
                 stage_of[c] = min(i, stage_of.get(c, i))
-        names = ["sources"] + [f"hop {i}" for i in range(1, k)] + [f"targets {a.target}"]
+        names = ["sources"] + [f"hop {i}" for i in range(1, k)] + [f"targets {target_re}"]
         layers = []
         for i, name in enumerate(names):
             ids = sorted(str(c) for c, st in stage_of.items() if st == i)
