@@ -159,7 +159,11 @@ def main():
     ap.add_argument("--thr", type=int, nargs="+", default=[5, 3], help="synapses per edge; each is reported")
     ap.add_argument("--tag", required=True)
     ap.add_argument("--max-paths", type=int, default=3000, help="paths kept per threshold in paths.tsv")
-    ap.add_argument("--link-paths", type=int, default=10, help="strongest paths shown in the Spelunker link (0 = all of the shortest length)")
+    ap.add_argument("--paths-connections", type=int, nargs="+", metavar="K",
+                    help="path lengths written to paths.tsv / cells.tsv (default: the shortest found)")
+    ap.add_argument("--link-connections", type=int, metavar="K", help="path length shown in the Spelunker link (default shortest)")
+    ap.add_argument("--link-min", type=int, default=0, help="only paths whose weakest edge has >= this many synapses in the link")
+    ap.add_argument("--link-paths", type=int, default=10, help="strongest paths shown in the Spelunker link (0 = all that qualify)")
     ap.add_argument("--fresh", action="store_true", help="ignore cached edge tables")
     ap.add_argument("--redo", nargs="+", default=[], metavar="STAGE", help="requery these stages (F1 B1 B2 M)")
     a = ap.parse_args()
@@ -259,37 +263,46 @@ def main():
         counts = {k: len(v) for k, v in paths.items()}
         shortest = next((k for k in (1, 2, 3, 4) if paths[k]), None)
         line = f"thr >= {thr}: paths by connections {counts}; shortest = {shortest or 'none within 4'}"
-        if shortest:
-            ranked = sorted(paths[shortest], key=lambda p: (-min(p[1]), -sum(p[1])))
+        for k in (1, 2, 3, 4):  # strength profile per length: paths whose weakest edge reaches each level
+            if paths[k]:
+                mins = np.array([min(ns) for _, ns in paths[k]])
+                line += (f"\n    {k} connections: weakest edge >= " +
+                         ", ".join(f"{lv}: {int((mins >= lv).sum())}" for lv in (5, 10, 15, 20, 30) if lv >= thr) +
+                         f"; distinct cells per stage {[len({c[i] for c, _ in paths[k]}) for i in range(1, k)]}")
+        want_k = a.link_connections or shortest
+        for k in [k for k in (a.paths_connections or [shortest]) if k and paths[k]]:
+            ranked = sorted(paths[k], key=lambda p: (-min(p[1]), -sum(p[1])))
             cells_mid = {c for p in ranked for c in p[0][1:-1]}
             srcs_hit = {p[0][0] for p in ranked}
             tgts_hit = {p[0][-1] for p in ranked}
-            line += (f"; {len(ranked)} paths of {shortest} connections through {len(cells_mid)} intermediate cells, "
+            line += (f"\n    written: {len(ranked)} paths of {k} connections through {len(cells_mid)} intermediate cells, "
                      f"from {len(srcs_hit)} sources onto targets {sorted(tgts_hit)}; strongest weakest-edge "
                      f"{min(ranked[0][1])}")
             for cells, ns in ranked[:a.max_paths]:
-                row = dict(thr=thr, connections=shortest, min_nsyn=min(ns), sum_nsyn=sum(ns),
+                row = dict(thr=thr, connections=k, min_nsyn=min(ns), sum_nsyn=sum(ns),
                            source=cells[0], source_class=src_class.get(cells[0], ""))
-                for k in range(1, 5):
-                    c = cells[k] if k < len(cells) - 1 else ""
-                    row[f"cell{k}"] = c
-                    row[f"label{k}"] = label(c) if c else ""
-                    row[f"n{k - 1}{k}"] = ns[k - 1] if k - 1 < len(ns) else ""
+                for j in range(1, 5):  # fixed columns for up to 4 connections (k is the path length)
+                    c = cells[j] if j < len(cells) - 1 else ""
+                    row[f"cell{j}"] = c
+                    row[f"label{j}"] = label(c) if c else ""
+                    row[f"n{j - 1}{j}"] = ns[j - 1] if j - 1 < len(ns) else ""
                 row.update(target=cells[-1], target_label=targets[cells[-1]], n_to_target=ns[-1])
                 out_rows.append(row)
             best = defaultdict(lambda: dict(paths=0, best_min=0, roles=set()))
             for cells, ns in ranked:
-                for k, c in enumerate(cells[1:-1], 1):
+                for h, c in enumerate(cells[1:-1], 1):  # h = hop index (k is the path length)
                     b = best[c]
                     b["paths"] += 1
                     b["best_min"] = max(b["best_min"], min(ns))
-                    b["roles"].add(f"hop{k}")
+                    b["roles"].add(f"hop{h}")
             for c, b in sorted(best.items(), key=lambda kv: (-kv[1]["best_min"], -kv[1]["paths"])):
-                cell_rows.append(dict(thr=thr, connections=shortest, cell=c, label=label(c), side=info.get(c, ("", "", 0, 0))[1],
+                cell_rows.append(dict(thr=thr, connections=k, cell=c, label=label(c), side=info.get(c, ("", "", 0, 0))[1],
                                       roles="+".join(sorted(b["roles"])), paths=b["paths"], best_min_nsyn=b["best_min"],
                                       in_D1=c in d1, in_U1=c in u1, in_U2=c in u2))
-            if best_link is None:
-                best_link = (thr, shortest, ranked[:a.link_paths] if a.link_paths else ranked)
+            if best_link is None and k == want_k:  # the link: highest threshold with paths of the wanted length
+                strong = [p for p in ranked if min(p[1]) >= a.link_min]
+                if strong:
+                    best_link = (thr, k, strong[:a.link_paths] if a.link_paths else strong)
         print(line, flush=True)
         summary.append(line)
 
@@ -320,7 +333,8 @@ def main():
         json.dump(spec, open(base + "_spec.json", "w"), indent=1)
         url = nglink.to_url(nglink.build(spec))
         open(base + "_ng.txt", "w").write(url + "\n")
-        head.append(f"Spelunker link: the {len(ranked)} strongest paths of {k} connections at >= {thr}, one layer per stage "
+        head.append(f"Spelunker link: {len(ranked)} paths of {k} connections at >= {thr}"
+                    f"{f', weakest edge >= {a.link_min}' if a.link_min else ''}, one layer per stage "
                     f"({', '.join(l['name'] for l in layers)}) ({base}_ng.txt)")
     open(base + "_summary.txt", "w").write("\n".join(head + summary) + "\n")
     print("\n".join(head), flush=True)
