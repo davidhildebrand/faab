@@ -27,23 +27,22 @@ import os
 import re
 
 import openpyxl
+from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
 
 from faab.config import FIGURES
 from faab.partners.sheet import KEYS, norm_xyz, parse_sheet, utc_stamp
+from faab.pr.prs_tab import as_date
 
-DATE = re.compile(r"^(\d\d)-(\d\d)-(\d\d)$")
 
-
-def typed(text, src_value, col_kind):
-    """the updated text as the type the source column holds"""
+def typed(text, src_value, col_kind, name=""):
+    """the updated text as the type the source column holds; any text date in a date column (header ending in 'date')
+    becomes a real date (David, 2026-10-18: dates are never kept as text) - an ambiguous d/m vs m/d stays text"""
     if text == "":
         return None
-    if col_kind == "date" or isinstance(src_value, datetime.datetime):
-        m = DATE.match(text)
-        if m:
-            return datetime.datetime(2000 + int(m.group(1)), int(m.group(2)), int(m.group(3)))
-        return text
+    if col_kind == "date" or isinstance(src_value, datetime.datetime) or name.endswith("date"):
+        d = as_date(text)
+        return d if d is not None else text
     if col_kind == "number":
         try:
             f = float(text)
@@ -129,7 +128,7 @@ def build_like(wb, src, s_lines, s_rows, n_lines, n_rows, title):
             sc = src_col[j] if j < len(src_col) else None
             scell = src.cell(style_row, sc) if sc else None
             v = typed(text.strip(), scell.value if (scell is not None and kinds) else None,
-                      kind.get(ALIAS.get(name, name), "text") if kinds else "text")
+                      kind.get(ALIAS.get(name, name), "text") if kinds else "text", name if kinds else "")
             oc = out.cell(i + 1, j + 1, v)
             if scell is not None:
                 oc._style = copy.copy(scell._style)
@@ -148,8 +147,14 @@ def main():
     ap.add_argument("updated")
     ap.add_argument("--title", required=True, help="name of the output tab, e.g. PRg1hop1")
     ap.add_argument("--like", action="store_true", help="new sheet: borrow the look of TAB instead of its rows")
+    ap.add_argument("--highlight", metavar="LINES", help="1-based line numbers of UPDATED (comma list or a file, one per "
+                    "line) whose whole row is filled light yellow: rows flagged for David's attention")
     ap.add_argument("--out")
     a = ap.parse_args()
+    hl = set()
+    if a.highlight:
+        text = open(a.highlight).read() if os.path.exists(a.highlight) else a.highlight
+        hl = {int(x) for x in re.split(r"[,\s]+", text.strip()) if x.strip().isdigit()}
 
     wb = openpyxl.load_workbook(a.book)
     src = wb[a.tab]
@@ -217,7 +222,7 @@ def main():
             sc = src.cell(si + 1, col_src[j] + 1) if si is not None else None
             name = n_header[j] if j < len(n_header) else ""
             v = typed(text.strip(), sc.value if sc is not None else None,
-                      kind.get(name, "text") if i in data_lines else "text")
+                      kind.get(name, "text") if i in data_lines else "text", name if i in data_lines else "")
             if sc is not None and isinstance(sc.value, str) and sc.value.startswith("="):
                 formulas += 1
             oc = out.cell(i + 1, j + 1, v)
@@ -227,13 +232,18 @@ def main():
                     oc.hyperlink = sc.hyperlink.target or v
             if isinstance(v, datetime.datetime) and (sc is None or not isinstance(sc.value, datetime.datetime)):
                 oc.number_format = 'yy"-"mm"-"dd'
+        if i + 1 in hl:  # flagged row: light yellow across the whole row
+            for j in range(len(col_src)):
+                out.cell(i + 1, j + 1).fill = PatternFill("solid", fgColor="FFF9C4")
     for ws in list(wb.worksheets):
         if ws is not out:
             wb.remove(ws)
+    out.title = a.title  # the source workbook may already hold a tab of this name, which made openpyxl add a digit
     path = a.out or os.path.join(FIGURES, f"{utc_stamp()}_FAABopticlobetargets-{a.title}.xlsx")
     wb.save(path)
-    print(f"wrote {path}: tab {a.title}, {len(n_lines)} lines, {len(n_rows)} data rows; "
-          f"{len(added)} added rows styled like the row above: {added}; {formulas} source formulas replaced by values")
+    print(f"wrote {path}: tab {out.title}, {len(n_lines)} lines, {len(n_rows)} data rows; "
+          f"{len(added)} added rows styled like the row above: {added}; {formulas} source formulas replaced by values"
+          f"{'; highlighted rows: ' + str(sorted(hl)) if hl else ''}")
 
 
 if __name__ == "__main__":

@@ -15,10 +15,11 @@ and a verdict:
 The block PRs (upstream_PR = the PR's original root) are located at their xyz in data/pr_groups.tsv.
 
 nsyn recount: ONE live query of the block PRs' outputs. Each row's cell = the root at its point. When several rows of a
-block now sit on the same cell (merged pieces), the live count goes on the main row (verdict ok first, then the larger
-sheet nsyn) and the other rows keep their sheet values, as the sheet already does for merges. syn_pct and PR_conv
+block now sit on the same cell (merged pieces), the live count goes on the main row (the larger sheet nsyn, ties ->
+verdict ok first) and the other rows keep their sheet values, as the sheet already does for merges. syn_pct and PR_conv
 (how many of the group's PRs synapse onto the cell) are recomputed for main rows; nsyn_old is left as it is.
-Changes of more than 2 synapses are flagged. Also reported: cells in a PR's live top 20 that the block lacks.
+Changes of more than 2 synapses are flagged. Also reported: cells in a PR's live top 20 that the block lacks (top 20 by the
+builder's rule - exactly 20, ties to cells already in the sheet then the lower root id - so ties at the cutoff do not count).
 
 --write-sheet OUT writes the updated copy: root_id_curr ('update' rows), nsyn / syn_pct / PR_conv (main rows), block
 title totals, --set fixes ('LINE:column=value', LINE = sheet line number), every cell stripped of leading/trailing
@@ -49,6 +50,7 @@ from faab.partners.sheet import as_int, fmt_vox, parse_sheet, utc_stamp
 CACHE = os.path.join(TMP, "pr_sheet_check_lineage.json")
 FRAG = re.compile(r"fragment|orphan|soma|difficult to extend", re.I)   # note clauses replaced by "orphan fragment"
 TITLE = re.compile(r"^(\d{15,})(\s+\[[^\]]*\]\s+)\d+ output synapses across \d+ partners \(updated [^)]*\)")
+TITLE2 = re.compile(r"^(hop-1 (\d{15,}) \(now )(\d{15,})(\).*?: )\d+ output synapses across \d+ partners \(updated [^)]*\)")
 _last = [0.0]
 
 
@@ -73,14 +75,36 @@ def main():
     ap.add_argument("--orphan-notes", action="store_true", help="note stopped orphan fragments as 'orphan fragment'")
     ap.add_argument("--note", action="append", default=[], metavar="ROOT_ORIG[@BLOCK_PR]=TEXT",
                     help="with --orphan-notes: set this stopped row's notes outright")
+    ap.add_argument("--pre-points", metavar="SHEET.tsv",
+                    help="two-hop sheet (blocks per hop1_root_id): the one-hop sheet whose rows give each hop-1 cell's xyz")
     a = ap.parse_args()
     import caveclient
     from fafbseg import flywire
     lines, rows = parse_sheet(a.sheet)
+    hop2 = "hop1_root_id" in rows[0]["header"]
+    if hop2:  # a two-hop sheet: the block's presynaptic cell is the hop-1 cell, not the PR
+        for r in rows:
+            r["block_pr"] = r["cells"]["hop1_root_id"].strip()
     prs = list(dict.fromkeys(r["block_pr"] for r in rows))
-    groups = pd.read_csv(os.path.join(DATA, "pr_groups.tsv"), sep="\t", dtype=str).fillna("")
-    pr_xyz = {r.root_id_orig: r.xyz for r in groups.itertuples() if r.root_id_orig in prs}
-    print(f"{len(rows)} partner rows in {len(prs)} blocks; PR points found for {len(pr_xyz)}/{len(prs)} PRs", flush=True)
+    if hop2:
+        if not a.pre_points:
+            raise SystemExit("a two-hop sheet needs --pre-points (the one-hop sheet with the hop-1 cells' xyz)")
+        _, pre_rows = parse_sheet(a.pre_points)
+        pr_xyz = {}
+        for pr in pre_rows:
+            for k in ("root_id_orig", "root_id_curr"):
+                v = pr["cells"][k].strip()
+                if v in prs and parse_xyz(pr["cells"]["xyz"]):
+                    pr_xyz.setdefault(v, pr["cells"]["xyz"])
+    else:
+        groups = pd.read_csv(os.path.join(DATA, "pr_groups.tsv"), sep="\t", dtype=str).fillna("")
+        pr_xyz = {r.root_id_orig: r.xyz for r in groups.itertuples() if r.root_id_orig in prs}
+    CONV = "PR_conv" if "PR_conv" in rows[0]["header"] else "h1_conv"
+    missing_pre = [p for p in prs if p not in pr_xyz]
+    print(f"{len(rows)} partner rows in {len(prs)} blocks; {'hop-1' if hop2 else 'PR'} points found for {len(pr_xyz)}/{len(prs)}"
+          + (f"; without a point: {missing_pre}" if missing_pre else ""), flush=True)
+    if missing_pre:
+        raise SystemExit("every block's presynaptic cell needs an xyz point")
     client = caveclient.CAVEclient(DATASTACK)
     now = datetime.datetime.now(datetime.timezone.utc)
 
@@ -174,26 +198,28 @@ def main():
         if c in pr_cells:
             df.loc[g.index, "role"] = "is a PR of this group"
             continue
-        if len(g) > 1:
-            main = g.assign(o=(g.verdict != "ok").astype(int), n=-g.nsyn_sheet).sort_values(["o", "n", "line"]).index[0]
+        if len(g) > 1:  # the record of a cell is the row with the largest sheet nsyn (David, 2026-10-25); ties -> verdict ok first
+            main = g.assign(o=(g.verdict != "ok").astype(int), n=-g.nsyn_sheet).sort_values(["n", "o", "line"]).index[0]
             for i in g.index.drop(main):
                 df.at[i, "role"] = f"merged with line {df.at[main, 'line']}"
     df.loc[df.line.isin(a.main), "role"] = "main"
     m = df.role == "main"
     df["nsyn_new"] = np.where(m, df.nsyn_live, df.nsyn_sheet)
     df["syn_pct_new"] = [round(100 * n / tot.get(pr_root[b], 1), 1) for n, b in zip(df.nsyn_new, df.block_pr)]
-    df["PR_conv_new"] = [int(conv.get(int(c), 0)) if c.isdigit() else "" for c in df.cell]
+    df["PR_conv_new"] = [int(conv.get(int(c), 0)) if c.isdigit() else "" for c in df.cell]  # also h1_conv for two-hop sheets
     df["diff"] = df.nsyn_new - df.nsyn_sheet
     df["flag"] = np.where(m & (df["diff"].abs() > 2), "CHANGED BY >2", "")
 
-    # 6. live top 20 per PR vs the block
+    # 6. live top 20 per block vs the block's rows, with the builder's rule (pr_downstream_build.top_n): exactly 20 rows,
+    #    ties broken in favor of cells already in the sheet, then the lower root id - so a tie at the cutoff is not "missing"
     missing = []
+    in_sheet = set(df.cell)
     for p in prs:
         r = pr_root[p]
-        sub = counts.loc[r].sort_values(ascending=False) if r in counts.index.get_level_values(0) else pd.Series(dtype=int)
-        top = sub[sub >= sub.iloc[min(19, len(sub) - 1)]] if len(sub) else sub
+        sub = counts.loc[r] if r in counts.index.get_level_values(0) else pd.Series(dtype=int)
+        order = sorted(sub.items(), key=lambda kv: (-int(kv[1]), -int(str(kv[0]) in in_sheet), int(kv[0])))[:20]
         have = set(df[df.block_pr == p].cell)
-        for rank, (post, n) in enumerate(top.items(), 1):
+        for rank, (post, n) in enumerate(order, 1):
             if str(post) not in have:
                 missing.append(dict(block_pr=p, rank=rank, root=post, nsyn=int(n), PR_conv=int(conv.get(post, 0))))
 
@@ -213,7 +239,7 @@ def main():
     ch = df[m & (df["diff"] != 0)]
     print(f"\nnsyn changes on main rows: {len(ch)} of {int(m.sum())} ({int((df.flag != '').sum())} by more than 2):")
     print(ch[["line", "block_pr", "root_id_orig", "cell", "status", "nsyn_sheet", "nsyn_live", "diff", "flag"]].to_string(index=False))
-    print(f"\ncells in a PR's live top 20 (ties at 20th included) that the block lacks: {len(missing)}")
+    print(f"\ncells in a PR's live top 20 (builder's rule, exactly 20) that the block lacks: {len(missing)}")
     if missing:
         print(pd.DataFrame(missing).to_string(index=False))
     print("\nblock totals now:", {p: (int(tot.get(pr_root[p], 0)), int(npart.get(pr_root[p], 0))) for p in prs})
@@ -245,7 +271,7 @@ def main():
             if r.role == "main" and r.cell.isdigit() and r.cell != "0":
                 c[h.index("nsyn")] = str(int(r.nsyn_new))
                 c[h.index("syn_pct")] = f"{r.syn_pct_new:g}"
-                c[h.index("PR_conv")] = str(r.PR_conv_new)
+                c[h.index(CONV)] = str(r.PR_conv_new)
             v = parse_xyz(c[h.index("xyz")])
             if v:
                 c[h.index("xyz")] = fmt_vox(v)
@@ -279,12 +305,17 @@ def main():
             for m in add:
                 p, root = m["block_pr"], str(m["root"])
                 h = rows[[x["block_pr"] for x in rows].index(p)]["header"]
-                first = body[[x["line"] for x in rows if x["block_pr"] == p][0]]
+                blk_rows = [body[x["line"]] for x in rows if x["block_pr"] == p]
+                first = blk_rows[0]
                 c = pad([""] * len(h))
-                c[0], c[1] = p, first[1]
+                for k in range(len(h)):  # block-constant columns (PR ids, PRtype, hop1_root_id, h1_nsyn) come along
+                    if h[k] and h[k] not in ("root_id_orig", "root_id_curr", "xyz", "nsyn", "syn_pct", CONV) + tuple(
+                            x for x in ("annotation", "status", "pr_date", "proofreader", "chk_date", "checker", "notes",
+                                        "SeaTable", "link")) and len({x[k] for x in blk_rows}) == 1:
+                        c[k] = first[k]
                 c[h.index("root_id_curr")], c[h.index("nsyn")] = root, str(m["nsyn"])
                 c[h.index("syn_pct")] = f"{round(100 * m['nsyn'] / tot.get(pr_root[p], 1), 1):g}"
-                c[h.index("PR_conv")], c[h.index("status")] = str(m["PR_conv"]), "NEW"
+                c[h.index(CONV)], c[h.index("status")] = str(m["PR_conv"]), "NEW"
                 if root in tracked:
                     # the cell is tracked in another block: keep its tracking columns; NEW only if it has no status
                     t_ = tracked[root]
@@ -324,9 +355,14 @@ def main():
                 new.append("\t".join(c[k] for k in keep))
                 continue
             mt = TITLE.match(c[0])
+            mt2 = TITLE2.match(c[0])
             if mt and mt.group(1) in pr_root:
                 r = pr_root[mt.group(1)]
                 c[0] = (f"{mt.group(1)}{mt.group(2)}{int(tot.get(r, 0))} output synapses across {int(npart.get(r, 0))} "
+                        f"partners (updated {ts:%Y-%m-%d %H:%M} UTC)")
+            elif mt2 and mt2.group(2) in pr_root:  # two-hop block title: refresh the hop-1 cell's current root and totals
+                r = pr_root[mt2.group(2)]
+                c[0] = (f"{mt2.group(1)}{r}{mt2.group(4)}{int(tot.get(r, 0))} output synapses across {int(npart.get(r, 0))} "
                         f"partners (updated {ts:%Y-%m-%d %H:%M} UTC)")
             n_out = width - len(a.drop_col)
             c = pad(c)

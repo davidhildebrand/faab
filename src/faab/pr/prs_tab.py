@@ -31,11 +31,21 @@ ASIDE = ("OFF-BUNDLE", "SECOND BUNDLE")  # rows with these notes are not members
 ID_COLS = ("root_id_orig", "root_id_curr", "partner_root_id_orig", "partner_root_id_curr")
 DEFAULT_OUT = os.path.join(FIGURES, "{stamp}_FAABopticlobetargets-PRs.xlsx")
 DATE_FMT = 'yy"-"mm"-"dd'  # how the sheet shows dates
-DATE_TEXT = [  # text forms of a date -> (year, month, day)
+def _slash(m):
+    """a/b/y: day-first when a > 12, month-first when b > 12; both <= 12 is ambiguous -> None (flagged, not guessed)"""
+    a, b, y = int(m[1]), int(m[2]), int(m[3]) + (2000 if len(m[3]) == 2 else 0)
+    if a > 12 and b <= 12:
+        return (y, b, a)
+    if b > 12 and a <= 12:
+        return (y, a, b)
+    return None
+
+
+DATE_TEXT = [  # text forms of a date -> (year, month, day) or None when ambiguous
     (re.compile(r"(\d\d)-(\d\d)-(\d\d)"), lambda m: (2000 + int(m[1]), int(m[2]), int(m[3]))),  # yy-mm-dd, as shown
-    (re.compile(r"(\d{4})-(\d\d)-(\d\d)"), lambda m: (int(m[1]), int(m[2]), int(m[3]))),
-    (re.compile(r"(\d{1,2})/(\d{1,2})/(\d\d|\d{4})"),
-     lambda m: (int(m[3]) + (2000 if len(m[3]) == 2 else 0), int(m[1]), int(m[2]))),  # m/d/yy, m/d/yyyy
+    (re.compile(r"(\d{4})-(\d\d)-(\d\d)"), lambda m: (int(m[1]), int(m[2]), int(m[3]))),  # yyyy-mm-dd
+    (re.compile(r"(\d\d)-(\d\d)-(\d{4})"), lambda m: (int(m[3]), int(m[2]), int(m[1]))),  # dd-mm-yyyy (seen 23-10-2026)
+    (re.compile(r"(\d{1,2})/(\d{1,2})/(\d\d|\d{4})"), _slash),  # d/m/y or m/d/y, decided by which part exceeds 12
 ]
 
 
@@ -184,8 +194,9 @@ def as_date(s):
     for p, ymd in DATE_TEXT:
         m = p.fullmatch(str(s).strip())
         if m:
+            v = ymd(m)
             try:
-                return datetime.datetime(*ymd(m))
+                return datetime.datetime(*v) if v else None
             except ValueError:
                 return None
     return None
