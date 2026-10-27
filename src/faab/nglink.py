@@ -10,8 +10,10 @@ Usage:
 
 spec.json format (all fields optional except at least one of meshes/neurons):
 {
-  "meshes":  [ {"kind":"brain","alpha":1.0}, {"kind":"AL","alpha":0.45} ],
-                 # kind in: brain, AL, MB, LH, CX   (alpha/color optional -> defaults)
+  "meshes":  [ {"kind":"brain","alpha":1.0}, {"kind":"AL","alpha":0.45},
+               {"kind":"OL","segments":["21","22","23","24"]} ],
+                 # kind in: brain, AL, MB, LH, CX, OL (optic-lobe neuropils), neuropil (whole-brain neuropil)
+                 # (alpha/color/segments optional -> defaults)
   "neurons": [ {"name":"putative Mi1","color":"#9467bd","ids_file":"figures/mi1_ids.txt"},
                {"name":"A + B","colors":{"648...":"#1f77d6","648...":"#2ecc71"},
                 "ids":["648...","648..."]} ],
@@ -57,15 +59,25 @@ MESHES = {
     "CX": {"source": "gs://aedes_whole-brain/meshes/CX_mesh/|neuroglancer-precomputed:",
            "segments": ["1", "2", "3", "4", "5", "6", "7", "8"], "name": "CX mesh",
            "color": "#7fb3d5", "alpha": 0.4},
+    # optic-lobe neuropils (David's standard link, 2026-10-27; ids -> labels in faab.ol_meshes.LABELS):
+    # 1 CB, 2 OL_L, 3 OL_R, 11-14 ME/LO/LOP/LA_L, 21-24 ME/LO/LOP/LA_R; default = the eight OL neuropils
+    "OL": {"source": {"url": "https://flyemdev.mrc-lmb.cam.ac.uk/flyconnectome/rclone/aedes_ol_meshes/|neuroglancer-precomputed:",
+                      "subsources": {"default": True, "properties": True}, "enableDefaultSubsources": False},
+           "segments": ["11", "12", "13", "14", "21", "22", "23", "24"], "name": "aedes_ol_meshes",
+           "color": None, "alpha": 0.22},
+    # whole-brain neuropil surface (standard link: segment 6 shown, alpha 0.13, light grey)
+    "neuropil": {"source": "https://flyem.mrc-lmb.cam.ac.uk/flyconnectome/aedes_brain/|neuroglancer-precomputed:",
+                 "segments": ["6"], "name": "aedes_neuropil", "color": "#e0e0e0", "alpha": 0.13},
 }
 
 
-def mesh_layer(kind, alpha=None, color=None):
+def mesh_layer(kind, alpha=None, color=None, segments=None):
     t = MESHES[kind]
-    layer = {"type": "segmentation", "source": t["source"], "segments": list(t["segments"]),
+    layer = {"type": "segmentation", "source": t["source"], "segments": [str(s) for s in (segments or t["segments"])],
              "name": t["name"], "visible": True,
-             "objectAlpha": t["alpha"] if alpha is None else alpha,
-             "segmentDefaultColor": color or t["color"]}
+             "objectAlpha": t["alpha"] if alpha is None else alpha}
+    if color or t["color"]:
+        layer["segmentDefaultColor"] = color or t["color"]
     if "silhouette" in t:
         layer["meshSilhouetteRendering"] = t["silhouette"]
     return layer
@@ -106,7 +118,7 @@ def build(spec):
     layers = []
     if spec.get("image", True):  # user rule (2026-09-25): the EM data layer is always present
         layers.append({"type": "image", "source": IMG, "name": "v2_sharded"})
-    layers += [mesh_layer(m["kind"], m.get("alpha"), m.get("color")) for m in spec.get("meshes", [])]
+    layers += [mesh_layer(m["kind"], m.get("alpha"), m.get("color"), m.get("segments")) for m in spec.get("meshes", [])]
     layers += [neuron_layer(n) for n in spec.get("neurons", [])]
     layers += [annotation_layer(a) for a in spec.get("annotations", [])]
     view = spec.get("view", "anterior")
