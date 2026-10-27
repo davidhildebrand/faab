@@ -17,7 +17,7 @@ as intermediates (reported). Paths are ranked by their weakest edge, then by tot
 Outputs (figures/<UTC stamp>_paths_<tag>_*): summary.txt, paths.tsv (one row per path, shortest length per threshold,
 capped), cells.tsv (every intermediate cell with its role, label and strongest path), ng.txt + spec.json (Spelunker
 link of the strongest paths: sources, intermediates, targets). Raw edge tables are cached in ../tmp/paths_cache/.
-Synapse source (--synapses, default auto, 2026-10-27): stages that filter more than --snapshot-min-ids (300) cells read
+Synapse source (--synapses, default auto, 2026-10-27): stages that filter more than --snapshot-min-ids (100) cells read
 the local synapse snapshot (faab.synsnap: newest daily checkpoint, refreshed over HTTP if > 6 h old, plus ONE CAVE
 catch-up to the run's timestamp shared by all stages - validated identical to live_query); small stages stay one
 live_query. --synapses live restores the old behaviour, --synapses snapshot uses the snapshot for every stage.
@@ -203,7 +203,8 @@ def main():
     ap.add_argument("--synapses", choices=["auto", "snapshot", "live"], default="auto",
                     help="where stage synapses come from: auto = the local synapse snapshot (faab.synsnap, updated to now) "
                          "for stages filtering more than --snapshot-min-ids cells, live_query for the small ones")
-    ap.add_argument("--snapshot-min-ids", type=int, default=300)
+    ap.add_argument("--snapshot-min-ids", type=int, default=100,
+                    help="stages filtering more cells than this read the snapshot in auto mode (David 2026-10-27: 100)")
     a = ap.parse_args()
     t0, stamp = time.time(), utc_stamp()
     os.makedirs(CACHE, exist_ok=True)
