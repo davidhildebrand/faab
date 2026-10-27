@@ -33,6 +33,10 @@ next to the repo).
 - A sheet row's xyz point (16 x 16 x 45 nm voxels) is its anchor; root ids are looked up at the point because they change
   with every proofreading edit.
 - Live synapse queries (`live_query`, timestamp now) are used for connectivity; the query time is recorded with results.
+- Large connectivity questions can use the local synapse snapshot instead (`faab.synsnap`, the flyconnectome aedes
+  snapshots: ~2.15 GB in `../snapshots/aedes_synapses`, daily checkpoints, optional CAVE catch-up to "now";
+  `synsnap.download()` fetches new checkpoints). Root ids are 18-digit int64: never let them pass through float64
+  (pandas turns nullable int64 columns into floats).
 
 ## Examples
 
