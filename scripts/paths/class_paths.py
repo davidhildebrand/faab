@@ -17,6 +17,10 @@ as intermediates (reported). Paths are ranked by their weakest edge, then by tot
 Outputs (figures/<UTC stamp>_paths_<tag>_*): summary.txt, paths.tsv (one row per path, shortest length per threshold,
 capped), cells.tsv (every intermediate cell with its role, label and strongest path), ng.txt + spec.json (Spelunker
 link of the strongest paths: sources, intermediates, targets). Raw edge tables are cached in ../tmp/paths_cache/.
+Synapse source (--synapses, default auto, 2026-10-27): stages that filter more than --snapshot-min-ids (300) cells read
+the local synapse snapshot (faab.synsnap: newest daily checkpoint, refreshed over HTTP if > 6 h old, plus ONE CAVE
+catch-up to the run's timestamp shared by all stages - validated identical to live_query); small stages stay one
+live_query. --synapses live restores the old behaviour, --synapses snapshot uses the snapshot for every stage.
 CAVE calls >= 5 s apart. Example:
     venv/bin/python scripts/paths/class_paths.py --target "DNp01" --pr-groups --thr 5 3 --tag pr_to_DNp01"""
 import argparse
@@ -109,12 +113,21 @@ def refresh_roots(client, ids, what):
     return out
 
 
-def query(client, now, tag, **filters):
-    """edge table (pre, post, n) of the live synapses matching the filters, chunked (<= 300 pre / 2000 post ids per
-    call) and cached by tag in ../tmp/paths_cache. A cached table is reused when the ids it was queried with (sidecar
-    <tag>_ids.json) cover the request, filtered to the requested ids; a cache without a sidecar is assumed to cover it."""
+def query(client, now, tag, snap=None, **filters):
+    """edge table (pre, post, n) of the synapses matching the filters at `now`.
+    snap given (a faab.synsnap.Snapshot): from the local synapse snapshot - newest checkpoint plus one CAVE catch-up to
+    `now`, shared by every stage of the run - with no row cap and no per-chunk calls (not cached; it is fast).
+    Otherwise live: chunked live_query (<= 300 pre / 2000 post ids per call), cached by tag in ../tmp/paths_cache. A
+    cached table is reused when the ids it was queried with (sidecar <tag>_ids.json) cover the request, filtered to the
+    requested ids; a cache without a sidecar is assumed to cover it."""
     path, side = os.path.join(CACHE, f"{tag}.tsv"), os.path.join(CACHE, f"{tag}_ids.json")
     pre, post = filters.get("pre_pt_root_id"), filters.get("post_pt_root_id")
+    if snap is not None:
+        t1 = time.time()
+        e = snap.edges(pre=pre, post=post, when=now, client=client)
+        print(f"  {tag}: {int(e.n.sum())} synapses -> {len(e)} edges from the synapse snapshot "
+              f"({snap.at(now)} + catch-up to {now:%Y-%m-%d %H:%M} UTC) in {time.time() - t1:.0f} s", flush=True)
+        return e[["pre", "post", "n"]].astype({"pre": np.int64, "post": np.int64, "n": int})
     if os.path.exists(path):
         e = pd.read_csv(path, sep="\t", dtype={"pre": np.int64, "post": np.int64, "n": int})
         had = json.load(open(side)) if os.path.exists(side) else None
@@ -187,6 +200,10 @@ def main():
     ap.add_argument("--link-paths", type=int, default=10, help="strongest paths shown in the Spelunker link (0 = all that qualify)")
     ap.add_argument("--fresh", action="store_true", help="ignore cached edge tables")
     ap.add_argument("--redo", nargs="+", default=[], metavar="STAGE", help="requery these stages (F1 B1 B2 M)")
+    ap.add_argument("--synapses", choices=["auto", "snapshot", "live"], default="auto",
+                    help="where stage synapses come from: auto = the local synapse snapshot (faab.synsnap, updated to now) "
+                         "for stages filtering more than --snapshot-min-ids cells, live_query for the small ones")
+    ap.add_argument("--snapshot-min-ids", type=int, default=300)
     a = ap.parse_args()
     t0, stamp = time.time(), utc_stamp()
     os.makedirs(CACHE, exist_ok=True)
@@ -248,27 +265,41 @@ def main():
     lo = min(a.thr)
     out_tag = a.tag + (f"_sources{a.side}" if a.side else "")
 
-    # ---- query stages, at the lowest threshold
+    # ---- query stages, at the lowest threshold; big stages from the local synapse snapshot (one shared catch-up)
+    _snap = []
+
+    def src(*id_lists):
+        """the Snapshot for a stage filtering these id lists, or None for a live query"""
+        n = max((len(x) for x in id_lists if x), default=0)
+        if a.synapses == "live" or (a.synapses == "auto" and n <= a.snapshot_min_ids):
+            return None
+        if not _snap:
+            from faab import synsnap
+            tag = synsnap.refresh(log=lambda m: print("  " + m, flush=True))
+            _snap.append(synsnap.Snapshot(log=lambda m: print("  " + m, flush=True)))
+            print(f"  synapse snapshot: newest local checkpoint {tag}", flush=True)
+        return _snap[0]
+
     print("F1: synapses out of the sources", flush=True)
-    F1 = query(client, now, f"{a.tag}_F1", pre_pt_root_id=sources)
+    F1 = query(client, now, f"{a.tag}_F1", src(sources), pre_pt_root_id=sources)
     empty = F1.iloc[:0]
     B1 = B2 = M = empty
     D1 = sorted(set(F1[F1.n >= lo].post) - set(sources) - glia)
     U1 = U2 = []
     if a.max_connections >= 2:
         print("B1: synapses into the targets", flush=True)
-        B1 = query(client, now, f"{a.tag}_B1", post_pt_root_id=tgt)
+        B1 = query(client, now, f"{a.tag}_B1", src(tgt), post_pt_root_id=tgt)
         U1 = sorted(set(B1[B1.n >= lo].pre) - set(tgt) - glia)
         print(f"  D1 (>= {lo} from a source): {len(D1)} cells (glia dropped: {len(set(F1[F1.n >= lo].post) & glia)}); "
               f"U1 (>= {lo} onto a target): {len(U1)} cells (glia dropped: {len(set(B1[B1.n >= lo].pre) & glia)})", flush=True)
     if a.max_connections >= 3:
         print("B2: synapses into U1", flush=True)
-        B2 = query(client, now, f"{a.tag}_B2", post_pt_root_id=U1)
+        B2 = query(client, now, f"{a.tag}_B2", src(U1), post_pt_root_id=U1)
         U2 = sorted(set(B2[B2.n >= lo].pre) - set(U1) - set(tgt) - glia)
         print(f"  U2 (>= {lo} onto a U1 cell, new): {len(U2)} cells", flush=True)
     if a.max_connections >= 4:
         print("M: synapses from D1 onto U2", flush=True)
-        M = query(client, now, f"{a.tag}_M", pre_pt_root_id=D1, post_pt_root_id=U2) if D1 and U2 else empty
+        M = query(client, now, f"{a.tag}_M", src(D1, U2), pre_pt_root_id=D1, post_pt_root_id=U2) if D1 and U2 else empty
 
     # ---- paths per threshold
     def adj(e, thr):
@@ -363,7 +394,8 @@ def main():
     pd.DataFrame(cell_rows).to_csv(base + "_cells.tsv", sep="\t", index=False)
     head = [f"paths {out_tag}: sources {a.source_ids or '/' + a.source + '/'} ({len(sources)} cells"
             f"{' incl. pr_groups.tsv' if a.pr_groups else ''}{', side ' + a.side + ' only' if a.side else ''}) -> "
-            f"targets {a.target_ids or '/' + a.target + '/'} ({len(tgt)}); live synapses at {now:%Y-%m-%d %H:%M} UTC; "
+            f"targets {a.target_ids or '/' + a.target + '/'} ({len(tgt)}); synapses at {now:%Y-%m-%d %H:%M} UTC ("
+            f"{'live_query' if not _snap else 'snapshot ' + _snap[0].at(now) + ' + catch-up for stages > ' + str(a.snapshot_min_ids) + ' cells, live_query for the rest'}); "
             f"edges = cell pairs with >= thr "
             f"synapses; glia (FlyTable) never intermediates; self synapses dropped",
             f"set sizes at >= {lo}: D1 {len(D1)}, U1 {len(U1)}, U2 {len(U2)}; M edges {len(M)}"]

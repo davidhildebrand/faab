@@ -5,7 +5,7 @@ rigid + scale) of every query cell against the labeled reference cells, calibrat
 CAUTION (2026-10-27): for small columnar cells (~80 L2 points, e.g. T4/T5) rigid + scale alignment makes every
 columnar cell fit (T4/T5 leave-one-out 0.70 vs L1-L5/LMC/Mi1 0.65; a quarter of labeled T4/T5 failed their own type).
 For those, centroid-aligned NBLAST with a nearest-neighbour vote over references + negatives separated them
-(tmp/t4t5_knn.py: 97% of references, 3% of negatives); this script still supplies the fetch/cache and the controls.
+(scratch/t4t5/t4t5_knn.py: 97% of references, 3% of negatives); this script still supplies the fetch/cache and the controls.
 Query ids: --query-file, ids separated by commas/spaces, one group per line (groups are reported separately).
 Expired query roots are replaced by their current roots (get_latest_roots). References are resolved fresh from SeaTable
 (supervoxel_id -> current root, one get_roots call).

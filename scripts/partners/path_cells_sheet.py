@@ -1,5 +1,5 @@
 """Tracking tab for every cell on the paths from a PR group to a set of target cells (first use 2026-10-27: PR group 1
--> David's T4/T5 candidates, paths from tmp/pr_g1_to_t4t5.py), in the look of the PRg1hop2 tab.
+-> David's T4/T5 candidates, paths from scratch/t4t5/pr_g1_to_t4t5.py), in the look of the PRg1hop2 tab.
 
 Blocks (top to bottom): hop-1 cells, hop-2 cells, hop-3 cells (the targets), then LOW PRIORITY: very large cells on the
 paths that are not lamina monopolar / Tm-like (>= --large-cable um of cable, or >= --large-outside of the cable
@@ -50,8 +50,8 @@ SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 CLS = ("superclass", "class", "subclass", "subsubclass", "type")
 RANK = ["checked", "proofread", "adequate", "review", "in progress", "stopped"]
 COLS = ["hop", "PR_root_id", "PRtype", "hop1_root_id", "hop2_root_id", "root_id_orig", "root_id_curr", "xyz", "nsyn",
-        "nsyn_out", "T4T5_reached", "cable_um", "neuropils", "annotation", "status", "pr_date", "proofreader",
-        "chk_date", "checker", "notes", "SeaTable", "tracked_in", "link"]
+        "nsyn_out", "annotation", "status", "pr_date", "proofreader", "chk_date", "checker", "notes", "SeaTable",
+        "tracked_in", "link", "T4T5_reached", "cable_um", "neuropils"]  # David 2026-10-27: these three right of link
 STYLE_ALIAS = {"upstream_PR": "PR_root_id", "hop": "PR_root_id", "hop2_root_id": "hop1_root_id", "nsyn_out": "nsyn",
                "T4T5_reached": "h1_conv", "cable_um": "syn_pct", "neuropils": "notes", "tracked_in": "notes"}
 WIDTH = {"hop": 5, "nsyn_out": 9, "T4T5_reached": 12, "cable_um": 9, "neuropils": 30, "tracked_in": 30}
@@ -295,7 +295,8 @@ def main():
         rs.sort(key=lambda d: d["_key"] if hop < 3 else (-info[(3, d["root_id_orig"])]["best"], -info[(3, d["root_id_orig"])]["total"]))
         blocks.append((hop, rs))
     low = sorted([row(h, c) for h in (1, 2, 3) for c in stage[h] if c in large], key=lambda d: (d["hop"], -float(d["cable_um"] or 0)))
-    when = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    m = re.match(r"(\d{4})(\d{2})(\d{2})d(\d{2})(\d{2})\d{2}tUTC", os.path.basename(a.paths))  # synapses = the path run's
+    when = (f"{m[1]}-{m[2]}-{m[3]} {m[4]}:{m[5]} UTC" if m else "unknown time")
     n = {h: len(rs) for h, rs in blocks}
     titles = {
         1: f"hop-1 (1st stage): {n[1]} cells postsynaptic to the PR group {a.group} photoreceptors (>= {a.thr} synapses) that lead on to a T4/T5 candidate",
