@@ -323,15 +323,26 @@ class Snapshot:
         return e[e.n >= min_syn].sort_values("n", ascending=False).reset_index(drop=True)
 
     def static(self, ids, columns=STATIC_COLS):
-        """static columns (supervoxels, positions, size) for synapse ids; static.parquet is sorted by id, so the
-        id filter reads only the row groups that hold them"""
+        """static columns (supervoxels, positions, size) for synapse ids; static.parquet is sorted by id, so only the
+        row groups whose id range holds a requested id are read (ids scattered over the whole range - e.g. every
+        synapse of a few hundred cells - no longer pull in the full 111M-row file)"""
         ids = np.unique(np.asarray(ids, dtype=np.int64))
         if not len(ids):
             return pd.DataFrame(columns=["id"] + list(columns))
-        tb = pq.read_table(os.path.join(self.root, "static.parquet"), columns=["id"] + list(columns),
-                           filters=[("id", ">=", int(ids.min())), ("id", "<=", int(ids.max()))])
-        df = tb.to_pandas()
-        return df[df.id.isin(ids)].reset_index(drop=True)
+        pf = pq.ParquetFile(os.path.join(self.root, "static.parquet"))
+        if not hasattr(self, "_rg"):
+            md, ci = pf.metadata, pf.schema_arrow.get_field_index("id")
+            st = [md.row_group(g).column(ci).statistics for g in range(md.num_row_groups)]
+            self._rg = (np.array([s.min for s in st], np.int64), np.array([s.max for s in st], np.int64))
+        lo, hi = self._rg
+        first = np.searchsorted(ids, lo, "left")  # per row group: is there a requested id in [lo, hi]?
+        groups = np.where((first < len(ids)) & (ids[np.minimum(first, len(ids) - 1)] <= hi))[0]
+        parts = []
+        for g in groups:  # one row group at a time, filtered at once: memory stays at one group
+            tb = pf.read_row_group(int(g), columns=["id"] + list(columns))
+            keep = np.isin(np.asarray(tb["id"].to_numpy(), dtype=np.int64), ids)
+            parts.append(tb.filter(pa.array(keep)))
+        return pa.concat_tables(parts).to_pandas().reset_index(drop=True)
 
     # -- catching up to times after the newest local checkpoint (CAVE, slow and spread out)
     def _needs_catch_up(self, tag, when):
