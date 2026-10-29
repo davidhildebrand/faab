@@ -46,7 +46,9 @@ LINK_ORDER = [34, 108, 15, 31, 41, 85, 109, 134, 158, 165, 172, 39, 66, 75, 7, 1
 EXTRA_C3 = "648518347642151200"  # SeaTable R7-8 cell without a cartridge label that travels in the c3 bundle
 ZONE_UM = 35.0
 NAMES = {"R2/R5": "lateral", "R1/R6": "near7/8", "R3/R4": "opp7/8", "R1/R6 or R3/R4": "end (no R7/R8 ref)"}
-CLASS_OF = {"R1-R6-like": "R1-R6", "R1-R6-like (few sites)": "R1-R6", "R7/R8-like": "R7/R8", "fragment": "fragment", "other": "other"}
+# "R7/R8-like" = verdict before 2026-10-29; "R8-like" / "R7-like" = the inputs-per-output / lamina-share verdicts since
+CLASS_OF = {"R1-R6-like": "R1-R6", "R1-R6-like (few sites)": "R1-R6", "R7/R8-like": "R7/R8", "R8-like": "R7/R8", "R7-like": "R7/R8",
+            "fragment": "fragment", "other": "other"}
 COLS = ["root_id_orig", "class", "root_id_curr", "xyz", "status", "pr_date", "proofreader", "chk_date", "checker", "notes", "link",
         "", "pair_type", "fly_pair", "partner_root_id_orig", "partner_root_id_curr", "partner_xyz", "confidence", "mirror_score",
         "mirror_margin", "terminal_score", "manual fly_pair check"]

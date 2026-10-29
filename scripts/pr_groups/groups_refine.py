@@ -531,7 +531,7 @@ def cmd_refine(groups, sel):
                 role[r] = f"in group {', '.join(map(str, other))}"
             elif float(st.loc[int(r), "frac_distal"]) < 0.6:
                 role[r] = (f"joins the bundle only near the lamina ({npre[r]} presynaptic sites; lamina-cell neurite?); not added")
-            elif census.get(r, "") in ("R1-R6-like", "R1-R6-like (few sites)", "R7/R8-like"):
+            elif census.get(r, "") in ("R1-R6-like", "R1-R6-like (few sites)", "R7/R8-like", "R8-like", "R7-like"):
                 role[r] = f"census {census[r]}"
             elif npre[r] >= 10 and sp.get(r, -1e9) >= F["s_end"] - 50:
                 role[r] = f"PR-like by synapses ({npre[r]} presynaptic sites)"
