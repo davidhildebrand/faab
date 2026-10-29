@@ -10,7 +10,8 @@ which keeps axons that run in parallel together and separates bundles that only 
 is calibrated on the known groups (intra-group vs nearest-other-group track distances are printed).
 Outputs: figures/pr_bundles_roots.tsv (one row per PR-like root: cluster, xyz at the reference depth, known/SeaTable
 labels), pr_bundles_clusters.tsv, pr_bundles_ng.txt / pr_bundles_state.json.
-Usage: python faab_pr_bundles_cluster.py [LINK_UM]
+Left eye: --left reads/writes the pr_left_* files instead.
+Usage: python faab_pr_bundles_cluster.py [LINK_UM] [--left]
 """
 from faab.config import REPO
 import datetime
@@ -28,14 +29,22 @@ import faab.nglink as nglink
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
-CACHE = os.path.join(OUT, "pr_bundle_boxes.pkl")
+LEFT = "--left" in sys.argv
+PFX = "pr_left_" if LEFT else "pr_"
+KNOWN_NAME = "known PRs (LRS left cartridges)" if LEFT else "known PRs (8 groups + LRS cartridges)"
+CACHE = os.path.join(OUT, f"{PFX}bundle_boxes.pkl")
 DEPTHS_UM = [45.0, 60.0, 75.0, 90.0]
 REF_DEPTH = 75.0
 MIN_HIT_VOX = 2000
 MIN_DEPTHS = 2
 MAX_ANGLE_DEG = 25.0
-LOW_VOX, HIGH_VOX = 25000, 600000   # per-slab volume window for one photoreceptor axon (known PRs: p10 70k, p90 203k)
-LINK_UM = float(sys.argv[1]) if len(sys.argv) > 1 else 5.0
+# per-slab volume window for one photoreceptor axon. Right: known PRs p5 47k, p10 70k, p90 203k. Left (cartridge 8,
+# 2026-10-29): thinner, p5 21k, p50 38k, p90 68k -> same ratio to p5 (~0.53) gives 11k
+LOW_VOX, HIGH_VOX = (11000, 600000) if LEFT else (25000, 600000)
+_num = [a for a in sys.argv[1:] if not a.startswith("--")]
+# left: 5 um put cartridge 8's R1-R6 into a 29-axon cluster, 3 um into 13, 2.5 um into 8 (its six + 2) - left bundles
+# are packed tighter; right: 6 um merged adjacent known groups, 5 um did not
+LINK_UM = float(_num[0]) if _num else (2.5 if LEFT else 5.0)
 FAR = 1000.0
 DIMS = {"x": [1.6e-08, "m"], "y": [1.6e-08, "m"], "z": [4.5e-08, "m"]}
 PALETTE = ["#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4", "#42d4f4", "#f032e6", "#bfef45", "#fabed4",
@@ -45,8 +54,8 @@ PALETTE = ["#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4", "#4
 def main():
     cache = pickle.load(open(CACHE, "rb"))
     boxes, sv2root = cache["boxes"], cache["sv2root"]
-    known = pd.read_csv(os.path.join(OUT, "pr_lattice_known.tsv"), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
-    st_path = os.path.join(OUT, "pr_lattice_seatable_prs.tsv")
+    known = pd.read_csv(os.path.join(OUT, f"{PFX}lattice_known.tsv"), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
+    st_path = os.path.join(OUT, f"{PFX}lattice_seatable_prs.tsv")
     st = pd.read_csv(st_path, sep="\t", dtype=str) if os.path.exists(st_path) else pd.DataFrame(columns=["root", "type", "cart"])
     st_type = {r.root: f"SeaTable {r.type}" + (f" cart {r.cart}" if isinstance(r.cart, str) and r.cart not in ("", "nan") else "")
                for r in st.itertuples()}
@@ -61,7 +70,7 @@ def main():
     mean_axis = axes.mean(0)
     mean_axis /= np.linalg.norm(mean_axis)
     # local axis: that of the nearest site (known or predicted, interpolated axes) at the reference depth
-    pred = pd.read_csv(os.path.join(OUT, "pr_lattice_predicted.tsv"), sep="\t")
+    pred = pd.read_csv(os.path.join(OUT, f"{PFX}lattice_predicted.tsv"), sep="\t")
     site_axes = np.vstack([axes, pred[["ax_x", "ax_y", "ax_z"]].values])
     site_axes /= np.linalg.norm(site_axes, axis=1, keepdims=True)
     site_lam = np.vstack([known[["lam_x", "lam_y", "lam_z"]].values, pred[["lam_x", "lam_y", "lam_z"]].values])
@@ -183,9 +192,9 @@ def main():
     cl["xyz_centroid"] = cl.c_vox_x.astype(str) + ", " + cl.c_vox_y.astype(str) + ", " + cl.c_vox_z.astype(str)
     cl = cl.sort_values(["n_new", "n_roots"], ascending=False)
     pr = pr.merge(cl[["n_roots", "n_known", "n_new"]], left_on="cluster", right_index=True)
-    pr.to_csv(os.path.join(OUT, "pr_bundles_roots.tsv"), sep="\t", index=False)
-    df.to_csv(os.path.join(OUT, "pr_bundles_all_roots.tsv"), sep="\t", index=False)
-    cl.to_csv(os.path.join(OUT, "pr_bundles_clusters.tsv"), sep="\t")
+    pr.to_csv(os.path.join(OUT, f"{PFX}bundles_roots.tsv"), sep="\t", index=False)
+    df.to_csv(os.path.join(OUT, f"{PFX}bundles_all_roots.tsv"), sep="\t", index=False)
+    cl.to_csv(os.path.join(OUT, f"{PFX}bundles_clusters.tsv"), sep="\t")
     pd.set_option("display.width", 250)
     print(f"\naverage-linkage clusters at {LINK_UM} um: {len(cl)}; sizes {cl.n_roots.value_counts().sort_index().to_dict()}")
     print("clusters containing known PRs (calibration):")
@@ -195,7 +204,7 @@ def main():
     print(new[["n_roots", "n_seatable", "spread_um", "n_depths_med", "xyz_centroid"]].to_string())
 
     # ---- link ----
-    neurons = [{"name": "known PRs (8 groups + LRS cartridges)", "color": "#808080", "ids": sorted(root_group)}]
+    neurons = [{"name": KNOWN_NAME, "color": "#808080", "ids": sorted(root_group)}]
     top = new.index.tolist()[:len(PALETTE)]
     for k, c in enumerate(top):
         ids = sorted(pr[pr.cluster == c].root)
@@ -213,9 +222,9 @@ def main():
     state["layers"].append({"type": "annotation", "source": {"url": "local://annotations", "transform": {"outputDimensions": DIMS}},
                             "annotations": anns, "name": f"bundle centroids (+{int(REF_DEPTH)} um above the lamina)", "annotationColor": "#ffe119"})
     url = nglink.to_url(state)
-    open(os.path.join(OUT, "pr_bundles_ng.txt"), "w").write(url + "\n")
-    json.dump(state, open(os.path.join(OUT, "pr_bundles_state.json"), "w"), indent=1)
-    print(f"\nlink {len(url)} chars saved to figures/pr_bundles_ng.txt ({datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC)")
+    open(os.path.join(OUT, f"{PFX}bundles_ng.txt"), "w").write(url + "\n")
+    json.dump(state, open(os.path.join(OUT, f"{PFX}bundles_state.json"), "w"), indent=1)
+    print(f"\nlink {len(url)} chars saved to figures/{PFX}bundles_ng.txt ({datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC)")
 
 
 if __name__ == "__main__":

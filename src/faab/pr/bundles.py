@@ -13,7 +13,8 @@ linkage (LINK_UM) on their centroid at the reference depth (REF_DEPTH, falling b
 Calibration: the known groups' R1-R6 should each land in one cluster.
 Outputs: figures/pr_bundle_boxes.pkl (cache), pr_bundles_roots.tsv, pr_bundles_clusters.tsv, pr_bundles_ng.txt /
 pr_bundles_state.json (EM, brain mesh, known PRs grey, new bundles coloured per cluster, cluster centroids).
-Read-only. Usage: python faab_pr_bundles.py [--refresh]
+Left eye: --left reads/writes the pr_left_* files instead (sites from scripts/pr_groups/left_sites.py).
+Read-only. Usage: python faab_pr_bundles.py [--refresh] [--left]
 """
 from faab.config import REPO
 import datetime
@@ -37,7 +38,10 @@ import faab.nglink as nglink
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
-CACHE = os.path.join(OUT, "pr_bundle_boxes.pkl")
+LEFT = "--left" in sys.argv
+PFX = "pr_left_" if LEFT else "pr_"
+KNOWN_NAME = "known PRs (LRS left cartridges)" if LEFT else "known PRs (8 groups + LRS cartridges)"
+CACHE = os.path.join(OUT, f"{PFX}bundle_boxes.pkl")
 DEPTHS_UM = [45.0, 60.0, 75.0, 90.0]
 REF_DEPTH = 75.0
 BOX_HALF_UM = (6.0, 6.0, 0.7)
@@ -79,9 +83,9 @@ def read_box(vol, centre_um, half_vox, res):
 def main():
     refresh = "--refresh" in sys.argv
     t0 = time.time()
-    known = pd.read_csv(os.path.join(OUT, "pr_lattice_known.tsv"), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
-    pred = pd.read_csv(os.path.join(OUT, "pr_lattice_predicted.tsv"), sep="\t")
-    st_path = os.path.join(OUT, "pr_lattice_seatable_prs.tsv")
+    known = pd.read_csv(os.path.join(OUT, f"{PFX}lattice_known.tsv"), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
+    pred = pd.read_csv(os.path.join(OUT, f"{PFX}lattice_predicted.tsv"), sep="\t")
+    st_path = os.path.join(OUT, f"{PFX}lattice_seatable_prs.tsv")
     st = pd.read_csv(st_path, sep="\t", dtype=str) if os.path.exists(st_path) else pd.DataFrame(columns=["root", "type", "cart"])
     st_type = {r.root: f"SeaTable {r.type}" + (f" cart {r.cart}" if isinstance(r.cart, str) and r.cart not in ("", "nan") else "")
                for r in st.itertuples()}
@@ -93,7 +97,7 @@ def main():
                     root_group[x] = f"{r.cartridge} {cls}"
     sites = [dict(name=r.cartridge, lam=np.array([r.lam_x, r.lam_y, r.lam_z]), axis=np.array([r.ax_x, r.ax_y, r.ax_z]))
              for r in known.itertuples()]
-    sites += [dict(name=f"p({r.lat_i},{r.lat_j})", lam=np.array([r.lam_x, r.lam_y, r.lam_z]), axis=np.array([r.ax_x, r.ax_y, r.ax_z]))
+    sites += [dict(name=getattr(r, "site", f"p({r.lat_i},{r.lat_j})"), lam=np.array([r.lam_x, r.lam_y, r.lam_z]), axis=np.array([r.ax_x, r.ax_y, r.ax_z]))
               for r in pred.itertuples()]
     mean_axis = np.mean([s["axis"] / np.linalg.norm(s["axis"]) for s in sites], axis=0)
     mean_axis /= np.linalg.norm(mean_axis)
@@ -221,9 +225,9 @@ def main():
     cl["xyz_centroid"] = cl.c_vox_x.astype(str) + ", " + cl.c_vox_y.astype(str) + ", " + cl.c_vox_z.astype(str)
     cl = cl.sort_values(["n_new", "n_roots"], ascending=False)
     pr = pr.merge(cl[["n_roots", "n_known", "n_new"]], left_on="cluster", right_index=True)
-    pr.to_csv(os.path.join(OUT, "pr_bundles_roots.tsv"), sep="\t", index=False)
-    df.to_csv(os.path.join(OUT, "pr_bundles_all_roots.tsv"), sep="\t", index=False)
-    cl.to_csv(os.path.join(OUT, "pr_bundles_clusters.tsv"), sep="\t")
+    pr.to_csv(os.path.join(OUT, f"{PFX}bundles_roots.tsv"), sep="\t", index=False)
+    df.to_csv(os.path.join(OUT, f"{PFX}bundles_all_roots.tsv"), sep="\t", index=False)
+    cl.to_csv(os.path.join(OUT, f"{PFX}bundles_clusters.tsv"), sep="\t")
     pd.set_option("display.width", 250)
     print(f"\nbundles (single linkage {LINK_UM} um on the +{int(REF_DEPTH)} um centroids): {len(cl)} clusters, "
           f"{int((cl.n_roots >= 4).sum())} with >= 4 roots, {int(((cl.n_roots >= 4) & (cl.n_known == 0)).sum())} of those entirely new")
@@ -235,7 +239,7 @@ def main():
     # ---- link ----
     known_ids = sorted(root_group)
     new_cl = cl[(cl.n_known == 0) & (cl.n_roots >= 3)].index.tolist()
-    neurons = [{"name": "known PRs (8 groups + LRS cartridges)", "color": "#808080", "ids": known_ids}]
+    neurons = [{"name": KNOWN_NAME, "color": "#808080", "ids": known_ids}]
     for k, c in enumerate(new_cl[:len(PALETTE)]):
         ids = sorted(pr[pr.cluster == c].root)
         neurons.append({"name": f"new bundle {k + 1} ({len(ids)} axons)", "color": PALETTE[k], "ids": ids})
@@ -252,9 +256,9 @@ def main():
     state["layers"].append({"type": "annotation", "source": {"url": "local://annotations", "transform": {"outputDimensions": DIMS}},
                             "annotations": anns, "name": f"bundle centroids (+{int(REF_DEPTH)} um)", "annotationColor": "#ffe119"})
     url = nglink.to_url(state)
-    open(os.path.join(OUT, "pr_bundles_ng.txt"), "w").write(url + "\n")
-    json.dump(state, open(os.path.join(OUT, "pr_bundles_state.json"), "w"), indent=1)
-    print(f"\nlink {len(url)} chars saved to figures/pr_bundles_ng.txt; live at {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC; "
+    open(os.path.join(OUT, f"{PFX}bundles_ng.txt"), "w").write(url + "\n")
+    json.dump(state, open(os.path.join(OUT, f"{PFX}bundles_state.json"), "w"), indent=1)
+    print(f"\nlink {len(url)} chars saved to figures/{PFX}bundles_ng.txt; live at {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC; "
           f"DONE in {time.time() - t0:.0f} s")
 
 
