@@ -14,7 +14,7 @@ point). LRS 1 and 2 do not (9-13 um, terminal pieces; 2026-10-29 their axis cann
 short, the mirrored right-side axes miss cartridge 8's axis by 138 deg, and 90% of the 587 PR-like cells feeding the
 same lamina targets are terminal pieces too, ending in a ~17-um layer parallel to the lamina - scratch/pr_groups/
 left_*.py); they are written to pr_left_lattice_noaxis.tsv and get no sites.
-Outputs (read by bundles.py --left and bundles_cluster.py --left): figures/pr_left_lattice_known.tsv,
+Outputs (read by bundles.py, bundles_cluster.py and bundles_verify.py with --side left): figures/pr_left_lattice_known.tsv,
 pr_left_lattice_predicted.tsv, pr_left_lattice_seatable_prs.tsv, pr_left_lattice_noaxis.tsv, pr_left_sites_ng.txt.
 Read-only, throttled.
 """

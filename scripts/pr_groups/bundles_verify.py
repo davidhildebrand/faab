@@ -1,83 +1,94 @@
 """Step 4 of the photoreceptor-group finder: synapse-based verification of the PR-like axons found by the census.
 
-For every PR-like root in figures/pr_bundles_roots.tsv (known and new) two live queries (timestamp = now) count
-presynaptic and postsynaptic sites; the median presynaptic position is expressed as a depth d along the mean
-cartridge axis relative to the root's bundle centroid 75 um above the lamina (d ~ 45-90 = lamina, d > 90 =
-medulla side, d < 45 = inside the bundle zone where photoreceptors make no synapses). Rules, calibrated on the
-known PRs (their distributions are printed):
-  R1-R6-like : n_pre >= PRE_MIN and 45 <= d <= 90 and n_post <= POST_MAX
-  R7/R8-like : n_pre >= 10 and d > 90 and n_post <= POST_MAX_R78
+For every PR-like root in figures/pr_bundles_roots.tsv (known and new) presynaptic and postsynaptic sites are counted
+(local synapse snapshot + one CAVE catch-up to now; validated identical to live_query, faab.synsnap), and where the
+outputs are: the fractions of presynaptic sites inside the side's lamina and medulla meshes (faab.ol_meshes). Rules,
+calibrated on the known PRs (their distributions are printed):
+  R1-R6-like : n_pre >= PRE_MIN and lamina share >= LA_MIN and n_post <= POST_MAX
+  R1-R6-like (few sites): 10 <= n_pre < PRE_MIN, otherwise as R1-R6-like
+  R7/R8-like : n_pre >= 10 and medulla share >= ME_MIN_R78 and lamina share < LA_MIN and n_post <= POST_MAX_R78
   fragment   : n_pre < 10 (axon piece without its terminal; keep for proofreading)
   other      : anything else (synapses in the wrong place or far too many inputs) - inspect
-Counts are cached in figures/pr_bundles_synapses.tsv (rerun with --refresh to re-query); the classification is
-network-free and written to figures/pr_bundles_roots_verified.tsv and pr_bundles_clusters_verified.tsv; the
-paste-ready summary figures/pr_bundles_summary.md is regenerated with the verified counts.
-Usage: python faab_pr_bundles_verify.py [--refresh]
+Until 2026-10-29 the position test was a depth d of the median presynaptic site along the mean cartridge axis,
+relative to the bundle centroid 75 um above the lamina (45-90 = lamina, > 90 = medulla side). On the left it fails:
+along cartridge 8's axis the medulla lies at lamina depth, so 20 R7s (one per bundle, 69% of outputs in ME_L) were
+called R1-R6 and 23 lamina axons just short of 45 um (all of cluster 81) 'other' (scratch/pr_groups/verify_mesh_rule.py).
+d is still reported (presyn_depth_um) and a disagreement noted.
+Counts are cached in figures/pr_bundles_synapses.tsv (rerun with --refresh to re-query; caches written before
+2026-10-29 came from live_query, have no mesh fractions and need --refresh); the classification is network-free and written to
+figures/pr_bundles_roots_verified.tsv and pr_bundles_clusters_verified.tsv; the paste-ready summary
+figures/pr_bundles_summary.md is regenerated with the verified counts. The raw synapse tables keep the live_query
+columns (root ids, '[x y z]' positions in nm), which src/faab/pr/bundles_pairs.py reads.
+--side left reads/writes the pr_left_* files instead; default right.
+Usage: python bundles_verify.py [--refresh] [--side right|left]
 """
 from faab.config import REPO
 import datetime
 import os
-import sys
-import time
 
 import numpy as np
 import pandas as pd
 import caveclient
-from faab.clients.cave import DATASTACK, throttle
+from faab import ol_meshes, synsnap
+from faab.clients.cave import DATASTACK
+from faab.pr.side import NEUROPILS, PREFIX, parse as parse_side
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
 VOX = np.array([16.0, 16.0, 45.0])
-SYN = os.path.join(OUT, "pr_bundles_synapses.tsv")
+SIDE, ARGS = parse_side()
+PFX = PREFIX[SIDE]
+LA, ME = NEUROPILS[SIDE]
+SYN = os.path.join(OUT, f"{PFX}bundles_synapses.tsv")
 PRE_MIN, POST_MAX, POST_MAX_R78 = 40, 100, 150
+LA_MIN, ME_MIN_R78 = 0.8, 0.2  # left cartridge 8 R1-R6: 97-100% of outputs in LA_L; its R7: 34% in ME_L
+
+
+def raw(df):
+    """snapshot rows -> the live_query layout of the raw tables (root ids, '[x y z]' positions in nm)"""
+    pos = lambda p: [f"[{int(x * VOX[0])} {int(y * VOX[1])} {int(z * VOX[2])}]"
+                     for x, y, z in df[[f"{p}_x", f"{p}_y", f"{p}_z"]].to_numpy()]
+    return pd.DataFrame({"id": df.id, "pre_pt_root_id": df.pre_root, "post_pt_root_id": df.post_root,
+                         "pre_pt_position": pos("pre"), "post_pt_position": pos("post"), "size": df["size"]})
 
 
 def fetch(ids):
     client = caveclient.CAVEclient(DATASTACK)
     now = datetime.datetime.now(datetime.timezone.utc)
-    t = throttle(time.time() - 10)
-
-    def query(side):  # transient CAVE 500s (sqlalchemy connection drops) are retried
-        nonlocal t
-        for attempt in range(4):
-            t = throttle(t)
-            try:
-                return client.materialize.live_query("synapses_v2", timestamp=now, filter_in_dict={side: ids})
-            except Exception as e:
-                print(f"  {side} query attempt {attempt + 1} failed: {str(e)[:120]}", flush=True)
-                time.sleep(20)
-        raise RuntimeError("synapse query keeps failing")
-    pre = query("pre_pt_root_id")
-    post = query("post_pt_root_id")
-    print(f"synapse rows: {len(pre)} pre, {len(post)} post (live at {now:%Y-%m-%d %H:%M} UTC)", flush=True)
-    keep = ["id", "pre_pt_root_id", "post_pt_root_id", "pre_pt_position", "post_pt_position", "size"]
-    pre[[c for c in keep if c in pre.columns]].to_csv(os.path.join(OUT, "pr_bundles_synapses_raw_pre.tsv"), sep="\t", index=False)
-    post[[c for c in keep if c in post.columns]].to_csv(os.path.join(OUT, "pr_bundles_synapses_raw_post.tsv"), sep="\t", index=False)
-    n_pre = pre.groupby("pre_pt_root_id").size()
-    n_post = post.groupby("post_pt_root_id").size()
-    med = {}
-    for rid, sub in pre.groupby("pre_pt_root_id"):
-        P = np.array([[float(v) for v in str(s).strip("[]").split()] for s in sub.pre_pt_position]) / 1000.0
-        med[int(rid)] = np.median(P, axis=0)
+    synsnap.refresh()
+    S = synsnap.Snapshot()
+    pre = S.synapses(pre=ids, when="now", positions=True, client=client)
+    post = S.synapses(post=ids, when="now", positions=True, client=client)
+    print(f"synapse rows: {len(pre)} pre, {len(post)} post (snapshot + catch-up to {now:%Y-%m-%d %H:%M} UTC)", flush=True)
+    raw(pre).to_csv(os.path.join(OUT, f"{PFX}bundles_synapses_raw_pre.tsv"), sep="\t", index=False)
+    raw(post).to_csv(os.path.join(OUT, f"{PFX}bundles_synapses_raw_post.tsv"), sep="\t", index=False)
+    n_pre = pre.groupby("pre_root").size()
+    n_post = post.groupby("post_root").size()
+    P_all = pre[["pre_x", "pre_y", "pre_z"]].to_numpy(float) * VOX / 1000.0
+    region = ol_meshes.assign(P_all, [LA, ME]) if len(pre) else np.array([], dtype=object)
     rows = []
     for r in ids:
-        m = med.get(r)
+        sel = (pre.pre_root == r).to_numpy()
+        m = np.median(P_all[sel], axis=0) if sel.any() else None
         rows.append(dict(root=str(r), n_pre=int(n_pre.get(r, 0)), n_post=int(n_post.get(r, 0)),
                          pre_x=m[0] if m is not None else np.nan, pre_y=m[1] if m is not None else np.nan,
-                         pre_z=m[2] if m is not None else np.nan, queried=f"{now:%Y-%m-%d %H:%M} UTC"))
+                         pre_z=m[2] if m is not None else np.nan,
+                         la_frac=round(float((region[sel] == LA).mean()), 2) if sel.any() else np.nan,
+                         me_frac=round(float((region[sel] == ME).mean()), 2) if sel.any() else np.nan,
+                         queried=f"{now:%Y-%m-%d %H:%M} UTC"))
     return pd.DataFrame(rows)
 
 
 def main():
-    roots = pd.read_csv(os.path.join(OUT, "pr_bundles_roots.tsv"), sep="\t", dtype={"root": str, "known": str, "seatable": str})
+    roots = pd.read_csv(os.path.join(OUT, f"{PFX}bundles_roots.tsv"), sep="\t", dtype={"root": str, "known": str, "seatable": str})
     roots["known"] = roots.known.fillna("")
-    cl = pd.read_csv(os.path.join(OUT, "pr_bundles_clusters.tsv"), sep="\t", index_col=0)
+    cl = pd.read_csv(os.path.join(OUT, f"{PFX}bundles_clusters.tsv"), sep="\t", index_col=0)
     cl["known_groups"] = cl.known_groups.fillna("")
-    known = pd.read_csv(os.path.join(OUT, "pr_lattice_known.tsv"), sep="\t")
+    known = pd.read_csv(os.path.join(OUT, f"{PFX}lattice_known.tsv"), sep="\t")
     ax = known[["ax_x", "ax_y", "ax_z"]].values.mean(0)
     ax /= np.linalg.norm(ax)
     ids = [int(x) for x in roots.root]
-    if "--refresh" in sys.argv or not os.path.exists(SYN):
+    if "--refresh" in ARGS or not os.path.exists(SYN):
         syn = fetch(ids)
         syn.to_csv(SYN, sep="\t", index=False)
     else:
@@ -86,6 +97,8 @@ def main():
         if missing:
             syn = pd.concat([syn, fetch([int(x) for x in missing])], ignore_index=True)
             syn.to_csv(SYN, sep="\t", index=False)
+    if "la_frac" not in syn or syn.loc[syn.n_pre > 0, "la_frac"].isna().any():
+        raise SystemExit(f"{SYN} has no mesh fractions (live_query cache from before 2026-10-29): rerun with --refresh")
     df = roots.merge(syn, on="root", how="left")
     cen = cl[["cx", "cy", "cz"]]
     d = []
@@ -102,28 +115,39 @@ def main():
     def rule(r):
         if r.n_pre < 10:
             return "fragment"
-        if r.n_pre >= PRE_MIN and 45 <= r.presyn_depth_um <= 90 and r.n_post <= POST_MAX:
+        if r.n_pre >= PRE_MIN and r.la_frac >= LA_MIN and r.n_post <= POST_MAX:
             return "R1-R6-like"
-        if r.presyn_depth_um > 90 and r.n_post <= POST_MAX_R78:
+        if r.me_frac >= ME_MIN_R78 and r.la_frac < LA_MIN and r.n_post <= POST_MAX_R78:
             return "R7/R8-like"
-        if 45 <= r.presyn_depth_um <= 90 and r.n_post <= POST_MAX:
+        if r.la_frac >= LA_MIN and r.n_post <= POST_MAX:
             return "R1-R6-like (few sites)"
         return "other"
     df["verdict"] = [rule(r) for r in df.itertuples()]
-    df["note"] = np.where(df.n_post > 30, "high n_post", "")
+
+    def note(r):
+        out = ["high n_post"] if r.n_post > 30 else []
+        if r.verdict.startswith("R1-R6") and not 45 <= r.presyn_depth_um <= 90:
+            out.append(f"outputs at depth {r.presyn_depth_um:.0f} um, outside the 45-90 lamina window")
+        if r.verdict == "R7/R8-like" and r.presyn_depth_um <= 90:
+            out.append(f"outputs at depth {r.presyn_depth_um:.0f} um, not beyond the lamina window")
+        return "; ".join(out)
+    df["note"] = [note(r) for r in df.itertuples()]
 
     # calibration on the known PRs
     kn = df[df.known != ""].copy()
     kn["cls"] = kn.known.str.split(" ").str[1]
     pd.set_option("display.width", 250)
-    print("known PRs (calibration): per class n_pre / n_post / presyn depth quantiles (p10, p50, p90) and rule verdicts")
+    print(f"side {SIDE}; known PRs (calibration): per class n_pre / n_post / presyn depth / {LA} and {ME} fractions "
+          f"(p10, p50, p90) and rule verdicts")
     for cls, sub in kn.groupby("cls"):
         q = lambda s: sub[s].quantile([0.1, 0.5, 0.9]).round(0).astype(int).tolist()
+        qf = lambda s: sub[s].quantile([0.1, 0.5, 0.9]).round(2).tolist()
         print(f"  {cls}: n {len(sub)}; n_pre {q('n_pre')}; n_post {q('n_post')}; depth {sub.presyn_depth_um.quantile([0.1, 0.5, 0.9]).round(0).tolist()}; "
-              f"verdicts {sub.verdict.value_counts().to_dict()}")
+              f"{LA} {qf('la_frac')}; {ME} {qf('me_frac')}; verdicts {sub.verdict.value_counts().to_dict()}")
     new = df[df.known == ""]
-    print(f"\nnew PR-like axons: {len(new)}; verdicts {new.verdict.value_counts().to_dict()}")
-    df.to_csv(os.path.join(OUT, "pr_bundles_roots_verified.tsv"), sep="\t", index=False)
+    print(f"\nnew PR-like axons: {len(new)}; verdicts {new.verdict.value_counts().to_dict()}; depth-window disagreements "
+          f"{int(new.note.str.contains('depth').sum())}")
+    df.to_csv(os.path.join(OUT, f"{PFX}bundles_roots_verified.tsv"), sep="\t", index=False)
 
     # per-cluster verified counts
     g = df.groupby("cluster")
@@ -133,7 +157,7 @@ def main():
                       "n_other": g.verdict.apply(lambda s: int((s == "other").sum()))})
     clv = cl.join(v)
     clv["n_PR_like"] = clv.n_R16_like + clv.n_R78_like
-    clv.to_csv(os.path.join(OUT, "pr_bundles_clusters_verified.tsv"), sep="\t")
+    clv.to_csv(os.path.join(OUT, f"{PFX}bundles_clusters_verified.tsv"), sep="\t")
     newc = clv[(clv.n_known == 0) & (clv.n_roots >= 4)].copy()
     newc["tier"] = 3
     newc.loc[newc.spread_um <= 6.0, "tier"] = 2
@@ -144,7 +168,7 @@ def main():
     print(newc[["rank", "tier", "n_roots", "n_R16_like", "n_R78_like", "n_fragment", "n_other", "spread_um", "xyz_centroid"]].to_string())
     print("\nmembers judged 'other' (inspect):")
     oth = df[(df.verdict == "other") & (df.known == "")].sort_values("n_post", ascending=False)
-    print(oth[["cluster", "root", "xyz_ref", "n_pre", "n_post", "presyn_depth_um", "presyn_xyz", "vox_med", "depths"]].to_string(index=False))
+    print(oth[["cluster", "root", "xyz_ref", "n_pre", "n_post", "presyn_depth_um", "la_frac", "me_frac", "presyn_xyz", "vox_med", "depths"]].to_string(index=False))
 
     # paste-ready summary with verdicts
     lines = ["| rank | tier | bundle | n_axons | R1-R6-like | R7/R8-like | fragments | other | spread_um | xyz_centroid_+75um | member_roots (verdict) |",
@@ -158,14 +182,14 @@ def main():
     for r in clv[clv.n_known > 0].sort_values("n_new", ascending=False).itertuples():
         mem = df[(df.cluster == r.Index) & (df.known == "")]
         klines.append(f"| {r.Index} | {r.known_groups} | {int(r.n_known)} | " + ", ".join(f"{m.root} ({short[m.verdict]})" for m in mem.itertuples()) + " |")
-    text = (f"# New photoreceptor bundle candidates with synapse verification ({syn.queried.iloc[0]})\n\n"
-            f"Verdict per axon from its synapses: R1-6 = >= {PRE_MIN} presynaptic sites at lamina depth and <= {POST_MAX} postsynaptic; "
-            f"R7/8 = presynaptic sites on the medulla side; frag = < 10 presynaptic sites (axon piece without terminal); "
+    text = (f"# New photoreceptor bundle candidates with synapse verification, {SIDE} eye ({syn.queried.iloc[0]})\n\n"
+            f"Verdict per axon from its synapses: R1-6 = >= {PRE_MIN} presynaptic sites, >= {LA_MIN:.0%} of them in {LA}, and <= {POST_MAX} postsynaptic; "
+            f"R7/8 = >= {ME_MIN_R78:.0%} of the presynaptic sites in {ME}; frag = < 10 presynaptic sites (axon piece without terminal); "
             f"OTHER = synapses in the wrong place or far too many inputs (inspect). Tiers: 1 = compact (spread <= 6 um) with 6-9 axons, "
-            f"2 = compact other sizes, 3 = loose. Per-axon xyz 75 um above the lamina: figures/pr_bundles_roots_verified.tsv.\n\n"
+            f"2 = compact other sizes, 3 = loose. Per-axon xyz 75 um above the lamina: figures/{PFX}bundles_roots_verified.tsv.\n\n"
             + "\n".join(lines) + "\n\n## Clusters containing known PRs: new members\n\n" + "\n".join(klines) + "\n")
-    open(os.path.join(OUT, "pr_bundles_summary.md"), "w").write(text)
-    print("\nsummary written to figures/pr_bundles_summary.md")
+    open(os.path.join(OUT, f"{PFX}bundles_summary.md"), "w").write(text)
+    print(f"\nsummary written to figures/{PFX}bundles_summary.md")
 
 
 if __name__ == "__main__":

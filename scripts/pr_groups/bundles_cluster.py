@@ -10,28 +10,27 @@ which keeps axons that run in parallel together and separates bundles that only 
 is calibrated on the known groups (intra-group vs nearest-other-group track distances are printed).
 Outputs: figures/pr_bundles_roots.tsv (one row per PR-like root: cluster, xyz at the reference depth, known/SeaTable
 labels), pr_bundles_clusters.tsv, pr_bundles_ng.txt / pr_bundles_state.json.
-Left eye: --left reads/writes the pr_left_* files instead.
-Usage: python faab_pr_bundles_cluster.py [LINK_UM] [--left]
+--side left reads/writes the pr_left_* files instead, with the left calibration below; default right.
+Usage: python bundles_cluster.py [LINK_UM] [--side right|left]
 """
 from faab.config import REPO
 import datetime
 import json
 import os
 import pickle
-import sys
 
 import numpy as np
 import pandas as pd
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import squareform
 from faab.partners.top10_xyz import VOX
+from faab.pr.side import KNOWN_NAME, PREFIX, parse as parse_side
 import faab.nglink as nglink
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
-LEFT = "--left" in sys.argv
-PFX = "pr_left_" if LEFT else "pr_"
-KNOWN_NAME = "known PRs (LRS left cartridges)" if LEFT else "known PRs (8 groups + LRS cartridges)"
+SIDE, ARGS = parse_side()
+PFX = PREFIX[SIDE]
 CACHE = os.path.join(OUT, f"{PFX}bundle_boxes.pkl")
 DEPTHS_UM = [45.0, 60.0, 75.0, 90.0]
 REF_DEPTH = 75.0
@@ -40,11 +39,11 @@ MIN_DEPTHS = 2
 MAX_ANGLE_DEG = 25.0
 # per-slab volume window for one photoreceptor axon. Right: known PRs p5 47k, p10 70k, p90 203k. Left (cartridge 8,
 # 2026-10-29): thinner, p5 21k, p50 38k, p90 68k -> same ratio to p5 (~0.53) gives 11k
-LOW_VOX, HIGH_VOX = (11000, 600000) if LEFT else (25000, 600000)
-_num = [a for a in sys.argv[1:] if not a.startswith("--")]
+LOW_VOX, HIGH_VOX = {"right": (25000, 600000), "left": (11000, 600000)}[SIDE]
+_num = [a for a in ARGS if not a.startswith("--")]
 # left: 5 um put cartridge 8's R1-R6 into a 29-axon cluster, 3 um into 13, 2.5 um into 8 (its six + 2) - left bundles
 # are packed tighter; right: 6 um merged adjacent known groups, 5 um did not
-LINK_UM = float(_num[0]) if _num else (2.5 if LEFT else 5.0)
+LINK_UM = float(_num[0]) if _num else {"right": 5.0, "left": 2.5}[SIDE]
 FAR = 1000.0
 DIMS = {"x": [1.6e-08, "m"], "y": [1.6e-08, "m"], "z": [4.5e-08, "m"]}
 PALETTE = ["#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4", "#42d4f4", "#f032e6", "#bfef45", "#fabed4",
@@ -204,7 +203,7 @@ def main():
     print(new[["n_roots", "n_seatable", "spread_um", "n_depths_med", "xyz_centroid"]].to_string())
 
     # ---- link ----
-    neurons = [{"name": KNOWN_NAME, "color": "#808080", "ids": sorted(root_group)}]
+    neurons = [{"name": KNOWN_NAME[SIDE], "color": "#808080", "ids": sorted(root_group)}]
     top = new.index.tolist()[:len(PALETTE)]
     for k, c in enumerate(top):
         ids = sorted(pr[pr.cluster == c].root)
