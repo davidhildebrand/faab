@@ -24,7 +24,7 @@ def main():
     stamp = utc_stamp()
     st_path = sorted(glob.glob(os.path.join(FIGURES, "*_seatable_aedes_main.tsv")))[-1]
     st = pd.read_csv(st_path, sep="\t", dtype=str).fillna("")
-    st["label"] = [seatable_label(r) for r in st.itertuples()]
+    st["label"] = [seatable_label(r) for r in st.to_dict("records")]
     by_root = {r: g for r, g in st[st.root_now != ""].groupby("root_now")}
     rows = scan_book(openpyxl.load_workbook(book))
     at = roots_at_xyz([s(r["values"]["xyz"]) for r in rows])

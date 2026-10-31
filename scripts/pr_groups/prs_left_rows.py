@@ -5,7 +5,8 @@ numbered after the right side's (103 = SeaTable LRS cartridge 8 with its census 
 Members: every census axon of the bundle except 'other' (medulla neurons), with the class from its synapse verdict
 (faab.pr.verdict: R1-R6-like -> R1-R6, few sites -> R1-R6?, R7-like -> R7, R8-like -> R8, fragment), ordered R1-R6,
 R7, R8, R7/R8, R1-R6?, fragment. SeaTable cells (side L, type R1-6 / R7-8) keep SeaTable's type (R1-6 -> R1-R6; R7-8 ->
-R7 or R8 by the synapse verdict, else R7/R8), status and proofreader, SeaTable column 'present'. Census axons: status
+R7 or R8 by the synapse verdict, else R7/R8), status and proofreader, SeaTable column 'present: <SeaTable label>',
+notes 'LRS: cartridge N' (no other SeaTable text in notes, David 2026-10-30). Census axons: status
 'candidate'. xyz: the census point 75 um above the lamina (SeaTable cells: SeaTable's point), accepted only if the live
 root there is the axon's current root, else the nearest L2-chunk point verified on it. root_id_curr = the root at the
 xyz. CAVE read-only, >= 5 s between calls.
@@ -22,7 +23,7 @@ import pandas as pd
 from faab import nglink, synsnap
 from faab.clients.cave import client as cave_client, parse_xyz, roots_at_xyz, throttle
 from faab.config import FIGURES, VOX
-from faab.partners.sheet import utc_stamp
+from faab.partners.sheet import seatable_label, utc_stamp
 from faab.pr.verdict import mesh_shares, verdict
 
 FIRST_GROUP = 103
@@ -46,6 +47,7 @@ def main():
     st = pd.read_csv(sorted(glob.glob(os.path.join(FIGURES, "*_seatable_aedes_main.tsv")))[-1], sep="\t", dtype=str).fillna("")
     st = st[(st.side == "L") & st["type"].isin(["R1-6", "R7-8"])].copy()
     st["cart"] = st.notes.str.extract(r"cartridge (\d+)")[0]
+    st["label"] = [seatable_label(r) for r in st.to_dict("records")]
     print(f"SeaTable side-L PRs: {len(st)}; cartridges {st.cart.value_counts().to_dict()}")
 
     # ---- groups: cartridge 8 bundle (census, with the SeaTable cells), cartridges 1 and 2, new bundles by rank
@@ -146,7 +148,7 @@ def main():
         notes = []
         if s is not None:
             cls = "R1-R6" if s.type == "R1-6" else {"R7-like": "R7", "R8-like": "R8"}.get(v["verdict"], "R7/R8")
-            notes.append(f"SeaTable {s.type}; {s.notes}")
+            notes.append(s.notes)  # 'LRS: cartridge N'; the SeaTable label goes into the SeaTable column
         else:
             cls = CLASS[v["verdict"]]
         if cen is not None:
@@ -165,7 +167,7 @@ def main():
         out.append(dict(group=group[k], root_id_orig=x["root"], **{"class": cls}, root_id_curr=x["now"], xyz=x["xyz"],
                         status=(s.status if s is not None and s.status else "candidate"),
                         proofreader=(s.proofreader if s is not None else ""), notes="; ".join(notes),
-                        SeaTable=("present" if s is not None else ""), n_pre=v["n_pre"]))
+                        SeaTable=(f"present: {s.label}" if s is not None else ""), n_pre=v["n_pre"]))
     df = pd.DataFrame(out)
     df["o"] = df["class"].map({c: i for i, c in enumerate(ORDER)})
     df = df.sort_values(["group", "o", "n_pre"], ascending=[True, True, False]).drop(columns=["o"])

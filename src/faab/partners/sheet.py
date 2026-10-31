@@ -33,9 +33,9 @@ def cell_text(v):
 
 
 def seatable_label(row):
-    """'superclass / class / subclass / subsubclass / type' of a SeaTable row (dict or namedtuple), blanks skipped"""
-    get = row.get if isinstance(row, dict) else (lambda c: getattr(row, c, ""))
-    return " / ".join(x for x in (cell_text(get(c)) for c in SEATABLE_CLS) if x)
+    """'superclass / class / subclass / subsubclass / type' of a SeaTable row (a dict or Series, not an itertuples row:
+    itertuples renames the 'class' column), blanks skipped"""
+    return " / ".join(x for x in (cell_text(row.get(c)) for c in SEATABLE_CLS) if x)
 
 
 def scan_book(wb):

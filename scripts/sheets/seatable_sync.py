@@ -4,16 +4,14 @@ add the left-eye PRs to the PRs tab; writes one .xlsx per changed tab (import vi
 Rules (David, 2026-10-30):
   - a row is 'in SeaTable' when the live root at its xyz (or, failing that, its root_id_curr) is the live root of a
     SeaTable row (figures/*_seatable_match.tsv from seatable_match.py);
-  - status: SeaTable's, except that our 'checked' and 'proofread' are kept (both count as SeaTable 'adequate'; a
-    SeaTable status other than adequate / proofread is then noted); a replaced real status is noted
-    ('before SeaTable sync: status X');
-  - annotation: SeaTable's label (superclass / class / subclass / subsubclass / type); a replaced annotation that the
-    label does not cover is noted. The PRs tab keeps its own class column and gets 'SeaTable: <label>' in notes;
+  - status: SeaTable's, except that our 'checked' and 'proofread' are kept (both count as SeaTable 'adequate');
   - proofreader: the sheet's names, plus every SeaTable proofreader not already credited, as SeaTable writes them
     (initials matching a credited sheet name, e.g. KT for Kristo T., count as credited);
-  - notes: SeaTable's notes and duplicate SeaTable rows are added;
-  - SeaTable column: 'present' when blank (also for NEW / NEW-DUP rows), 'added' marks kept ('ADDED' and the Sheets
-    AI-formula leftovers -> 'added');
+  - SeaTable column: '<mark>: <SeaTable label>' (label = superclass / class / subclass / subsubclass / type), mark
+    'added' (or 'added (AK)') where the sheet said our team added it, else 'present' (also for NEW / NEW-DUP rows);
+  - nothing from SeaTable goes into notes, and the annotation / class columns keep the sheet's values (David,
+    2026-10-30: notes were too verbose and repeated the sheet; the label lives in the SeaTable column only). Replaced
+    values are in the change log;
 Always: root_id_curr -> the root at the xyz when root_id_curr is no longer current; rows whose root_id_curr is current
 but elsewhere (MISMATCH) are highlighted and noted, nothing moved; statuses lowercase ('stoppped' -> 'stopped');
 'added' typed into checker moves to SeaTable; dates typed day-month-year (2020-10-26 for 20-10-2026, text 27-10-26)
@@ -44,7 +42,7 @@ from faab.partners.sheet import cell_text as s, scan_book, utc_stamp
 from faab.pr import prs_tab as T
 
 HL = "FFFFF9C4"
-KEEP, SAME = ("checked", "proofread"), ("adequate", "proofread")
+KEEP = ("checked", "proofread")
 STATUSES = ("checked", "proofread", "adequate", "review", "in progress", "stopped", "candidate")
 SPELL = {"stoppped": "stopped"}
 TABS = ("PRg1toT4T5", "PRs", "PRg1hop1", "PRg1hop2", "PRg2hop1", "Mi1s")
@@ -55,9 +53,14 @@ def initials(name):
     return (w[0][0] + w[-1][0]).upper() if len(w) >= 2 else name.strip().upper()
 
 
-def tokens(x):
-    t = set(re.findall(r"[a-z0-9]+", x.lower()))
-    return t | ({"lmc"} if t & {"l1", "l2", "l3", "l4", "l5"} else set())  # L1-L5 are LMCs
+def seatable_mark(cur):
+    """'added' marks keep who added the cell ('added-AK' / 'added (AK)' -> 'added (AK)'; a SeaTable status in
+    parentheses, as in 'added (proofread)', is dropped); anything else ('', 'in SeaTable', 'tba') -> 'present'"""
+    c = cur.split(":")[0].strip()
+    if c.lower().startswith("added"):
+        who = re.fullmatch(r"added\s*(?:-|\()\s*([A-Za-z]{2,4})\)?", c, re.I)
+        return f"added ({who.group(1).upper()})" if who else "added"
+    return "present"
 
 
 class Book:
@@ -208,36 +211,15 @@ def main():
         # --- SeaTable
         if mm.get("via"):
             sts = [t for t in dict.fromkeys(x.strip() for x in mm["st_status"].split(";")) if t]
-            if "status" in cols and sts:
-                stv = "; ".join(sts)
-                if st in KEEP:
-                    if any(t not in SAME for t in sts):
-                        notes_add.append(f"SeaTable status: {stv}")
-                elif st != stv:
-                    if st and not st.startswith("NEW"):
-                        notes_add.append(f"before SeaTable sync: status {st}")
-                    B.put(tab, r, cols["status"], stv, "SeaTable status")
-            label = mm["st_label"]
-            if "annotation" in cols and label:
-                old = v.get("annotation", "")
-                if old != label:
-                    if old and not tokens(old) <= tokens(label):
-                        notes_add.append(f"before SeaTable sync: annotation {old}")
-                    B.put(tab, r, cols["annotation"], label, "SeaTable label")
-            elif label and "SeaTable" not in v.get("notes", ""):
-                notes_add.append(f"SeaTable: {label}")
+            if "status" in cols and sts and st not in KEEP and st != "; ".join(sts):
+                B.put(tab, r, cols["status"], "; ".join(sts), "SeaTable status")
             if "proofreader" in cols and mm["st_proofreader"]:
                 B.put(tab, r, cols["proofreader"], merge_people(v.get("proofreader", ""), mm["st_proofreader"]),
                       "SeaTable proofreaders added")
-            for n in (t for t in mm["st_notes"].split("; ") if t):
-                if n not in v.get("notes", ""):
-                    notes_add.append(f"SeaTable notes: {n}")
-            if int(float(mm["st_n"] or 1)) > 1:
-                notes_add.append(f"SeaTable has {int(float(mm['st_n']))} rows for this cell ({mm['st_serial']})")
             if col("SeaTable"):
-                cur = s(wb[tab].cell(r, col("SeaTable")).value)
-                if not cur or cur.lower() == "tba":
-                    B.put(tab, r, col("SeaTable"), "present", "in SeaTable")
+                label = "; ".join(t for t in dict.fromkeys(x.strip() for x in mm["st_label"].split(";")) if t)
+                mark = seatable_mark(s(wb[tab].cell(r, col("SeaTable")).value))
+                B.put(tab, r, col("SeaTable"), mark + (f": {label}" if label else ""), "SeaTable mark + label")
         if notes_add and "notes" in cols:
             old = s(wb[tab].cell(r, cols["notes"]).value)
             B.put(tab, r, cols["notes"], "; ".join([old] * bool(old) + notes_add), "notes added")
