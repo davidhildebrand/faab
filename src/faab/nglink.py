@@ -101,18 +101,27 @@ def _load_ids(spec):
     return [str(i) for i in (ids or [])]
 
 
+def clean_state(state):
+    """drop source entries commented out with a leading '#' (the README scene has '#.../aedes_infos/|...'; Spelunker
+    rejects it: 'scheme does not support | URL pipelines'); returns the state, changed in place"""
+    for L in state.get("layers", []):
+        if isinstance(L.get("source"), list):
+            L["source"] = [s for s in L["source"] if not (isinstance(s, str) and s.startswith("#"))]
+    return state
+
+
 def base_scene():
-    """the README proofreading scene (a fresh copy)"""
+    """the README proofreading scene (a fresh copy, '#' sources dropped)"""
     if not os.path.exists(BASE_SCENE):
         sys.exit(f"missing {BASE_SCENE}: run scripts/tools/ng_base_scene.py once")
     with open(BASE_SCENE) as f:
         st = json.load(f)
     st.pop("_faab_scene_id", None)
-    return st
+    return clean_state(st)
 
 
 def seg_source():
-    """the README scene's segmentation source list (graphene + aedes_infos + live SeaTable annotations)"""
+    """the README scene's segmentation source list (graphene + live SeaTable annotations)"""
     return next(L for L in base_scene()["layers"] if L.get("name") == BASE_SEG)["source"]
 
 
