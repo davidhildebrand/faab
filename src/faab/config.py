@@ -16,7 +16,7 @@ VOX = (16.0, 16.0, 45.0)                  # nm per voxel of sheet / Spelunker xy
 # figures/ is sorted into topic subfolders (David, 2026-10-30: too many files at the top level). The topic comes from
 # the file name alone, so a writer and every reader agree; first match wins; stamps are ignored.
 FIG_TOPICS = [
-    ("sheets", r".*(FAABopticlobetargets|pr_sheet_check|seatable|faab_pr_top|partner_glia|cells_xyz|soma_overrides|no_soma_check).*"),
+    ("sheets", r".*(FAABopticlobetargets|pr_sheet_check|seatable|faab_pr_top|partner_glia|cells_xyz|soma_overrides|no_soma_check|cell_consistency).*"),
     ("cutouts", r"cutout.*"),
     ("t4t5", r".*(t4t5|type_match|type_copies|tm546|fragment_search).*"),
     ("paths", r".*(paths_|pr_to_DN|dnp01|lplc2|vpn_|ct1_|seed_|class_paths|state_4684|objects_only|pr777).*"),

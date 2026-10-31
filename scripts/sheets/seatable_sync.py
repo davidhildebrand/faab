@@ -19,11 +19,15 @@ shortened by faab.partners.short_notes (proofreaders' text kept verbatim; 'dupli
 r<row>' pointing at the record row); statuses lowercase ('stoppped' -> 'stopped');
 'added' typed into checker moves to SeaTable; dates typed day-month-year (2020-10-26 for 20-10-2026, text 27-10-26)
 are corrected; text dates become dates and other text in date columns moves to notes. Hand edits (--edits JSON:
-tab, row, column, value; column 'fill' with value clear / highlight) are applied last. --left-rows adds the
+tab, row, column, value; column 'fill' with value clear / highlight) are applied next. --reconcile then brings the
+rows of one live cell in line (faab.partners.reconcile, David 2026-10-31: same-block rows of a correctly merged cell
+collapse into one, every row of a cell takes the best status and carries the same notes; --sizes = a
+cell_consistency.py TSV, whose L2 chunk counts say which fragment-noted cells are whole now). --left-rows adds the
 '>>> additional L side putative PRs' section (prs_left_rows.py) at the end of the PRs tab, styled like the R side.
-CAVE read-only: one is_latest_roots call. Writes figures/<stamp>_FAABopticlobetargets-<tab>.xlsx per changed tab, the
-full workbook in tmp/, and figures/<stamp>_seatable_sync_changes.tsv (every changed cell with the reason).
-Usage: seatable_sync.py BOOK.xlsx [--edits E.json] [--left-rows L.tsv --left-link URL]"""
+CAVE read-only: one is_latest_roots call (+ with --reconcile, a live synapse recount for collapsed rows). Writes
+figures/<stamp>_FAABopticlobetargets-<tab>.xlsx per changed tab, the full workbook in tmp/, and
+figures/<stamp>_seatable_sync_changes.tsv (every changed cell with the reason; row numbers before collapsing).
+Usage: seatable_sync.py BOOK.xlsx [--edits E.json] [--reconcile --sizes C.tsv] [--left-rows L.tsv --left-link URL]"""
 import argparse
 import copy
 import datetime
@@ -149,6 +153,8 @@ def main():
     ap.add_argument("--edits")
     ap.add_argument("--left-rows")
     ap.add_argument("--left-link", default="")
+    ap.add_argument("--reconcile", action="store_true")
+    ap.add_argument("--sizes")
     a = ap.parse_args()
     stamp = utc_stamp()
     match_path = a.match or sorted(glob.glob(fig("*_seatable_match.tsv")))[-1]
@@ -230,7 +236,8 @@ def main():
                 B.put(tab, r, cols["root_id_curr"], at, "root update (root at xyz)")
             else:
                 B.fill(tab, r, cols.values(), "highlight", "MISMATCH")
-                notes_add.append(f"xyz off the cell (on {at})")
+                if f"xyz off the cell (on {at})" not in v.get("notes", ""):  # flagged by an earlier sync already
+                    notes_add.append(f"xyz off the cell (on {at})")
         # --- SeaTable
         if mm.get("via"):
             sts = [t for t in dict.fromkeys(x.strip() for x in mm["st_status"].split(";")) if t]
@@ -254,6 +261,45 @@ def main():
             B.fill(e["tab"], e["row"], x["cols"].values(), e["value"], "hand edit")
         else:
             B.put(e["tab"], e["row"], x["cols"][e["column"]], e["value"], "hand edit")
+
+    # --- rows of one live cell (after the hand edits; collapsing renumbers rows, so it comes last among row edits)
+    if a.reconcile:
+        from faab.partners.reconcile import reconcile
+        sizes = {}
+        if a.sizes:
+            z = pd.read_csv(a.sizes, sep="\t", dtype=str).fillna("")
+            sizes = {r: int(n) for r, n in zip(z.cell, z.l2_chunks) if n.isdigit()}
+
+        def cell_of(x):
+            at = M.get((x["tab"], x["row"]), {}).get("root_at_xyz", "")
+            cu = s(wb[x["tab"]].cell(x["row"], x["cols"]["root_id_curr"]).value) if "root_id_curr" in x["cols"] else ""
+            return cu if latest.get(cu) else at
+
+        def yellow(x):
+            return any(wb[x["tab"]].cell(x["row"], cc).fill is not None and wb[x["tab"]].cell(x["row"], cc).fill.fill_type == "solid"
+                       and wb[x["tab"]].cell(x["row"], cc).fill.fgColor.rgb == HL for cc in x["cols"].values())
+
+        def recount(pairs):
+            ups = sorted({u for u, _ in pairs})
+            t = throttle(0)
+            ok = np.asarray(c.chunkedgraph.is_latest_roots([int(u) for u in ups])).astype(bool)
+            cur = {}
+            for u, good in zip(ups, ok):
+                if not good:
+                    t = throttle(t)
+                cur[u] = [int(u)] if good else [int(v) for v in np.atleast_1d(c.chunkedgraph.get_latest_roots(int(u)))]
+            t = throttle(t)
+            try:
+                syn = c.materialize.live_query("synapses_v2", timestamp=datetime.datetime.now(datetime.timezone.utc),
+                                               filter_in_dict={"pre_pt_root_id": sorted({v for vs in cur.values() for v in vs}),
+                                                               "post_pt_root_id": sorted({int(cc) for _, cc in pairs})})
+            except Exception as ex:
+                print(f"  recount failed ({str(ex)[:80]}); collapsed rows get their nsyn summed")
+                return {}
+            n = syn[syn.pre_pt_root_id != syn.post_pt_root_id].groupby(["pre_pt_root_id", "post_pt_root_id"]).size()
+            return {(u, cc): int(sum(n.get((v, int(cc)), 0) for v in cur[u])) for u, cc in pairs}
+
+        reconcile(wb, B, rows, cell_of, sizes, yellow, recount=recount)
 
     # --- left-eye PRs section
     if a.left_rows:
