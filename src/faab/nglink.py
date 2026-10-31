@@ -6,8 +6,9 @@ proofreading scene recommended in the FAAB README (state 5971265676902400, kept 
 data/ng_readme_scene.json; refresh with scripts/tools/ng_base_scene.py): its
 segmentation source carries the live SeaTable annotation source, so a viewer sees
 at once whether a neuron is annotated (serial_id, side, ...) (David, 2026-10-31).
-Neuron layers use that same source list; the scene's mesh layers are reused (those
-a spec does not ask for stay in the list, hidden).
+Neuron layers use that same source list (the first group goes into the scene's own
+segmentation layer, which would otherwise overlay every cell on the EM); the scene's
+mesh layers are reused (those a spec does not ask for stay in the list, hidden).
 
 Usage:
     python3 nglink.py spec.json        # prints the URL (and writes spec["out"] if set)
@@ -101,12 +102,30 @@ def _load_ids(spec):
     return [str(i) for i in (ids or [])]
 
 
+def _seg_url(src):
+    first = src[0] if isinstance(src, list) and src else src
+    return str(first.get("url") if isinstance(first, dict) else first).rstrip("/")
+
+
 def clean_state(state):
-    """drop source entries commented out with a leading '#' (the README scene has '#.../aedes_infos/|...'; Spelunker
-    rejects it: 'scheme does not support | URL pipelines'); returns the state, changed in place"""
-    for L in state.get("layers", []):
+    """(1) drop source entries commented out with a leading '#' (the README scene has '#.../aedes_infos/|...';
+    Spelunker rejects it: 'scheme does not support | URL pipelines'); (2) the README scene's segmentation layer with no
+    segments overlays EVERY cell on the EM (David, 2026-10-31), so the first neuron layer on the same segmentation is
+    folded into it (it keeps the scene's sources and settings, takes that layer's name, segments and colors).
+    Returns the state, changed in place."""
+    layers = state.get("layers", [])
+    for L in layers:
         if isinstance(L.get("source"), list):
             L["source"] = [s for s in L["source"] if not (isinstance(s, str) and s.startswith("#"))]
+    base = next((L for L in layers if L.get("name") == BASE_SEG and L.get("type") == "segmentation"), None)
+    if base is not None and not base.get("segments"):
+        first = next((L for L in layers if L is not base and L.get("type") == "segmentation" and L.get("segments")
+                      and _seg_url(L["source"]) == _seg_url(base["source"])), None)
+        if first is not None:
+            base.update({k: v for k, v in first.items() if k != "source"})
+            layers.remove(first)
+            if state.get("selectedLayer", {}).get("layer") == BASE_SEG:
+                state["selectedLayer"]["layer"] = base["name"]
     return state
 
 
@@ -183,7 +202,7 @@ def build(spec):
                   "showDefaultAnnotations": False, "layout": spec.get("layout", "3d")})
     if spec.get("select"):
         state["selectedLayer"] = {"layer": spec["select"], "visible": True, "size": 361}
-    return state
+    return clean_state(state)
 
 
 def to_url(state):
