@@ -36,8 +36,7 @@ from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
-SEG = "graphene://middleauth+https://cave.fanc-fly.com/segmentation/table/wclee_aedes_brain"
-IMG = "precomputed://gs://zetta_lee_mosquito_001_alignment_central/img/v2_sharded"
+IMG ="precomputed://gs://zetta_lee_mosquito_001_alignment_central/img/v2_sharded"
 DIMS = {"x": [1.6e-08, "m"], "y": [1.6e-08, "m"], "z": [4.5e-08, "m"]}
 COLORS = {"R1-R6": "#ff9f1c", "R1–R6": "#ff9f1c", "R7": "#e040fb", "R8": "#00c2d1"}
 
@@ -109,7 +108,8 @@ def main():
         print("spatial synapse query failed:", str(e)[:120], flush=True)
 
     # ---- neuroglancer state ----
-    seg_layer = {"type": "segmentation", "source": SEG, "segments": [str(r) for r in roots],
+    from faab import nglink  # README-scene segmentation sources (live SeaTable annotations); brain mesh layer
+    seg_layer = {"type": "segmentation", "source": nglink.seg_source(), "segments": [str(r) for r in roots],
                  "segmentColors": {str(r): COLORS.get(c, "#ffffff") for r, c in cls_of.items()},
                  "name": f"PRs {name}", "selectedAlpha": 0.3, "objectAlpha": 0.9}
     anns = [{"type": "axis_aligned_bounding_box", "id": "cube", "pointA": vox(lo), "pointB": vox(hi),
@@ -121,8 +121,7 @@ def main():
         anns.append({"type": "point", "id": f"s{i}", "point": vox(p), "description": f"{c} presynaptic site"})
     ann_layer = {"type": "annotation", "source": {"url": "local://annotations", "transform": {"outputDimensions": DIMS}},
                  "annotations": anns, "name": "cutout + PR presynaptic sites", "annotationColor": "#ffff00"}
-    from faab import nglink  # brain mesh layer (faint) after the EM layer, as in every other FAAB link
-    state = {"dimensions": DIMS, "position": vox(centre_nm), "crossSectionScale": 1.0, "projectionScale": 20000,
+    state ={"dimensions": DIMS, "position": vox(centre_nm), "crossSectionScale": 1.0, "projectionScale": 20000,
              "layers": [{"type": "image", "source": IMG, "name": "EM"}, nglink.mesh_layer("brain", alpha=0.15),
                         seg_layer, ann_layer],
              "showSlices": False, "layout": "xy-3d",

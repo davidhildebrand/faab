@@ -1,7 +1,8 @@
 """Reconcile the tracking tabs' rows that sit on the same live cell (David, 2026-10-31).
 
   - Rows of one cell in the SAME block (same header row) were correctly merged: they collapse into one row. The record
-    row (best status, then most nsyn, then the first) stays with the cell's tracking and a live nsyn recount from the
+    row (best status, then most nsyn, then the first) stays with the cell's tracking and an nsyn recount (synapse
+    snapshot caught up to now) from the
     block's upstream cell (upstream_PR / hop1_root_id); the other rows are deleted. Not collapsed: the PRs tab (groups
     have their own rules), yellow MISMATCH rows, and cells whose notes mention a false merge / merge error.
   - Every other row of the cell (other blocks, other tabs) carries the same tracking: the best status (RANK: checked >
@@ -123,7 +124,7 @@ def first_n(v):
 def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, latest_of=None, log=print):
     """rows: scan_book rows of the tracking tabs (row numbers before any deletion); cell_of(x) -> live cell id or '';
     sizes: cell -> L2 chunks (cells not listed are never called whole); yellow(x) -> True for MISMATCH rows;
-    recount(pairs) -> {(upstream id, cell): live synapses} for [(upstream id as written, cell)], or None (then the
+    recount(pairs) -> {(upstream id, cell): synapses now} for [(upstream id as written, cell)], or None (then the
     collapsed rows' nsyn are summed); latest_of(ids) -> {id: [current roots]} for upstream ids as written, or None
     (then rows whose cell became the block's own upstream cell are not looked for)."""
     val = lambda x, n: wb[x["tab"]].cell(x["row"], x["cols"][n]).value if n in x["cols"] else None
@@ -223,7 +224,7 @@ def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, latest_of=None,
             n = counts.get((u, c)) if u else None
             n = n if n else sum(first_n(val(x, "nsyn")) for x in [rec] + others)
             B.put(tab, rec["row"], cols["nsyn"], int(n), f"collapsed {len(others) + 1} rows of one cell: nsyn "
-                  + ("live recount" if counts.get((u, c)) else "summed"))
+                  + ("recount (synapse snapshot, caught up to now)" if counts.get((u, c)) else "summed"))
         if "notes" in cols:  # pointers to the twins go with them
             B.put(tab, rec["row"], cols["notes"], "; ".join(p for p in parts(val(rec, "notes")) if not POINTER.search(p)),
                   "collapsed rows of one cell")

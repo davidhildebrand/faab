@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Reusable, NETWORK-FREE builder for aedes (FAAB) Spelunker/neuroglancer links.
 
-No caveclient, no fafbseg, no network — pure stdlib. Mesh sources/transforms and
-the standard view are hardcoded from memory (faab-neuroglancer-mesh-sources), so
-this runs locally and doesn't need a permissions popup for network access.
+No caveclient, no fafbseg, no network — pure stdlib. Every link starts from the
+proofreading scene recommended in the FAAB README (state 5971265676902400, kept in
+data/ng_readme_scene.json; refresh with scripts/tools/ng_base_scene.py): its
+segmentation source carries the live SeaTable annotation source, so a viewer sees
+at once whether a neuron is annotated (serial_id, side, ...) (David, 2026-10-31).
+Neuron layers use that same source list; the scene's mesh layers are reused (those
+a spec does not ask for stay in the list, hidden).
 
 Usage:
     python3 nglink.py spec.json        # prints the URL (and writes spec["out"] if set)
@@ -26,11 +30,17 @@ spec.json format (all fields optional except at least one of meshes/neurons):
   "out":    "figures/foo_ng.txt"
 }
 """
+import copy
+import os
 import sys
 import json
 import urllib.parse
 
-SEG = "graphene://middleauth+https://cave.fanc-fly.com/segmentation/table/wclee_aedes_brain"
+BASE_SCENE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "data", "ng_readme_scene.json")
+BASE_SEG = "wclee_aedes_brain"  # the README scene's segmentation layer (graphene + live SeaTable annotation source)
+BASE_MESH = {"brain": "brain mesh", "AL": "al_meshes3", "MB": "mb_meshes", "LH": "lh_meshes", "CX": "CX",
+             "OL": "aedes_ol_meshes", "neuropil": "aedes_neuropil"}
+SEG ="graphene://middleauth+https://cave.fanc-fly.com/segmentation/table/wclee_aedes_brain"
 IMG = "precomputed://gs://zetta_lee_mosquito_001_alignment_central/img/v2_sharded"
 _OUTDIMS = {"x": [1.6e-08, "m"], "y": [1.6e-08, "m"], "z": [4.5e-08, "m"]}
 
@@ -91,8 +101,23 @@ def _load_ids(spec):
     return [str(i) for i in (ids or [])]
 
 
-def neuron_layer(spec):
-    layer = {"type": "segmentation", "source": SEG, "segments": _load_ids(spec),
+def base_scene():
+    """the README proofreading scene (a fresh copy)"""
+    if not os.path.exists(BASE_SCENE):
+        sys.exit(f"missing {BASE_SCENE}: run scripts/tools/ng_base_scene.py once")
+    with open(BASE_SCENE) as f:
+        st = json.load(f)
+    st.pop("_faab_scene_id", None)
+    return st
+
+
+def seg_source():
+    """the README scene's segmentation source list (graphene + aedes_infos + live SeaTable annotations)"""
+    return next(L for L in base_scene()["layers"] if L.get("name") == BASE_SEG)["source"]
+
+
+def neuron_layer(spec, source=None):
+    layer = {"type": "segmentation", "source": copy.deepcopy(source) if source else seg_source(), "segments": _load_ids(spec),
              "name": spec.get("name", "neurons"), "visible": True}
     if spec.get("colors"):
         layer["segmentColors"] = {str(k): v for k, v in spec["colors"].items()}
@@ -115,20 +140,38 @@ def annotation_layer(spec):
 
 
 def build(spec):
+    state = base_scene()
+    base = state["layers"]
+    seg = next(L for L in base if L.get("name") == BASE_SEG)
+    asked = {BASE_MESH[m["kind"]]: m for m in spec.get("meshes", [])}
     layers = []
-    if spec.get("image", True):  # user rule (2026-09-25): the EM data layer is always present
-        layers.append({"type": "image", "source": IMG, "name": "v2_sharded"})
-    layers += [mesh_layer(m["kind"], m.get("alpha"), m.get("color"), m.get("segments")) for m in spec.get("meshes", [])]
-    layers += [neuron_layer(n) for n in spec.get("neurons", [])]
+    for L in base:
+        if L["type"] == "image":
+            if not spec.get("image", True):  # user rule (2026-09-25): the EM data layer is always present
+                continue
+        elif L is not seg:  # mesh layers: shown when the spec asks for them, else kept hidden
+            m = asked.pop(L["name"], None)
+            L["visible"] = m is not None
+            if m:
+                if m.get("segments"):
+                    L["segments"] = [str(s) for s in m["segments"]]
+                if m.get("alpha") is not None:
+                    L["objectAlpha"] = m["alpha"]
+                if m.get("color"):
+                    L["segmentDefaultColor"] = m["color"]
+                    L.pop("segmentColors", None)
+        layers.append(L)
+    layers += [mesh_layer(m["kind"], m.get("alpha"), m.get("color"), m.get("segments")) for m in asked.values()]
+    layers += [neuron_layer(n, seg["source"]) for n in spec.get("neurons", [])]
     layers += [annotation_layer(a) for a in spec.get("annotations", [])]
     view = spec.get("view", "anterior")
     orient = VIEWS.get(view, view)
     # optional "position": [x, y, z] in 16x16x45 nm voxels and "scale": projectionScale
     # (whole brain = 31785; ~6000 frames a single cell) to open the view on one cell
-    state = {"dimensions": DIMS, "position": spec.get("position", POS), "projectionOrientation": orient,
-             "projectionScale": spec.get("scale", PSCALE), "layers": layers,
-             "showSlices": bool(spec.get("image", False)),
-             "showDefaultAnnotations": False, "layout": spec.get("layout", "3d")}
+    state.update({"dimensions": DIMS, "position": spec.get("position", POS), "projectionOrientation": orient,
+                  "projectionScale": spec.get("scale", PSCALE), "layers": layers,
+                  "showSlices": bool(spec.get("image", False)),
+                  "showDefaultAnnotations": False, "layout": spec.get("layout", "3d")})
     if spec.get("select"):
         state["selectedLayer"] = {"layer": spec["select"], "visible": True, "size": 361}
     return state

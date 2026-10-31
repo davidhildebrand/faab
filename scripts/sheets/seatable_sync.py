@@ -24,7 +24,8 @@ rows of one live cell in line (faab.partners.reconcile, David 2026-10-31: same-b
 collapse into one, every row of a cell takes the best status and carries the same notes; --sizes = a
 cell_consistency.py TSV, whose L2 chunk counts say which fragment-noted cells are whole now). --left-rows adds the
 '>>> additional L side putative PRs' section (prs_left_rows.py) at the end of the PRs tab, styled like the R side.
-CAVE read-only: one is_latest_roots call (+ with --reconcile, a live synapse recount for collapsed rows). Writes
+CAVE read-only: one is_latest_roots call (+ with --reconcile, a synapse recount for collapsed rows from the local
+snapshot, faab.synsnap, with its CAVE catch-up to now). Writes
 figures/<stamp>_FAABopticlobetargets-<tab>.xlsx per changed tab, the full workbook in tmp/, and
 figures/<stamp>_seatable_sync_changes.tsv (every changed cell with the reason; row numbers before collapsing).
 Usage: seatable_sync.py BOOK.xlsx [--edits E.json] [--reconcile --sizes C.tsv] [--left-rows L.tsv --left-link URL]"""
@@ -44,6 +45,7 @@ import openpyxl
 import pandas as pd
 from openpyxl.styles import Font, PatternFill
 
+from faab import synsnap
 from faab.clients.cave import client as cave_client, throttle
 from faab.config import FIGURES, TMP
 from faab.partners.sheet import cell_text as s, scan_book, utc_stamp
@@ -298,17 +300,20 @@ def main():
             return {u: cur[u] for u in ids}
 
         def recount(pairs):
+            """local synapse snapshot (faab.synsnap) caught up to now, self-contacts removed"""
             latest_of({u for u, _ in pairs})
             wait()
             try:
-                syn = c.materialize.live_query("synapses_v2", timestamp=datetime.datetime.now(datetime.timezone.utc),
-                                               filter_in_dict={"pre_pt_root_id": sorted({v for u, _ in pairs for v in cur[u]}),
-                                                               "post_pt_root_id": sorted({int(cc) for _, cc in pairs})})
+                e = synsnap.Snapshot(log=lambda *_: None).edges(
+                    pre=sorted({v for u, _ in pairs for v in cur[u]}), post=sorted({int(cc) for _, cc in pairs}),
+                    when="now", client=c)
             except Exception as ex:
                 print(f"  recount failed ({str(ex)[:80]}); collapsed rows get their nsyn summed")
                 return {}
-            n = syn[syn.pre_pt_root_id != syn.post_pt_root_id].groupby(["pre_pt_root_id", "post_pt_root_id"]).size()
-            return {(u, cc): int(sum(n.get((v, int(cc)), 0) for v in cur[u])) for u, cc in pairs}
+            finally:
+                last[0] = time.time()
+            n = {(int(p), int(q)): int(k) for p, q, k in zip(e.pre, e.post, e.n)}
+            return {(u, cc): sum(n.get((v, int(cc)), 0) for v in cur[u]) for u, cc in pairs}
 
         reconcile(wb, B, rows, cell_of, sizes, yellow, recount=recount, latest_of=latest_of)
 
