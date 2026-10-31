@@ -14,7 +14,9 @@ Rules (David, 2026-10-30):
     values are in the change log;
 Always: root_id_curr -> the root at the xyz when root_id_curr is no longer current; rows whose root_id_curr is current
 but elsewhere (MISMATCH) are highlighted and get the short note 'xyz off the cell (on <root at xyz>)', nothing moved
-(notes are for the proofreaders: generated notes stay short, David 2026-10-30); statuses lowercase ('stoppped' -> 'stopped');
+(notes are for the proofreaders: generated notes stay short, David 2026-10-30); notes our scripts wrote earlier are
+shortened by faab.partners.short_notes (proofreaders' text kept verbatim; 'duplicate target of <id>' -> 'duplicate of
+r<row>' pointing at the record row); statuses lowercase ('stoppped' -> 'stopped');
 'added' typed into checker moves to SeaTable; dates typed day-month-year (2020-10-26 for 20-10-2026, text 27-10-26)
 are corrected; text dates become dates and other text in date columns moves to notes. Hand edits (--edits JSON:
 tab, row, column, value; column 'fill' with value clear / highlight) are applied last. --left-rows adds the
@@ -40,6 +42,7 @@ from openpyxl.styles import Font, PatternFill
 from faab.clients.cave import client as cave_client, throttle
 from faab.config import FIGURES, TMP
 from faab.partners.sheet import cell_text as s, scan_book, utc_stamp
+from faab.partners.short_notes import shorten
 from faab.pr import prs_tab as T
 
 HL = "FFFFF9C4"
@@ -174,11 +177,29 @@ def main():
                 ws.cell(hr, sc)._style = copy.copy(ws.cell(hr, sc - 1)._style)
                 B.log.append(dict(tab=tab, row=hr, column="SeaTable", old="", new="SeaTable", why="header was blank"))
                 B.touched.add(tab)
+    by_orig = {}  # root_id_orig -> [(tab, row, nsyn)]: the record rows that 'duplicate target of' notes point to
+    for x in rows:
+        nsyn = re.match(r"\d+", s(x["values"].get("nsyn")))
+        by_orig.setdefault(s(x["values"].get("root_id_orig")), []).append((x["tab"], x["row"], int(nsyn.group()) if nsyn else 0))
+
+    def row_of(orig, tab, row):
+        """the record row of root_id_orig: same tab first, then any tab; largest nsyn; never the row itself"""
+        cand = [c for c in by_orig.get(orig, []) if (c[0], c[1]) != (tab, row)]
+        same = [c for c in cand if c[0] == tab]
+        if not (same or cand):
+            return None
+        t, rr, _ = max(same or cand, key=lambda c: c[2])
+        return f"r{rr}" if t == tab else f"{t} r{rr}"
+
     for x in rows:
         tab, r, cols, v = x["tab"], x["row"], x["cols"], {k: s(val) for k, val in x["values"].items()}
         mm = M.get((tab, r), {})
         col = lambda name: cols.get(name) or (sea_col.get(tab) if name == "SeaTable" else None)
         notes_add = []
+        if v.get("notes") and "notes" in cols:
+            short, _ = shorten(v["notes"], lambda orig: row_of(orig, tab, r))
+            if short != v["notes"]:
+                B.put(tab, r, cols["notes"], short, "generated notes shortened")
         # --- spelling / misplaced values
         st = v.get("status", "")
         if "status" in cols:
