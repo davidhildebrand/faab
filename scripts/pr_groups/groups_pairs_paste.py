@@ -6,6 +6,7 @@ from faab.config import REPO
 import os
 
 import pandas as pd
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
@@ -24,7 +25,7 @@ def conf(r):
 
 def main():
     src = pd.read_csv(os.path.join(os.path.dirname(OUT), "..", "tmp", "pr_groups_pasted.tsv"), sep="\t", dtype=str)
-    pairs = pd.read_csv(os.path.join(OUT, "faab_pr_groups_pairs.tsv"), sep="\t", dtype=str)
+    pairs = pd.read_csv(fig("faab_pr_groups_pairs.tsv"), sep="\t", dtype=str)
     by_orig = {r.root_id_orig: r for r in pairs.itertuples()}
     used_to_orig = {r.root_used: r.root_id_orig for r in pairs.itertuples()}
     by_used = {r.root_used: r for r in pairs.itertuples()}
@@ -53,7 +54,7 @@ def main():
                                     pair_conf(p), note]))
         lines.append("")
     txt = "\n".join(lines)
-    open(os.path.join(OUT, "faab_pr_groups_pairs_paste.tsv"), "w").write(txt + "\n")
+    open(fig("faab_pr_groups_pairs_paste.tsv"), "w").write(txt + "\n")
     print(txt)
 
 

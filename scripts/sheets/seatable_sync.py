@@ -44,6 +44,7 @@ from faab.config import FIGURES, TMP
 from faab.partners.sheet import cell_text as s, scan_book, utc_stamp
 from faab.partners.short_notes import shorten
 from faab.pr import prs_tab as T
+from faab.config import fig
 
 HL = "FFFFF9C4"
 KEEP = ("checked", "proofread")
@@ -150,7 +151,7 @@ def main():
     ap.add_argument("--left-link", default="")
     a = ap.parse_args()
     stamp = utc_stamp()
-    match_path = a.match or sorted(glob.glob(os.path.join(FIGURES, "*_seatable_match.tsv")))[-1]
+    match_path = a.match or sorted(glob.glob(fig("*_seatable_match.tsv")))[-1]
     m = pd.read_csv(match_path, sep="\t", dtype=str).fillna("")
     M = {(t, int(r)): x for t, r, x in zip(m.tab, m.row, m.to_dict("records"))}
     wb = openpyxl.load_workbook(a.book)
@@ -265,13 +266,13 @@ def main():
     full = os.path.join(TMP, f"{stamp}_synced_full.xlsx")
     wb.save(full)
     log = pd.DataFrame(B.log)
-    log.to_csv(os.path.join(FIGURES, f"{stamp}_seatable_sync_changes.tsv"), sep="\t", index=False)
+    log.to_csv(fig(f"{stamp}_seatable_sync_changes.tsv"), sep="\t", index=False)
     for tab in [t for t in TABS if t in B.touched]:
         w2 = openpyxl.load_workbook(full)
         for other in list(w2.worksheets):
             if other.title != tab:
                 w2.remove(other)
-        out = os.path.join(FIGURES, f"{stamp}_FAABopticlobetargets-{tab}.xlsx")
+        out = fig(f"{stamp}_FAABopticlobetargets-{tab}.xlsx")
         w2.save(out)
         print(f"wrote {out}")
     print(f"\nchanges: {len(log)} cells; per tab and reason:")

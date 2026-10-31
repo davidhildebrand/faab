@@ -5,11 +5,12 @@ from faab.config import REPO
 import os
 import re
 import pandas as pd
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
-TSV = os.path.join(OUT, "faab_pr_top20_update.tsv")
-BLOCKS = os.path.join(OUT, "faab_pr_top20_update_blocks.tsv")
-ASCII = os.path.join(OUT, "faab_pr_top20_update_ascii.txt")
+TSV = fig("faab_pr_top20_update.tsv")
+BLOCKS = fig("faab_pr_top20_update_blocks.tsv")
+ASCII = fig("faab_pr_top20_update_ascii.txt")
 COLS = ["upstream_PR", "class", "root_id_orig", "root_id_curr", "xyz", "n_syn", "pct_of_outp", "PR_conv",
         "annotation", "status", "pr_date", "proofreader", "chk_date", "checker", "notes", "followups",
         "SeaTable", "n_syn_prev", "prevrank", "p_glia", "soma_check", "update"]  # p_glia: faab_glia_logistic.py; soma_check: faab_soma_column.py
@@ -87,7 +88,7 @@ def main():
         "648518347643620818": ("R1–R6", "117", "97"), "648518347567256005": ("R1–R6", "185", "150"),
         "648518347777360890": ("R7", "32", "22"), "648518347626873298": ("R8", "54", "32")}
     live = "2026-09-18"
-    meta_path = os.path.join(OUT, "faab_pr_top20_update_meta.json")
+    meta_path = fig("faab_pr_top20_update_meta.json")
     if os.path.exists(meta_path):
         import json
         meta = json.load(open(meta_path))

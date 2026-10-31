@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 
 from faab.clients.cave import DATASTACK, latest_roots, throttle
 from faab.clients.neuprint import client as npclient, MALE_CNS
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 AEDES = {"A": 648518347638241763, "B": 648518347495933144}
@@ -34,11 +35,11 @@ def resample(n):
 
 
 def main():
-    M = pickle.load(open(os.path.join(OUT, "ct1_xspecies_nblast.pkl"), "rb"))
+    M = pickle.load(open(fig("ct1_xspecies_nblast.pkl"), "rb"))
     lab = M["labels"]; Mx = M["M"]
     idx = {n: i for i, n in enumerate(lab)}
 
-    scache = os.path.join(OUT, "ct1_xspecies_skels.pkl")
+    scache = fig("ct1_xspecies_skels.pkl")
     if os.path.exists(scache):
         raw = pickle.load(open(scache, "rb"))
     else:
@@ -114,7 +115,7 @@ def main():
     fig.suptitle("Drosophila CT1 (male-CNS) vs nblast_align'd Aedes putative CT1  (A, B)",
                  fontsize=15, y=0.99)
     fig.tight_layout(rect=[0, 0, 1, 0.97])
-    out = os.path.join(OUT, "ct1_xspecies_sidebyside.png")
+    out = fig("ct1_xspecies_sidebyside.png")
     fig.savefig(out, dpi=170)
     print("saved", out, "\nDONE", flush=True)
 

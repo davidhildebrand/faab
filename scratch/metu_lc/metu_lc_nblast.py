@@ -9,13 +9,14 @@ if not hasattr(np, "row_stack"):
     np.row_stack = np.vstack
 import pandas as pd
 import navis
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 MIN_PTS = 20
 
 
 def main():
-    D = pickle.load(open(os.path.join(OUT, "metu_lc_dotprops_fresh.pkl"), "rb"))
+    D = pickle.load(open(fig("metu_lc_dotprops_fresh.pkl"), "rb"))
     by = D["dotprops"]; lab = D["label_by_root"]; stat = D["status_by_root"]
     roots = [r for r in by if len(by[r].points) >= MIN_PTS]
     nls = []
@@ -71,10 +72,10 @@ def main():
         print(cand[cols].to_string(index=False, float_format=lambda x: f"{x:.3f}"))
     print(f"\n(subset also having >=3/5 nearest neighbours MeTu4: {len(strong)} — highest confidence)")
 
-    df.to_csv(os.path.join(OUT, "metu_lc_scores.csv"), index=False)
+    df.to_csv(fig("metu_lc_scores.csv"), index=False)
     pickle.dump({"roots": roots, "labels": labels, "M": M, "df": df,
                  "candidates": cand["root"].tolist(), "strong": strong["root"].tolist()},
-                open(os.path.join(OUT, "metu_lc_nblast.pkl"), "wb"))
+                open(fig("metu_lc_nblast.pkl"), "wb"))
     print("\nsaved metu_lc_scores.csv + metu_lc_nblast.pkl\nDONE", flush=True)
 
 

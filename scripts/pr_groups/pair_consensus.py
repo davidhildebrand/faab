@@ -17,12 +17,13 @@ import numpy as np
 import pandas as pd
 
 from faab.pr.pairing_demo import analyse_group, OUT
+from faab.config import fig
 
 RING_MAX = 2.5
 
 
 def ring_test(g):
-    path = os.path.join(OUT, f"pr_bundle_track_group{g}.tsv")
+    path = fig(f"pr_bundle_track_group{g}.tsv")
     if not os.path.exists(path):
         return None
     df = pd.read_csv(path, sep="\t")
@@ -52,7 +53,7 @@ def ring_test(g):
 def main():
     pasted = pd.read_csv(os.path.join(os.path.dirname(OUT), "..", "tmp", "pr_groups_pasted.tsv"), sep="\t", dtype=str)
     import json
-    now = json.load(open(os.path.join(OUT, "pr_footprint_roots.json")))["root_used"]
+    now = json.load(open(fig("pr_footprint_roots.json")))["root_used"]
     for g in [int(a) for a in sys.argv[1:]] or [1, 4]:
         R = analyse_group(g, verbose=False)
         old2new = {r.root_id_curr: int(n) for r, n in zip(pasted.itertuples(), now) if int(r.group) == g}
@@ -98,7 +99,7 @@ def main():
             row["verdict"] = verdict
             rows.append(row)
         tab = pd.DataFrame(rows)
-        tab.to_csv(os.path.join(OUT, f"pr_pair_consensus_group{g}.tsv"), sep="\t", index=False)
+        tab.to_csv(fig(f"pr_pair_consensus_group{g}.tsv"), sep="\t", index=False)
         pd.set_option("display.width", 250)
         print(f"\n=== group {g}: terminal plane {R['th']} deg (mirror {R['score']:.2f}); "
               f"ring {ring['n_slices'] if ring else 0} slices, margin {ring['margin_deg']:.0f} deg, sides ok {ring['sides_ok']}" if ring else

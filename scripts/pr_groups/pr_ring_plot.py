@@ -54,6 +54,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
+from faab.config import fig
 
 DATASTACK = "wclee_aedes_brain"
 VOX = np.array([16.0, 16.0, 45.0])  # nm per sheet voxel
@@ -259,8 +260,8 @@ def fetch(members, tag, r7_arg):
     df = pd.DataFrame(rows)
     meta = dict(tag=tag, queried=f"{now:%Y-%m-%d %H:%M} UTC", synapse_unit=unit, lam=lam.tolist(), axis=axis.tolist(),
                 u=u.tolist(), v=v.tolist(), members=mem, box_um=BOX_UM, step_um=STEP_UM)
-    df.to_csv(os.path.join(OUT, f"pr_ring_plot_{tag}.tsv"), sep="\t", index=False)
-    json.dump(meta, open(os.path.join(OUT, f"pr_ring_plot_{tag}.json"), "w"), indent=1)
+    df.to_csv(fig(f"pr_ring_plot_{tag}.tsv"), sep="\t", index=False)
+    json.dump(meta, open(fig(f"pr_ring_plot_{tag}.json"), "w"), indent=1)
     print(f"{len(boxes)} cutouts, {len(svs)} supervoxels, {len(df)} member-slices ({time.time() - t0:.0f} s)", flush=True)
     return df, meta
 
@@ -387,7 +388,7 @@ def plot(A, meta, title, mirror=False):
         lines.append("fly names need R7 and six outer axons" + ("" if A["r7"] else "; orientation arbitrary (no R7)"))
     fig.text(0.02, 0.01, "\n".join(lines), fontsize=7.5, va="bottom", color="#444")
     fig.tight_layout(rect=(0, 0.08, 1, 1))
-    png = os.path.join(OUT, f"pr_ring_plot_{meta['tag']}.png")
+    png = fig(f"pr_ring_plot_{meta['tag']}.png")
     fig.savefig(png, dpi=150)
     return png
 
@@ -412,8 +413,8 @@ def main():
     tag = a.tag or (f"g{a.group}" if a.group is not None else "bundle")
     title = f"group {a.group}" if a.group is not None else tag
     if a.replot:
-        df = pd.read_csv(os.path.join(OUT, f"pr_ring_plot_{tag}.tsv"), sep="\t", dtype={"root": str})
-        meta = json.load(open(os.path.join(OUT, f"pr_ring_plot_{tag}.json")))
+        df = pd.read_csv(fig(f"pr_ring_plot_{tag}.tsv"), sep="\t", dtype={"root": str})
+        meta = json.load(open(fig(f"pr_ring_plot_{tag}.json")))
     else:
         if a.group is not None:
             members = load_members(a.group, a.groups_file)
@@ -444,7 +445,7 @@ def main():
                          angle_vs_r7=round(A["rel"][r]) if r in A["rel"] else "",
                          r7_how=A["r7_how"], flank_margin_deg=round(A["margin"]) if A["margin"] is not None else "",
                          left_out=dict(A["dropped"]).get(r, ""), queried=meta["queried"]))
-    pd.DataFrame(rows).to_csv(os.path.join(OUT, f"pr_ring_plot_{tag}_names.tsv"), sep="\t", index=False)
+    pd.DataFrame(rows).to_csv(fig(f"pr_ring_plot_{tag}_names.tsv"), sep="\t", index=False)
     print("saved", plot(A, meta, title, a.mirror))
 
 

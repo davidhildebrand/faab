@@ -16,6 +16,7 @@ import urllib.request
 import numpy as np
 
 from faab.config import FIGURES
+from faab.config import fig
 
 SOURCE = "https://flyemdev.mrc-lmb.cam.ac.uk/flyconnectome/rclone/aedes_ol_meshes/"
 LABELS = {1: "CB", 2: "OL_L", 3: "OL_R", 11: "ME_L", 12: "LO_L", 13: "LOP_L", 14: "LA_L",
@@ -24,7 +25,7 @@ IDS = {v: k for k, v in LABELS.items()}
 # the four optic-lobe neuropils per side, and the coarse regions; a point is assigned to the first that contains it
 FINE = ["LA_R", "ME_R", "LO_R", "LOP_R", "LA_L", "ME_L", "LO_L", "LOP_L"]
 COARSE = ["OL_R", "OL_L", "CB"]
-CACHE = os.path.join(FIGURES, "ol_meshes")
+CACHE = fig("ol_meshes")
 _vol = {}
 
 

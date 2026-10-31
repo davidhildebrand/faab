@@ -11,6 +11,7 @@ import pandas as pd
 import caveclient
 from scipy.spatial import cKDTree
 from faab.clients.cave import DATASTACK
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 
@@ -30,7 +31,7 @@ def main():
     pos = nuc[["pt_position_x", "pt_position_y", "pt_position_z"]].astype(float).values / 1000.0  # nm->um
     print(f"nuclei table: {len(nuc)} nuclei with a root")
 
-    mi1 = [int(d.id) for d in pickle.load(open(os.path.join(OUT, "mi1_dotprops.pkl"), "rb"))]
+    mi1 = [int(d.id) for d in pickle.load(open(fig("mi1_dotprops.pkl"), "rb"))]
     mi1set = set(mi1)
     is_mi1 = nuc["pt_root_id"].isin(mi1set).values
     soma = pos[is_mi1]
@@ -52,7 +53,7 @@ def main():
     pool_ids = nuc.loc[keep, "pt_root_id"].unique().tolist()
     pickle.dump({"pool_ids": pool_ids,
                  "pool_pos_um": pos[keep]},
-                open(os.path.join(OUT, "mi1_nuclei_pool.pkl"), "wb"))
+                open(fig("mi1_nuclei_pool.pkl"), "wb"))
     print(f"\nsaved pool (<20um): {len(pool_ids)} candidate cells -> mi1_nuclei_pool.pkl")
 
 

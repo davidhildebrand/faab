@@ -17,11 +17,12 @@ import pandas as pd
 from fafbseg import flywire
 from faab.clients.cave import DATASTACK
 from faab.partners.top10_xyz import backbone_midpoint_nm, VOX
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
-TSV = os.path.join(OUT, "faab_pr_groups_xyz.tsv")
-SCACHE = os.path.join(OUT, "pr_partner_skels.pkl")
+TSV = fig("faab_pr_groups_xyz.tsv")
+SCACHE = fig("pr_partner_skels.pkl")
 ORIG, USE, OTHER = 648518347571683763, 648518347700929678, 648518347504455355
 HEADERS = ["root_id_orig", "class", "root_id_curr", "xyz", "status", "pr_date",
            "proofreader", "chk_date", "checker", "notes"]

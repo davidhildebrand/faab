@@ -14,11 +14,12 @@ import numpy as np
 import pandas as pd
 
 from faab.config import FIGURES
+from faab.config import fig
 
-known = pd.concat([pd.read_csv(os.path.join(FIGURES, f), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
+known = pd.concat([pd.read_csv(fig(f), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
                    for f in ("pr_left_lattice_known.tsv", "pr_left_lattice_noaxis.tsv")]).sort_values("cartridge").reset_index(drop=True)
-h = pd.read_csv(os.path.join(FIGURES, "pr_left_helpers.tsv"), sep="\t")
-sk = pickle.load(open(os.path.join(FIGURES, "pr_left_skels.pkl"), "rb"))
+h = pd.read_csv(fig("pr_left_helpers.tsv"), sep="\t")
+sk = pickle.load(open(fig("pr_left_skels.pkl"), "rb"))
 lam12 = known[known.cartridge.isin(["L1", "L2"])][["lam_x", "lam_y", "lam_z"]].values.mean(0)
 
 

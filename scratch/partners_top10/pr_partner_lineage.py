@@ -16,10 +16,11 @@ import time
 import pandas as pd
 import caveclient
 from faab.clients.cave import DATASTACK, throttle
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
-TSV = os.path.join(OUT, "faab_pr_top10_xyz.tsv")
-LIN = os.path.join(OUT, "pr_partner_lineage.json")
+TSV = fig("faab_pr_top10_xyz.tsv")
+LIN = fig("pr_partner_lineage.json")
 
 
 def build():

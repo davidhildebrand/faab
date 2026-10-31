@@ -17,12 +17,13 @@ import pandas as pd
 from faab.clients.cave import roots_at_xyz
 from faab.config import FIGURES
 from faab.partners.sheet import scan_book, cell_text as s, seatable_label, utc_stamp
+from faab.config import fig
 
 
 def main():
     book = sys.argv[1]
     stamp = utc_stamp()
-    st_path = sorted(glob.glob(os.path.join(FIGURES, "*_seatable_aedes_main.tsv")))[-1]
+    st_path = sorted(glob.glob(fig("*_seatable_aedes_main.tsv")))[-1]
     st = pd.read_csv(st_path, sep="\t", dtype=str).fillna("")
     st["label"] = [seatable_label(r) for r in st.to_dict("records")]
     by_root = {r: g for r, g in st[st.root_now != ""].groupby("root_now")}
@@ -49,7 +50,7 @@ def main():
                      st_root_id="; ".join(g.root_id))
         out.append(d)
     df = pd.DataFrame(out).fillna("")
-    path = os.path.join(FIGURES, f"{stamp}_seatable_match.tsv")
+    path = fig(f"{stamp}_seatable_match.tsv")
     df.to_csv(path, sep="\t", index=False)
     print(f"{os.path.basename(st_path)}: {len(st)} SeaTable rows; {len(df)} sheet rows with an xyz in {df.tab.nunique()} tabs")
     for tab, g in df.groupby("tab", sort=False):

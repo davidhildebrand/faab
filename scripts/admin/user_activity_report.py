@@ -28,6 +28,7 @@ import numpy as np
 import pandas as pd
 import caveclient
 from faab.clients.cave import DATASTACK, throttle
+from faab.config import fig
 
 UTC = dt.timezone.utc
 OUT = os.path.join(REPO, "figures")
@@ -40,7 +41,7 @@ INCLUDE_UNDO = False                            # False -> exclude undo ops
 DISCOVER_IF_EMPTY = True                        # sample recent edits to find users
 DISCOVER_SAMPLE = 40                            # #changed-roots to sample (server cost!)
 THROTTLE_S = 2.0                                # seconds between CAVE calls
-OUT_CSV = os.path.join(OUT, "user_activity_report.csv")
+OUT_CSV = fig("user_activity_report.csv")
 # ----------------------------------------------------------------------
 
 

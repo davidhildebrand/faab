@@ -4,6 +4,7 @@ line between groups. Network-free. Usage: python faab_pr_bundles_pairs_pipes.py 
 from faab.config import REPO
 import os
 import sys
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
@@ -29,9 +30,9 @@ def render(lines):
 
 def main():
     suffix = sys.argv[1] if len(sys.argv) > 1 else ""
-    lines = open(os.path.join(OUT, f"pr_bundles_pairs_paste{suffix}.tsv")).read().split("\n")
+    lines = open(fig(f"pr_bundles_pairs_paste{suffix}.tsv")).read().split("\n")
     txt = render(lines)
-    open(os.path.join(OUT, f"pr_bundles_pairs_pipes{suffix}.txt"), "w").write(txt + "\n")
+    open(fig(f"pr_bundles_pairs_pipes{suffix}.txt"), "w").write(txt + "\n")
     print(txt)
 
 

@@ -17,6 +17,7 @@ if not hasattr(np, "row_stack"):
 import pandas as pd
 import caveclient
 from faab.clients.cave import DATASTACK, throttle
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
@@ -29,10 +30,10 @@ def _s(v):
 
 
 def main():
-    bridge = pd.read_csv(os.path.join(OUT, "pr_metu_bridge.tsv"), sep="\t", dtype={"root": str})
+    bridge = pd.read_csv(fig("pr_metu_bridge.tsv"), sep="\t", dtype={"root": str})
     strong = bridge[bridge.path_strength >= MIN_SYN]
     roots = [int(r) for r in strong.root]
-    cells = pd.read_csv(os.path.join(OUT, "pr_metu_link_cells.tsv"), sep="\t", dtype={"root": str})
+    cells = pd.read_csv(fig("pr_metu_link_cells.tsv"), sep="\t", dtype={"root": str})
     cls = {int(r.root): ("PR " + r.cls if r.kind == "PR" else "MeTu") for r in cells.itertuples() if r.kind in ("PR", "MeTu")}
 
     import seaserpent as ss
@@ -81,7 +82,7 @@ def main():
                          unlabelled=int(k.get("unlabelled", 0)), n_input_cells=int(s.pre_pt_root_id.nunique()),
                          top_other_inputs=top, syn_to_MeTu=int(r.syn_to_MeTu)))
     out = pd.DataFrame(rows).sort_values("from_R7R8", ascending=False)
-    out.to_csv(os.path.join(OUT, "bridge_inputs.tsv"), sep="\t", index=False)
+    out.to_csv(fig("bridge_inputs.tsv"), sep="\t", index=False)
     pd.set_option("display.max_colwidth", 60)
     print(out.to_string(index=False))
     pr_in = syn[syn.pre_kind.isin(["R7/R8", "R1-R6"])]

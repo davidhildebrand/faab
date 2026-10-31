@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 from neuprint import NeuronCriteria as NC, fetch_neurons, fetch_simple_connections
 from faab.clients.neuprint import client as npclient, MALE_CNS, OPTIC_LOBE
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 N = 25
@@ -69,7 +70,7 @@ def main():
     print("\n=== Drosophila reference, all metrics from one consistent sample ===")
     pd.set_option("display.width", 170)
     print(df.to_string(index=False))
-    df.to_csv(os.path.join(OUT, "photoreceptor_ref_consistent.csv"), index=False)
+    df.to_csv(fig("photoreceptor_ref_consistent.csv"), index=False)
     print("\nsaved photoreceptor_ref_consistent.csv\nDONE")
 
 

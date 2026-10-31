@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from neuprint import NeuronCriteria as NC, fetch_neurons
 from navis.interfaces import neuprint as nvneu
 from faab.clients.neuprint import client as npclient, MALE_CNS
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 CT1 = 648518347700703374
@@ -59,7 +60,7 @@ def main():
     fig.suptitle(f"CT1: fly male-CNS (navy) vs FAAB candidate (red) — matched scale (+/-{W:.0f}um)",
                  fontsize=16, y=0.99)
     fig.tight_layout(rect=[0, 0, 1, 0.97])
-    fig.savefig(os.path.join(OUT, "ct1_compare2.png"), dpi=110)
+    fig.savefig(fig("ct1_compare2.png"), dpi=110)
     print("saved ct1_compare2.png")
 
 

@@ -27,6 +27,7 @@ import matplotlib.pyplot as plt
 from faab.clients.cave import DATASTACK, throttle
 from faab.pr.bundles import read_box
 from faab.pr.pairing_demo import analyse_group, PAIR_COL, OUT, TMP
+from faab.config import fig
 
 VOX = np.array([16.0, 16.0, 45.0])
 RES1 = np.array([32.0, 32.0, 45.0])      # mip-1 voxel size (nm)
@@ -42,7 +43,7 @@ def main():
     axis, that, nrm, c, s_end, outer, inner, names = (R[k] for k in ("axis", "that", "nrm", "c", "s_end", "outer", "inner", "names"))
     s_lo = min(((R["neu"][r].nodes[["x", "y", "z"]].values - c) @ axis).min() for r in outer)
     pasted = pd.read_csv(os.path.join(TMP, "pr_groups_pasted.tsv"), sep="\t", dtype=str)
-    now = json.load(open(os.path.join(OUT, "pr_footprint_roots.json")))["root_used"]
+    now = json.load(open(fig("pr_footprint_roots.json")))["root_used"]
     rows = [(r.root_id_curr, int(n), r._3) for r, n in zip(pasted.itertuples(), now) if int(r.group) == g]
     old2new = {o: n for o, n, _ in rows}
     label = {}
@@ -156,7 +157,7 @@ def main():
     df["angle"] = np.degrees(np.arctan2(df.v, df.u))
     df["radius"] = np.hypot(df.u, df.v)
     tag_ext = "_ext" if extend > 0 else ""
-    df.to_csv(os.path.join(OUT, f"pr_bundle_track_group{g}{tag_ext}.tsv"), sep="\t", index=False)
+    df.to_csv(fig(f"pr_bundle_track_group{g}{tag_ext}.tsv"), sep="\t", index=False)
     print(f"{df.s_box.nunique()} slices, {int(df.complete.sum() / max(len(roots), 1))} with all {len(roots)} cells; "
           f"{time.time() - t0:.0f} s", flush=True)
 
@@ -201,7 +202,7 @@ def main():
     D.set_xlabel("s (um)")
     D.set_title("D  cyclic order around the center at each slice (colors = fly pair; red R7, green R8)")
     fig.suptitle(f"Group {g}: eight axons tracked with 6-um mip-1 cutouts along the bundle axis (frame of the pairing analysis)")
-    png = os.path.join(OUT, f"pr_bundle_track_group{g}{tag_ext}.png")
+    png = fig(f"pr_bundle_track_group{g}{tag_ext}.png")
     fig.savefig(png, dpi=120)
     print("saved", png)
     for s, cells, rts in order_rows[::max(1, len(order_rows) // 8)]:

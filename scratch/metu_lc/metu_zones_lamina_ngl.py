@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import linkage, fcluster
 
 from faab.clients.cave import throttle, DATASTACK
+from faab.config import fig
 
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 OUT = os.path.join(REPO, "figures")
@@ -60,7 +61,7 @@ def main():
         "layout": "xy-3d",
     }
     url = site.rstrip("/") + "/#!" + urllib.parse.quote(json.dumps(state, separators=(",", ":")))
-    with open(os.path.join(OUT, "lamina_ngl_url.txt"), "w") as f:
+    with open(fig("lamina_ngl_url.txt"), "w") as f:
         f.write(url + "\n")
     print(f"\n[3] lamina neuroglancer URL ({len(lam_latest)} segs) -> figures/lamina_ngl_url.txt")
     print("    seg source:", seg_url[:70], "...")
@@ -95,10 +96,10 @@ def main():
         sc = ax.scatter(cen[a], cen[b], c=cl, cmap="tab10", s=18)
         ax.set_xlabel(an + " (um)"); ax.set_ylabel(bn + " (um)"); ax.set_aspect("equal")
     fig.suptitle("Aedes MeTu AOTU output-synapse centroids, colored by zone-cluster (k=4)")
-    fig.tight_layout(); fig.savefig(os.path.join(OUT, "metu_aotu_zones.png"), dpi=150)
+    fig.tight_layout(); fig.savefig(fig("metu_aotu_zones.png"), dpi=150)
     pd.DataFrame({"root_id": cen.index.astype("int64"), "zone_k4": cl,
                   "x": cen["x"].values, "y": cen["y"].values, "z": cen["z"].values}
-                 ).to_csv(os.path.join(OUT, "metu_aotu_zones.csv"), index=False)
+                 ).to_csv(fig("metu_aotu_zones.csv"), index=False)
     print("  saved metu_aotu_zones.png + .csv")
 
 

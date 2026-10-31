@@ -29,6 +29,7 @@ import navis
 import caveclient
 from fafbseg import flywire
 from faab.clients.cave import DATASTACK, throttle
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
@@ -82,8 +83,8 @@ def primary_neurite_point_nm(sk, soma_nm):
 
 
 def main():
-    p = pd.read_csv(os.path.join(OUT, "photoreceptor_partners.csv"))
-    io = pd.read_csv(os.path.join(OUT, "photoreceptor_io.csv"))
+    p = pd.read_csv(fig("photoreceptor_partners.csv"))
+    io = pd.read_csv(fig("photoreceptor_io.csv"))
     out = p[p.direction == "output"].copy()
     cls_of = dict(zip(io.root.astype("int64"), io["class"]))
     tot_of = dict(zip(io.root.astype("int64"), io.out_syn))
@@ -143,7 +144,7 @@ def main():
     fetch_ids = [resolved.get(r, r) for r in partners]
 
     # ---- skeletons (cached) ----
-    scache = os.path.join(OUT, "pr_partner_skels.pkl")
+    scache = fig("pr_partner_skels.pkl")
     sk_by = pickle.load(open(scache, "rb")) if os.path.exists(scache) else {}
     need = [i for i in fetch_ids if i not in sk_by]
     if need:
@@ -246,7 +247,7 @@ def main():
     df["notes"] = df.downstream.map(lambda r: note.get(int(r), ""))
     df = df[HEADERS]
 
-    tsv = os.path.join(OUT, "faab_pr_top10_xyz.tsv")
+    tsv = fig("faab_pr_top10_xyz.tsv")
     df.to_csv(tsv, sep="\t", index=False)
     n_prim = sum("primary neurite" in v for v in note.values())
     print(f"\nxyz on primary neurite: {n_prim}/{len(partners)} partners; "

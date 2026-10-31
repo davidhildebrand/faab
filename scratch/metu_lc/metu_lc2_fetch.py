@@ -12,6 +12,7 @@ import seaserpent as ss
 import caveclient
 from fafbseg import flywire
 from faab.clients.cave import DATASTACK, throttle
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
@@ -86,7 +87,7 @@ def main():
               f"median {int(np.median(v))}", flush=True)
 
     pickle.dump({"dotprops": by, "label": lab, "lc": lc, "metu_ref": metu_ref},
-                open(os.path.join(OUT, "metu_lc2.pkl"), "wb"))
+                open(fig("metu_lc2.pkl"), "wb"))
     print("saved metu_lc2.pkl\nDONE", flush=True)
 
 

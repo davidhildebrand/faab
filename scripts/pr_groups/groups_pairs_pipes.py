@@ -3,6 +3,7 @@
 partner tables). Margins printed without a sign. Output figures/faab_pr_groups_pairs_pipes.txt."""
 from faab.config import REPO
 import os
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
@@ -18,7 +19,7 @@ def table(header, rows):
 
 
 def main():
-    lines = open(os.path.join(OUT, "faab_pr_groups_pairs_paste.tsv")).read().split("\n")
+    lines = open(fig("faab_pr_groups_pairs_paste.tsv")).read().split("\n")
     out, header, rows, gname = [], None, [], None
     for ln in lines + [""]:
         cells = ln.split("\t")
@@ -34,7 +35,7 @@ def main():
             cells = [c.lstrip("+") for c in cells]
             rows.append(cells)
     txt = "\n".join(out).rstrip("\n")
-    open(os.path.join(OUT, "faab_pr_groups_pairs_pipes.txt"), "w").write(txt + "\n")
+    open(fig("faab_pr_groups_pairs_pipes.txt"), "w").write(txt + "\n")
     print(txt)
 
 

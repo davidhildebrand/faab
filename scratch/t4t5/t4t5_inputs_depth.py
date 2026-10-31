@@ -26,13 +26,14 @@ from scipy.spatial import cKDTree
 from faab import nglink, ol_meshes, synsnap
 from faab.config import FIGURES, TMP, VOX
 from faab.partners.sheet import utc_stamp
+from faab.config import fig
 
 warnings.filterwarnings("ignore")
 spec = importlib.util.spec_from_file_location("cp", "/Users/davidh/Data/Vibe/FAAB/faab/scripts/paths/class_paths.py")
 cp = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cp)
 
-TAB = os.path.join(FIGURES, "20261027d195202tUTC_FAABopticlobetargets-PRg1toT4T5.tsv")
+TAB = fig("20261027d195202tUTC_FAABopticlobetargets-PRg1toT4T5.tsv")
 THR = 2          # synapses onto one target to list an input (the paths used 3; fly Tm3 -> T4 is weak)
 RADIUS = 30.0    # um: local plane fit and sideways reach of an anchor
 MIN_LO = 5       # synapses inside LO_R needed to call a depth
@@ -205,7 +206,7 @@ def main():
     D = pd.DataFrame(out)
     D["syn_to_targets"] = D.syn_to_T4 + D.syn_to_T5
     D = D.sort_values(["in_tab", "depth_class", "syn_to_targets"], ascending=[False, True, False])
-    base = os.path.join(FIGURES, f"{stamp}_t4t5_inputs_depth")
+    base = fig(f"{stamp}_t4t5_inputs_depth")
     D.to_csv(base + ".tsv", sep="\t", index=False)
 
     pd.set_option("display.width", 250)

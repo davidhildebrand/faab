@@ -12,13 +12,14 @@ import cloudvolume as cv
 from scipy.spatial import cKDTree, ConvexHull, Delaunay
 from caveclient import CAVEclient
 from faab.clients.cave import DATASTACK, throttle
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 GRID_UM = 2.5
 
 
 def main():
-    dp = pickle.load(open(os.path.join(OUT, "mi1_dotprops.pkl"), "rb"))
+    dp = pickle.load(open(fig("mi1_dotprops.pkl"), "rb"))
     C = np.array([d.points.mean(0) for d in dp])          # Mi1 centroids (um)
     known = set(int(d.id) for d in dp)
 
@@ -65,7 +66,7 @@ def main():
     roots = np.array(client.chunkedgraph.get_roots(uniq_sv.tolist()), dtype=np.uint64)
     uniq_roots = set(int(r) for r in roots if r != 0)
     pickle.dump({"pts_nm": pts_nm, "svs": svs, "roots": sorted(uniq_roots)},
-                open(os.path.join(OUT, "mi1_plane_cells.pkl"), "wb"))
+                open(fig("mi1_plane_cells.pkl"), "wb"))
 
     print(f"\n=== CELLS INTERSECTING THE Mi1 SHEET: {len(uniq_roots)} ===")
     print(f"    (from {len(pts_um)} surface samples; sheet area ~{len(pts_um)*GRID_UM**2/1e3:.0f}x10^3 um^2)")

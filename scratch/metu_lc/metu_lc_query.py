@@ -5,6 +5,7 @@ import os
 import pickle
 import pandas as pd
 import seaserpent as ss
+from faab.config import fig
 
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 OUT = os.path.join(REPO, "figures")
@@ -40,7 +41,7 @@ def main():
         types = g["type"].astype(str).value_counts().to_dict() if "type" in g else "?"
         print(f"subclass=={lab!r}: {len(g)} cells | sides {sides} | annotators {anns}")
         print(f"    type breakdown: {types}")
-        pickle.dump([int(x) for x in g["rid"]], open(os.path.join(OUT, f"ids_{lab}.pkl"), "wb"))
+        pickle.dump([int(x) for x in g["rid"]], open(fig(f"ids_{lab}.pkl"), "wb"))
     print("DONE")
 
 

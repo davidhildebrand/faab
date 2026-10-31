@@ -7,14 +7,15 @@ import pickle
 import numpy as np
 import caveclient
 from faab.clients.cave import DATASTACK, throttle
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 
 
 def main():
-    diag = pickle.load(open(os.path.join(OUT, "metu_lc_diag.pkl"), "rb"))
+    diag = pickle.load(open(fig("metu_lc_diag.pkl"), "rb"))
     npts = diag["npts"]; latest = diag["latest_ids"]; stale = diag["stale_ids"]
-    D = pickle.load(open(os.path.join(OUT, "metu_lc_dotprops.pkl"), "rb"))
+    D = pickle.load(open(fig("metu_lc_dotprops.pkl"), "rb"))
     lab = D["label_by_root"]
 
     good = [r for r in npts if npts[r] >= 50]                 # the 2 with morphology

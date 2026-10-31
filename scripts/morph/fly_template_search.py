@@ -27,8 +27,9 @@ import pandas as pd
 from faab import nglink
 from faab.config import FIGURES, REPO
 from faab.partners.sheet import utc_stamp
+from faab.config import fig
 
-CACHE = os.path.join(FIGURES, "type_copies_dotprops.pkl")
+CACHE = fig("type_copies_dotprops.pkl")
 
 
 def main():
@@ -146,7 +147,7 @@ def main():
     allA = P[["cell", "label", "status", "points"]].reset_index(drop=True)
     allA["fwd_best"] = fwd_best
     con = pd.concat([pd.DataFrame(cinfo), summarize(A[nQ:], B[nT:])], axis=1).sort_values("best", ascending=False)
-    base = os.path.join(FIGURES, f"{stamp}_fly_templates_{a.tag}")
+    base = fig(f"{stamp}_fly_templates_{a.tag}")
     res.to_csv(base + ".tsv", sep="\t", index=False)
     allA.to_csv(base + "_stageA.tsv", sep="\t", index=False)
     con.to_csv(base + "_controls.tsv", sep="\t", index=False)

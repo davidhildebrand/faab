@@ -28,6 +28,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from faab.pr.groups_mirror import load_groups, prep, reflect, THETAS, SCACHE, OUT
+from faab.config import fig
 
 warnings.filterwarnings("ignore")
 navis.set_pbars(hide=True)
@@ -41,9 +42,9 @@ R7_COL, R8_COL = "#A32D2D", "#0F6E56"
 def presyn_centroid(group):
     """lamina reference from the saved synapse table (roots of 2026-10-10 mapped through the pasted order)"""
     pasted = pd.read_csv(os.path.join(TMP, "pr_groups_pasted.tsv"), sep="\t", dtype=str)
-    roots = json.load(open(os.path.join(OUT, "pr_footprint_roots.json")))["root_used"]
+    roots = json.load(open(fig("pr_footprint_roots.json")))["root_used"]
     sel = {int(r) for r, g, c in zip(roots, pasted.group, pasted["class"]) if int(g) == group and c.startswith("R1")}
-    syn = pd.read_csv(os.path.join(OUT, "pr_groups_out_raw.tsv"), sep="\t")
+    syn = pd.read_csv(fig("pr_groups_out_raw.tsv"), sep="\t")
     P = syn[syn.pre.isin(sel)][["pre_x", "pre_y", "pre_z"]].to_numpy(float)
     return P
 
@@ -210,7 +211,7 @@ def main():
     D.legend(fontsize=8, loc="upper left")
     fig.suptitle(f"Group {g}: the pairing frame on the real skeletons (roots of 2026-09-30; lamina side from the presynaptic sites)",
                  fontsize=13)
-    png = os.path.join(OUT, f"pr_pairing_demo_group{g}.png")
+    png = fig(f"pr_pairing_demo_group{g}.png")
     fig.savefig(png, dpi=130)
     b64 = base64.b64encode(open(png, "rb").read()).decode()
     html = (f"<!DOCTYPE html><html><head><meta charset='utf-8'><title>Pairing demo group {g}</title></head><body "
@@ -220,7 +221,7 @@ def main():
             f"(lamina side from {len(P)} R1-R6 presynaptic sites), the terminal zone is the last {ZONE:.0f} um, "
             f"t and d are the means of each cell's terminal-zone nodes in the plane frame.</p>"
             f"<img style='width:100%' src='data:image/png;base64,{b64}'></body></html>")
-    open(os.path.join(OUT, f"pr_pairing_demo_group{g}.html"), "w").write(html)
+    open(fig(f"pr_pairing_demo_group{g}.html"), "w").write(html)
     print("saved", png)
 
 

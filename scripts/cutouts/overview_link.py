@@ -10,6 +10,7 @@ import urllib.parse
 
 import numpy as np
 import pandas as pd
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
@@ -34,7 +35,7 @@ def main():
                and np.all(np.array(a["point"]) >= lo) and np.all(np.array(a["point"]) <= hi)]
         layers.append({"type": "annotation", "source": {"url": "local://annotations", "transform": {"outputDimensions": DIMS}},
                        "annotations": boxes + pts, "name": "proposed cutout (group 1)", "annotationColor": "#ffff00"})
-    inv = pd.read_csv(os.path.join(OUT, "cutout_inventory.tsv"), sep="\t", dtype={"state": str})
+    inv = pd.read_csv(fig("cutout_inventory.tsv"), sep="\t", dtype={"state": str})
     inv = inv[inv.lo.notna()]
     seen, anns = set(), []
     for r in inv.itertuples():

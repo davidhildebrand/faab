@@ -13,9 +13,10 @@ import pandas as pd
 
 from faab.config import FIGURES
 from faab.partners.sheet import seatable_label, utc_stamp
+from faab.config import fig
 
 L = pd.read_csv(sys.argv[1], sep="\t", dtype=str).fillna("")
-st = pd.read_csv(sorted(glob.glob(os.path.join(FIGURES, "*_seatable_aedes_main.tsv")))[-1], sep="\t", dtype=str).fillna("")
+st = pd.read_csv(sorted(glob.glob(fig("*_seatable_aedes_main.tsv")))[-1], sep="\t", dtype=str).fillna("")
 label = {r["root_now"]: seatable_label(r) for r in st.to_dict("records")}
 if "detail" not in L:
     L["detail"] = L.notes.str.replace(r"^SeaTable R(?:1-6|7-8); (LRS: cartridge \d+; )?", "", regex=True)
@@ -39,7 +40,7 @@ def short(old):
 L["notes"] = [short(x) for x in L.notes]
 miss = [r for r, x in zip(L.root_id_curr, L.SeaTable) if x == "present" and r not in label]
 L["SeaTable"] = [f"present: {label[r]}" if x == "present" and r in label else x for r, x in zip(L.root_id_curr, L.SeaTable)]
-out = os.path.join(FIGURES, f"{utc_stamp()}_pr_left_groups.tsv")
+out = fig(f"{utc_stamp()}_pr_left_groups.tsv")
 L.to_csv(out, sep="\t", index=False)
 print(f"{len(L)} rows; notes {L.notes.value_counts().head(6).to_dict()}; max notes length {L.notes.str.len().max()}; "
       f"SeaTable labels {sum(L.SeaTable.str.startswith('present:'))}; not found {miss}; written {out}")

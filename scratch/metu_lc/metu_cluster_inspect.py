@@ -11,9 +11,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import linkage, dendrogram, fcluster
 from scipy.spatial.distance import squareform
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
-metu_dp, roots = pickle.load(open(os.path.join(OUT, "metu_dotprops.pkl"), "rb"))
+metu_dp, roots = pickle.load(open(fig("metu_dotprops.pkl"), "rb"))
 keep = [(d, r) for d, r in zip(metu_dp, roots) if len(d.points) >= 10]
 dps = navis.NeuronList([d for d, _ in keep])
 labs = [str(r)[-6:] for _, r in keep]
@@ -46,5 +47,5 @@ for k, c in [(2, "red"), (3, "purple"), (4, "green")]:
 ax.legend(loc="upper right")
 ax.set_title("Aedes MeTu clustering — colored at k=4; dashed lines = k=2/3/4 cuts")
 fig.tight_layout()
-fig.savefig(os.path.join(OUT, "metu_dendrogram_cuts.png"), dpi=150)
+fig.savefig(fig("metu_dendrogram_cuts.png"), dpi=150)
 print("\nsaved metu_dendrogram_cuts.png")

@@ -22,6 +22,7 @@ from fafbseg import flywire
 from neuprint import NeuronCriteria as NC, fetch_neurons
 from navis.interfaces import neuprint as nvneu
 from faab.clients.neuprint import client, MALE_CNS
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 PER_TYPE = 25
@@ -83,7 +84,7 @@ def cluster_report(dps, labels, name):
     ax.set_title(f"{name} MeTu clustering (NBLAST, Ward) — leaves colored by true MeTu1-4 "
                  f"(ARI={ari_maj:.2f})")
     fig.tight_layout()
-    fig.savefig(os.path.join(OUT, f"fly_metu_{name}.png"), dpi=150)
+    fig.savefig(fig(f"fly_metu_{name}.png"), dpi=150)
     print(f"  saved fly_metu_{name}.png")
 
 

@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from neuprint import NeuronCriteria as NC, fetch_neurons, fetch_simple_connections
 from faab.clients.neuprint import client as npclient, MALE_CNS
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 NSAMPLE = 60
@@ -46,7 +47,7 @@ def main():
         print(f"{grp}: sampled {len(pick)} cells, {int(g.n_syn.sum())} output synapses",
               flush=True)
     cv = pd.concat(allg, ignore_index=True)
-    cv.to_csv(os.path.join(OUT, "mcns_convergence.csv"), index=False)
+    cv.to_csv(fig("mcns_convergence.csv"), index=False)
     pd.set_option("display.width", 170)
     print("\n=== male-CNS top convergent OUTPUT TYPES ===")
     for cls, d in cv.groupby("src_class"):

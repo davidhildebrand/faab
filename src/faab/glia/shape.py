@@ -25,12 +25,13 @@ if not hasattr(np, "row_stack"):
     np.row_stack = np.vstack
 import pandas as pd
 from scipy.spatial import ConvexHull, QhullError
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
-SCACHE = os.path.join(OUT, "pr_partner_skels.pkl")
-GM = os.path.join(OUT, "glia_metrics.tsv")
-PF = os.path.join(OUT, "partner_glia_flags.tsv")
+SCACHE = fig("pr_partner_skels.pkl")
+GM = fig("glia_metrics.tsv")
+PF = fig("partner_glia_flags.tsv")
 MIN_CABLE = 100.0
 PRE_CUT = 10.6
 SHAPE = ["vol_per_L1", "fill", "cable_per_L1", "xsec", "cable_per_hull", "L1_um", "rg_um", "vol_um3"]
@@ -195,7 +196,7 @@ def main():
             d.update(skeleton_metrics(s))
         rows.append(d)
     df = derived(pd.DataFrame(rows))
-    df.to_csv(os.path.join(OUT, "glia_shape_skel.tsv"), sep="\t", index=False)
+    df.to_csv(fig("glia_shape_skel.tsv"), sep="\t", index=False)
 
     comp = df[(df.set == "comparison") & df.cable_um.notna()]
     print(f"comparison cells with a skeleton: {len(comp)} of {len(gm)} "

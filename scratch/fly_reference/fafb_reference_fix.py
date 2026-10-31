@@ -12,6 +12,7 @@ from faab.config import REPO
 import os
 import numpy as np
 import pandas as pd
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 COLS = ["out_syn", "out_partners", "in_syn", "in_partners",
@@ -19,7 +20,7 @@ COLS = ["out_syn", "out_partners", "in_syn", "in_partners",
 
 
 def main():
-    df = pd.read_csv(os.path.join(OUT, "fafb_photoreceptor_percell.csv"))
+    df = pd.read_csv(fig("fafb_photoreceptor_percell.csv"))
     recs = []
     for cls, d in df.groupby("class"):
         q75 = d.out_syn.quantile(0.75)
@@ -37,7 +38,7 @@ def main():
     pd.set_option("display.width", 170)
     print("\n=== FAFB reference, best-reconstructed quartile ===")
     print(ref.to_string(index=False))
-    ref.to_csv(os.path.join(OUT, "fafb_photoreceptor_ref.csv"), index=False)
+    ref.to_csv(fig("fafb_photoreceptor_ref.csv"), index=False)
     print("\noverwrote fafb_photoreceptor_ref.csv\nDONE")
 
 

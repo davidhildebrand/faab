@@ -20,6 +20,7 @@ import seaserpent as ss
 from fafbseg import flywire
 
 from faab.clients.cave import throttle, DATASTACK
+from faab.config import fig
 
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 OUT = os.path.join(REPO, "figures")
@@ -75,26 +76,26 @@ def main():
             & (g["max_w"] <= 25) & g["total"].between(15, 80)]
     sig = sig.sort_values(["n_metu", "total"], ascending=False)
     print(f"unannotated partners: {(~g['annotated']).sum()} | Dm2-signature candidates: {len(sig)}")
-    sig.to_csv(os.path.join(OUT, "dm2_candidates.csv"), index=False)
+    sig.to_csv(fig("dm2_candidates.csv"), index=False)
 
     cand_ids = sig["pre_pt_root_id"].astype("int64").head(MAX_CAND).tolist()
     # MeTu targeted by these candidates = MeTu1-equivalent subset
     tgt = conn[conn["pre_pt_root_id"].isin(cand_ids)]["post_pt_root_id"].value_counts()
-    tgt.rename("n_candidate_inputs").to_csv(os.path.join(OUT, "metu1_equiv_targets.csv"))
+    tgt.rename("n_candidate_inputs").to_csv(fig("metu1_equiv_targets.csv"))
     print(f"MeTu targeted by candidates (MeTu1-equiv subset): {len(tgt)} / {len(metu_roots)}")
 
     # ---- fetch MeTu dotprops (b) ----
     t = throttle(t)
     metu_dp = dps_um(flywire.get_l2_dotprops(metu_roots, dataset=DATASTACK,
                                              max_threads=1, omit_failures=True, progress=False))
-    pickle.dump((metu_dp, metu_roots), open(os.path.join(OUT, "metu_dotprops.pkl"), "wb"))
+    pickle.dump((metu_dp, metu_roots), open(fig("metu_dotprops.pkl"), "wb"))
     print("fetched MeTu dotprops:", len(metu_dp))
 
     # ---- fetch candidate dotprops (a) ----
     t = throttle(t)
     cand_dp = dps_um(flywire.get_l2_dotprops(cand_ids, dataset=DATASTACK,
                                              max_threads=1, omit_failures=True, progress=False))
-    pickle.dump((cand_dp, cand_ids), open(os.path.join(OUT, "candidate_dotprops.pkl"), "wb"))
+    pickle.dump((cand_dp, cand_ids), open(fig("candidate_dotprops.pkl"), "wb"))
     spans = [float((d.points.max(0) - d.points.min(0)).max()) for d in cand_dp]
     print(f"fetched candidate dotprops: {len(cand_dp)} | span um median {np.median(spans):.0f} "
           f"| >150um (large, drop later): {sum(s > 150 for s in spans)}")

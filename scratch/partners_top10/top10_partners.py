@@ -6,6 +6,7 @@ also contact it (convergence), and any FlyTable annotation. Read-only.
 from faab.config import REPO
 import os
 import pandas as pd
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
@@ -25,8 +26,8 @@ def table(headers, rows, aligns=None):
 
 
 def main():
-    p = pd.read_csv(os.path.join(OUT, "photoreceptor_partners.csv"))
-    io = pd.read_csv(os.path.join(OUT, "photoreceptor_io.csv"))
+    p = pd.read_csv(fig("photoreceptor_partners.csv"))
+    io = pd.read_csv(fig("photoreceptor_io.csv"))
     out = p[p.direction == "output"].copy()
     cls_of = dict(zip(io.root.astype("int64"), io["class"]))
     tot_of = dict(zip(io.root.astype("int64"), io.out_syn))

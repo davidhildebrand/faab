@@ -16,6 +16,7 @@ import pandas as pd
 from faab import ol_meshes, synsnap
 from faab.config import DATA, FIGURES
 from faab.partners.sheet import utc_stamp
+from faab.config import fig
 
 VOX_UM = np.array([0.016, 0.016, 0.045])
 g = pd.read_csv(os.path.join(DATA, "pr_groups.tsv"), sep="\t", dtype={"root_id_curr": str})
@@ -55,6 +56,6 @@ for label, sub_all in (("all", g), ("proofread/checked only", g[g.confirmed])):
         print(f"  {cls}: n {len(sub)} ({len(s)} with >= 10 outputs); outputs p50 {s.n_pre.median():.0f}, inputs p50 "
               f"{s.n_post.median():.0f}; LA share p10/25/50/75/90 {q('LA')}; ME share {q('ME')}; outside both {q('outside')}; "
               f">= 20% in ME: {int((s.ME >= 0.2).sum())}; >= 80% in LA: {int((s.LA >= 0.8).sum())}")
-out = os.path.join(FIGURES, f"{utc_stamp()}_pr_classes_mesh_shares.tsv")
+out = fig(f"{utc_stamp()}_pr_classes_mesh_shares.tsv")
 g.drop(columns=["root"]).to_csv(out, sep="\t", index=False)
 print(f"\nwritten {out}")

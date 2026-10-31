@@ -16,6 +16,7 @@ if not hasattr(np, "row_stack"):
 import pandas as pd
 import caveclient
 from faab.clients.cave import DATASTACK, throttle
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
@@ -55,7 +56,7 @@ def main():
         root = sv_root.get(int(s)) if s.isdigit() else (int(_s(r.get("root_id", ""))) if _s(r.get("root_id", "")).isdigit() else None)
         rows.append(dict(source="FlyTable", flytable_root=_s(r.get("root_id", "")), root=root, label=label[i],
                          side=_s(r.get("side", "")), status=_s(r.get("status", "")), name=_s(r.get("cell_name", r.get("name", "")))))
-    meta_pr = json.load(open(os.path.join(OUT, "faab_pr_top20_update_meta.json")))
+    meta_pr = json.load(open(fig("faab_pr_top20_update_meta.json")))
     prs = pd.read_csv(os.path.join(HERE, "..", "tmp", "sheet_prs.tsv"), sep="\t", dtype=str).fillna("")
     for _, p in prs[prs["class"].str.strip().str.upper() == "R7"].iterrows():
         cur = int(meta_pr["pr_roots"].get(p.root_id_orig, p.root_id_curr or p.root_id_orig))
@@ -83,7 +84,7 @@ def main():
     df["top_partner_syn"] = [int(top[r].iloc[0]) if r in top and len(top[r]) else 0 for r in df.root]
     df["in_syn"] = [int(n_in.get(r, 0)) for r in df.root]
     df = df.sort_values("out_syn", ascending=False)
-    df.to_csv(os.path.join(OUT, "r7_outputs.tsv"), sep="\t", index=False)
+    df.to_csv(fig("r7_outputs.tsv"), sep="\t", index=False)
     pd.set_option("display.width", 250)
     print(df[["source", "root", "label", "side", "status", "out_syn", "out_partners", "top_partner", "top_partner_syn", "in_syn"]]
           .to_string(index=False))

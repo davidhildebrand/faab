@@ -46,6 +46,7 @@ import pandas as pd
 from faab.clients.cave import live_outputs, parse_xyz
 from faab.config import DATASTACK, FIGURES, DATA, TMP, VOX
 from faab.partners.sheet import as_int, fmt_vox, parse_sheet, utc_stamp
+from faab.config import fig
 
 CACHE = os.path.join(TMP, "pr_sheet_check_lineage.json")
 FRAG = re.compile(r"fragment|orphan|soma|difficult to extend", re.I)   # note clauses replaced by "orphan fragment"
@@ -224,7 +225,7 @@ def main():
                 missing.append(dict(block_pr=p, rank=rank, root=post, nsyn=int(n), PR_conv=int(conv.get(post, 0))))
 
     stamp = utc_stamp(now)
-    rep = os.path.join(FIGURES, f"pr_sheet_check_{stamp}.tsv")
+    rep = fig(f"pr_sheet_check_{stamp}.tsv")
     df.to_csv(rep, sep="\t", index=False)
     pd.DataFrame(missing).to_csv(rep.replace(".tsv", "_missing_top20.tsv"), sep="\t", index=False)
     pd.set_option("display.width", 250)

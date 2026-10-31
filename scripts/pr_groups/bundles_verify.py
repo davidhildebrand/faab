@@ -47,6 +47,7 @@ from faab.clients.cave import DATASTACK
 from faab.pr.side import NEUROPILS, PREFIX, parse as parse_side
 from faab.pr.verdict import (LA_MIN, ME_MARGIN_UM, ME_R7, POST_MAX, POST_MAX_R7, PRE_MIN, R8_IN_PER_OUT,
                              mesh_shares as _mesh_shares, verdict)
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
@@ -54,8 +55,8 @@ VOX = np.array([16.0, 16.0, 45.0])
 SIDE, ARGS = parse_side()
 PFX = PREFIX[SIDE]
 LA, ME = NEUROPILS[SIDE]
-SYN = os.path.join(OUT, f"{PFX}bundles_synapses.tsv")
-RAW = os.path.join(OUT, f"{PFX}bundles_synapses_raw_{{}}.tsv")
+SYN = fig(f"{PFX}bundles_synapses.tsv")
+RAW = fig(f"{PFX}bundles_synapses_raw_{{}}.tsv")
 
 
 def mesh_shares(pre):
@@ -102,11 +103,11 @@ def fetch(ids, append=False):
 
 
 def main():
-    roots = pd.read_csv(os.path.join(OUT, f"{PFX}bundles_roots.tsv"), sep="\t", dtype={"root": str, "known": str, "seatable": str})
+    roots = pd.read_csv(fig(f"{PFX}bundles_roots.tsv"), sep="\t", dtype={"root": str, "known": str, "seatable": str})
     roots["known"] = roots.known.fillna("")
-    cl = pd.read_csv(os.path.join(OUT, f"{PFX}bundles_clusters.tsv"), sep="\t", index_col=0)
+    cl = pd.read_csv(fig(f"{PFX}bundles_clusters.tsv"), sep="\t", index_col=0)
     cl["known_groups"] = cl.known_groups.fillna("")
-    known = pd.read_csv(os.path.join(OUT, f"{PFX}lattice_known.tsv"), sep="\t")
+    known = pd.read_csv(fig(f"{PFX}lattice_known.tsv"), sep="\t")
     ax = known[["ax_x", "ax_y", "ax_z"]].values.mean(0)
     ax /= np.linalg.norm(ax)
     ids = [int(x) for x in roots.root]
@@ -164,7 +165,7 @@ def main():
     new = df[df.known == ""]
     print(f"\nnew PR-like axons: {len(new)}; verdicts {new.verdict.value_counts().to_dict()}; depth-window disagreements "
           f"{int(new.note.str.contains('depth').sum())}")
-    df.to_csv(os.path.join(OUT, f"{PFX}bundles_roots_verified.tsv"), sep="\t", index=False)
+    df.to_csv(fig(f"{PFX}bundles_roots_verified.tsv"), sep="\t", index=False)
 
     # per-cluster verified counts
     g = df.groupby("cluster")
@@ -175,7 +176,7 @@ def main():
                       "n_other": g.verdict.apply(lambda s: int((s == "other").sum()))})
     clv = cl.join(v)
     clv["n_PR_like"] = clv.n_R16_like + clv.n_R8_like + clv.n_R7_like
-    clv.to_csv(os.path.join(OUT, f"{PFX}bundles_clusters_verified.tsv"), sep="\t")
+    clv.to_csv(fig(f"{PFX}bundles_clusters_verified.tsv"), sep="\t")
     newc = clv[(clv.n_known == 0) & (clv.n_roots >= 4)].copy()
     newc["tier"] = 3
     newc.loc[newc.spread_um <= 6.0, "tier"] = 2
@@ -208,7 +209,7 @@ def main():
             f"OTHER = synapses in the wrong place or far too many inputs (inspect). Tiers: 1 = compact (spread <= 6 um) with 6-9 axons, "
             f"2 = compact other sizes, 3 = loose. Per-axon xyz 75 um above the lamina: figures/{PFX}bundles_roots_verified.tsv.\n\n"
             + "\n".join(lines) + "\n\n## Clusters containing known PRs: new members\n\n" + "\n".join(klines) + "\n")
-    open(os.path.join(OUT, f"{PFX}bundles_summary.md"), "w").write(text)
+    open(fig(f"{PFX}bundles_summary.md"), "w").write(text)
     print(f"\nsummary written to figures/{PFX}bundles_summary.md")
 
 

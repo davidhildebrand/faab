@@ -33,12 +33,13 @@ from faab import nglink
 from faab.clients.cave import DATASTACK, client as cave_client, throttle
 from faab.config import FIGURES, TMP
 from faab.partners.sheet import utc_stamp
+from faab.config import fig
 
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 CLS = ("superclass", "class", "subclass", "subsubclass", "type")
 POINTS = 1500
-CACHE = os.path.join(FIGURES, "type_copies_dotprops.pkl")
-OLD_CACHE = os.path.join(FIGURES, "vpn_pop_dotprops.pkl")  # dotprops fetched for the 2026-10-25 VPN clustering
+CACHE = fig("type_copies_dotprops.pkl")
+OLD_CACHE = fig("vpn_pop_dotprops.pkl")  # dotprops fetched for the 2026-10-25 VPN clustering
 NUCLEI = os.path.join(TMP, "nuclei_v1_aedes_v542.tsv")
 _t = [0.0]
 
@@ -197,7 +198,7 @@ def main():
                                                 points=[len(cache[r].points) for r in small],
                                                 call=f"too small to score (< {a.min_points} L2 points)"))])
     out = out.sort_values("sym_max", ascending=False, na_position="last")
-    base = os.path.join(FIGURES, f"{stamp}_type_copies_{a.tag}")
+    base = fig(f"{stamp}_type_copies_{a.tag}")
     out.to_csv(base + ".tsv", sep="\t", index=False)
     q = out[out.call != "template"].sym_max.dropna()
     print(f"\nsym_max over the pool: median {q.median():.2f}, 90% {q.quantile(0.9):.2f}, 99% {q.quantile(0.99):.2f}; "

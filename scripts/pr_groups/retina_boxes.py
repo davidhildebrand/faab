@@ -27,6 +27,7 @@ from faab.clients.cave import DATASTACK, throttle
 from faab.pr.bundles import read_box
 from faab.pr.pairing_demo import analyse_group, PAIR_COL, R7_COL, R8_COL, OUT, TMP
 from faab.nglink import IMG
+from faab.config import fig
 
 RES1 = np.array([32.0, 32.0, 45.0])
 BOX_UM, STEP_UM = 14.0, 6.0
@@ -38,7 +39,7 @@ def main():
     R = analyse_group(g, verbose=False)
     axis, that, nrm, c, outer, inner, names = (R[k] for k in ("axis", "that", "nrm", "c", "outer", "inner", "names"))
     pasted = pd.read_csv(os.path.join(TMP, "pr_groups_pasted.tsv"), sep="\t", dtype=str)
-    now = json.load(open(os.path.join(OUT, "pr_footprint_roots.json")))["root_used"]
+    now = json.load(open(fig("pr_footprint_roots.json")))["root_used"]
     old2new = {r.root_id_curr: int(n) for r, n in zip(pasted.itertuples(), now) if int(r.group) == g}
     label, color = {}, {}
     for i, r in enumerate(outer):
@@ -49,7 +50,7 @@ def main():
         rt = old2new.get(r, int(r))
         label[rt], color[rt] = k, (R7_COL if k == "R7" else R8_COL)
     # start: centroid of the last complete, compact slice of the bundle tracking (frame coords -> xyz)
-    tr = pd.read_csv(os.path.join(OUT, f"pr_bundle_track_group{g}.tsv"), sep="\t")
+    tr = pd.read_csv(fig(f"pr_bundle_track_group{g}.tsv"), sep="\t")
     comp = tr[tr.complete].groupby("s_box").filter(lambda s: s.radius.max() <= 2.5)
     s_start = float(comp.s_box.min())
     sl = comp[comp.s_box == s_start]
@@ -132,7 +133,7 @@ def main():
             continue
         pos = pos + STEP_UM * direction
     df = pd.DataFrame(rows)
-    df.to_csv(os.path.join(OUT, f"pr_retina_boxes_group{g}.tsv"), sep="\t", index=False)
+    df.to_csv(fig(f"pr_retina_boxes_group{g}.tsv"), sep="\t", index=False)
 
     fig, axes = plt.subplots(len(panels), 2, figsize=(11, 5.4 * len(panels)), squeeze=False)
     ext = [-BOX_UM / 2, BOX_UM / 2, BOX_UM / 2, -BOX_UM / 2]
@@ -157,7 +158,7 @@ def main():
         A.text(-BOX_UM / 2 + 3.1, BOX_UM / 2 - 1.3, "5 um", color="w", fontsize=8, ha="center")
     fig.suptitle(f"FAAB group {g}: from the top of the bundle into the retina", fontsize=11)
     fig.tight_layout()
-    png = os.path.join(OUT, f"pr_retina_boxes_group{g}.png")
+    png = fig(f"pr_retina_boxes_group{g}.png")
     fig.savefig(png, dpi=130)
     print("saved", png)
 

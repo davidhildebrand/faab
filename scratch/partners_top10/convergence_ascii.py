@@ -3,6 +3,7 @@ male-CNS, FAFB/FlyWire, and FAAB (aedes)."""
 from faab.config import REPO
 import os
 import pandas as pd
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 
@@ -20,7 +21,7 @@ def table(headers, rows, aligns=None):
 
 
 def fly_block(csv, label, nsrc):
-    cv = pd.read_csv(os.path.join(OUT, csv))
+    cv = pd.read_csv(fig(csv))
     cv["post_type"] = cv["post_type"].astype(str)
     for cls in ("R1-6", "R7", "R8"):
         d = cv[cv.src_class == cls].sort_values("n_syn", ascending=False)
@@ -46,7 +47,7 @@ def main():
     print("\n\nTABLE C - FAAB (aedes): partners shared by >1 of the 6 R1-R6 cells")
     print("          aedes has no cell-type annotations here, so targets are root_ids")
     print()
-    cv = pd.read_csv(os.path.join(OUT, "faab_convergence.csv"))
+    cv = pd.read_csv(fig("faab_convergence.csv"))
     dist = cv.n_photoreceptors.value_counts().sort_index(ascending=False)
     rows = [[int(k), int(v)] for k, v in dist.items()]
     print(table(["shared by N of 6 R1-R6", "n partners"], rows))

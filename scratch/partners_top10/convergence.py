@@ -9,14 +9,15 @@ from faab.config import REPO
 import os
 import numpy as np
 import pandas as pd
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 
 
 def main():
-    p = pd.read_csv(os.path.join(OUT, "photoreceptor_partners.csv"))
-    io = pd.read_csv(os.path.join(OUT, "photoreceptor_io.csv"))
+    p = pd.read_csv(fig("photoreceptor_partners.csv"))
+    io = pd.read_csv(fig("photoreceptor_io.csv"))
     cls_of = dict(zip(io.root.astype("int64"), io["class"]))
 
     out = p[p.direction == "output"].copy()
@@ -58,7 +59,7 @@ def main():
     pd.set_option("display.width", 200)
     print(top.head(25).to_string(index=False))
 
-    conv.to_csv(os.path.join(OUT, "faab_convergence.csv"), index=False)
+    conv.to_csv(fig("faab_convergence.csv"), index=False)
     print("\nsaved faab_convergence.csv\nDONE")
 
 

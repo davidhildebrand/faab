@@ -10,6 +10,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Polygon, FancyArrowPatch, FancyBboxPatch
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 C = {"R1": "#D85A30", "R6": "#D85A30", "R2": "#7F77DD", "R5": "#7F77DD", "R3": "#1D9E75", "R4": "#1D9E75",
@@ -106,7 +107,7 @@ def main():
     panel(G, "FAAB lamina (groups 1-8)", "all eight stay together; terminals 8-11 um radius\n"
                                           "spread over 3-5 cartridge spacings (pooling)\nR8 ends here and synapses onto R7 (R8 -> R7, not back)")
     fig.suptitle("Photoreceptor arrangement: Drosophila (literature) vs FAAB (measured)", fontsize=13)
-    png = os.path.join(OUT, "pr_bundle_schematic.png")
+    png = fig("pr_bundle_schematic.png")
     fig.savefig(png, dpi=140)
     print("saved", png)
 

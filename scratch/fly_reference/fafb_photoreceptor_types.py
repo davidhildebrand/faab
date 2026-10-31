@@ -10,10 +10,11 @@ if not hasattr(np, "row_stack"):
 import pandas as pd
 import caveclient
 from faab.clients.cave import throttle
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 DS = "flywire_fafb_public"
-CACHE = os.path.join(OUT, "fafb_annotations.pkl")
+CACHE = fig("fafb_annotations.pkl")
 
 
 def main():

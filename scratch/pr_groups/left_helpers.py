@@ -25,12 +25,13 @@ from faab import ol_meshes, synsnap
 from faab.clients.cave import DATASTACK, throttle
 from faab.config import FIGURES
 from faab.partners.top10_xyz import VOX
+from faab.config import fig
 
-SCACHE = os.path.join(FIGURES, "pr_left_skels.pkl")
+SCACHE = fig("pr_left_skels.pkl")
 VOX_UM = np.array(VOX) / 1000.0
-known = pd.concat([pd.read_csv(os.path.join(FIGURES, f), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
+known = pd.concat([pd.read_csv(fig(f), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
                    for f in ("pr_left_lattice_known.tsv", "pr_left_lattice_noaxis.tsv")]).sort_values("cartridge").reset_index(drop=True)
-st = pd.read_csv(os.path.join(FIGURES, "pr_left_lattice_seatable_prs.tsv"), sep="\t", dtype=str)
+st = pd.read_csv(fig("pr_left_lattice_seatable_prs.tsv"), sep="\t", dtype=str)
 seatable = set(int(x) for x in st.root)
 want = sys.argv[1:] or ["L1", "L2"]
 
@@ -100,6 +101,6 @@ for cn in want:
         print(f"{cn}: {len(long_)} long helpers at {np.sort(d)[:8].round(0).tolist()} um; IDW axis {m.round(3).tolist()}; "
               f"helper angles to it p50/p90 {np.percentile(angs, [50, 90]).round(0).tolist()} deg; within 30 um: "
               f"{int((d < 30).sum())}")
-out = os.path.join(FIGURES, "pr_left_helpers.tsv")
+out = fig("pr_left_helpers.tsv")
 h.to_csv(out, sep="\t", index=False)
 print(f"written {out}")

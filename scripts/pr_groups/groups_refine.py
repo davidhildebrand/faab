@@ -49,10 +49,11 @@ from faab.pr.groups_mirror import prep as skprep
 from faab.pr.bundles import read_box
 from faab.pr.lamina_footprint import flat, retry
 from faab.pr.prs_tab import member_order
+from faab.config import fig
 
 warnings.filterwarnings("ignore")
 navis.set_pbars(hide=True)
-RDIR = os.path.join(OUT, "refine")
+RDIR = fig("refine")
 os.makedirs(RDIR, exist_ok=True)
 PASTES = ["pr_bundles_pairs_paste.tsv", "pr_bundles_pairs_paste_extra.tsv", "refine/new_groups.tsv",  # split-off groups
           "refine/regroup.tsv"]  # 2026-10-17: one group per bundle (groups_regroup.py); 'group N removed' drops a group
@@ -70,10 +71,10 @@ TODAY = datetime.date.today().isoformat()
 def load_groups():
     groups = {}
     for fn in PASTES:
-        if not os.path.exists(os.path.join(OUT, fn)):
+        if not os.path.exists(fig(fn)):
             continue
         g, header = None, None
-        for ln in open(os.path.join(OUT, fn)).read().split("\n"):
+        for ln in open(fig(fn)).read().split("\n"):
             cells = ln.split("\t")
             if ln.startswith("group ") and " removed" in cells[0]:
                 groups.pop(int(cells[0].split()[1]), None)
@@ -128,7 +129,7 @@ def load_presyn():
 
 
 def ref_um():
-    lat = pd.read_csv(os.path.join(OUT, "pr_lattice_known.tsv"), sep="\t")
+    lat = pd.read_csv(fig("pr_lattice_known.tsv"), sep="\t")
     return lat[["lam_x", "lam_y", "lam_z"]].to_numpy(float).mean(0)
 
 
@@ -445,7 +446,7 @@ def cmd_refine(groups, sel):
     state = load_state()
     frames = pickle.load(open(FRAMES, "rb"))
     presyn = load_presyn()
-    rv = pd.read_csv(os.path.join(OUT, "pr_bundles_roots_verified.tsv"), sep="\t", dtype={"root": str})
+    rv = pd.read_csv(fig("pr_bundles_roots_verified.tsv"), sep="\t", dtype={"root": str})
     census = dict(zip(rv.root, rv.verdict))
     owner = {}
     for g in groups:
@@ -889,8 +890,8 @@ def write_outputs(groups, sel, results, state):
                              single=sum(1 for x in v if x in ("terminal only", "ring only")),
                              names=("full" if R["r7"] else "ends unresolved")))
         lines += [f"group {g}", " | ".join(COLS)] + [" | ".join(str(c) for c in row) for row in out] + [""]
-    open(os.path.join(OUT, "pr_groups9plus_refined_pipes.txt"), "w").write("\n".join(lines) + "\n")
-    open(os.path.join(OUT, "pr_groups9plus_refined_paste.tsv"), "w").write(
+    open(fig("pr_groups9plus_refined_pipes.txt"), "w").write("\n".join(lines) + "\n")
+    open(fig("pr_groups9plus_refined_paste.tsv"), "w").write(
         "\n".join(l.replace(" | ", "\t") for l in lines) + "\n")
     S = pd.DataFrame(summ)
     for col in S.columns:

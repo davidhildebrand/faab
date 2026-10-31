@@ -38,6 +38,7 @@ from faab import nglink
 from faab.clients.cave import client as cave_client, roots_at_xyz, throttle
 from faab.config import DATA, FIGURES, TMP
 from faab.partners.sheet import utc_stamp
+from faab.config import fig
 
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 CLS = ("superclass", "class", "subclass", "subsubclass", "type")
@@ -390,7 +391,7 @@ def main():
         summary.append(line)
 
     # ---- outputs
-    base = os.path.join(FIGURES, f"{stamp}_paths_{out_tag}")
+    base = fig(f"{stamp}_paths_{out_tag}")
     pd.DataFrame(out_rows).to_csv(base + "_paths.tsv", sep="\t", index=False)
     pd.DataFrame(cell_rows).to_csv(base + "_cells.tsv", sep="\t", index=False)
     head = [f"paths {out_tag}: sources {a.source_ids or '/' + a.source + '/'} ({len(sources)} cells"

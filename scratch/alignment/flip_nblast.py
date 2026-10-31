@@ -28,6 +28,7 @@ import matplotlib.pyplot as plt
 from faab.clients.cave import DATASTACK, throttle
 
 from faab.morph import fetch_dotprops_um
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 A_IN = 648518347638241763
@@ -128,12 +129,12 @@ def main():
     fig.suptitle(f"A={A_root}  vs  B={B_root} raw and L-R flipped  (dataset: aedes)",
                  fontsize=14, y=0.99)
     fig.tight_layout(rect=[0, 0, 1, 0.97])
-    out = os.path.join(OUT, "flip_nblast.png")
+    out = fig("flip_nblast.png")
     fig.savefig(out, dpi=190)
     print(f"\nsaved {out}")
     pickle.dump({"A_root": A_root, "B_root": B_root, "s_raw": float(s_raw),
                  "s_flip": float(s_flip), "S": S},
-                open(os.path.join(OUT, "flip_nblast.pkl"), "wb"))
+                open(fig("flip_nblast.pkl"), "wb"))
 
 
 if __name__ == "__main__":

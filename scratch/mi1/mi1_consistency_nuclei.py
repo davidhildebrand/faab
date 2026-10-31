@@ -17,6 +17,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from faab.clients.cave import DATASTACK
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 
@@ -37,10 +38,10 @@ def ng_link(segids):
 
 
 def main():
-    by = {int(d.id): d for d in pickle.load(open(os.path.join(OUT, "mi1_dotprops.pkl"), "rb"))}
+    by = {int(d.id): d for d in pickle.load(open(fig("mi1_dotprops.pkl"), "rb"))}
     mi1 = list(by)
     client = caveclient.CAVEclient(DATASTACK)
-    ncache = os.path.join(OUT, "nuclei_cache.pkl")
+    ncache = fig("nuclei_cache.pkl")
     if os.path.exists(ncache):
         nuc = pickle.load(open(ncache, "rb"))
     else:
@@ -61,7 +62,7 @@ def main():
     mi1n = [r for r in mi1 if r in soma]
     print(f"soma-bearing Mi1: {len(mi1n)}")
 
-    mcache = os.path.join(OUT, "mi1_align_matrix.pkl")
+    mcache = fig("mi1_align_matrix.pkl")
     if os.path.exists(mcache):
         M = pickle.load(open(mcache, "rb"))
     else:
@@ -105,11 +106,11 @@ def main():
     fig.suptitle("Soma-bearing Mi1 — nblast_align-aligned to medoid, sorted by consistency "
                  "(color = mean similarity: dark purple = low, orange = high)", fontsize=14, y=0.995)
     fig.tight_layout(rect=[0, 0, 1, 0.98])
-    fig.savefig(os.path.join(OUT, "mi1_gallery.png"), dpi=200)
+    fig.savefig(fig("mi1_gallery.png"), dpi=200)
 
     top10 = [mi1n[order[i]] for i in range(min(10, len(mi1n)))]
     url = ng_link(top10)
-    open(os.path.join(OUT, "mi1_top_ng.txt"), "w").write(url + "\n")
+    open(fig("mi1_top_ng.txt"), "w").write(url + "\n")
     print(f"\ntop-10 root_ids: {top10}")
     print("saved mi1_gallery.png + mi1_top_ng.txt")
 

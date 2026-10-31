@@ -16,6 +16,7 @@ import pandas as pd
 import caveclient
 from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import VOX
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
@@ -63,11 +64,11 @@ def main():
                              size_um=None, n_points=0, position=st.get("position")))
         print(f"[{k + 1}/{len(ids)}] {sid}: {nbox} boxes; layers {names}", flush=True)
     inv = pd.DataFrame(rows)
-    inv.to_csv(os.path.join(OUT, "cutout_inventory.tsv"), sep="\t", index=False)
+    inv.to_csv(fig("cutout_inventory.tsv"), sep="\t", index=False)
 
     # ---- compare with our proposals ----
     ours = {}
-    for p in sorted(glob.glob(os.path.join(OUT, "cutout_group1_*um_state.json"))):
+    for p in sorted(glob.glob(fig("cutout_group1_*um_state.json"))):
         st = json.load(open(p))
         for L in st["layers"]:
             if L.get("type") == "annotation":

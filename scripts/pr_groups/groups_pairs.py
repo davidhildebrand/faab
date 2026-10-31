@@ -26,13 +26,14 @@ import caveclient
 from fafbseg import flywire
 from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import VOX
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
 TMP = os.path.join(HERE, "..", "tmp")
-SCACHE = os.path.join(OUT, "pr_partner_skels.pkl")
-G1 = os.path.join(OUT, "faab_pr_current_roots.tsv")
-G28 = os.path.join(OUT, "faab_pr_groups_xyz.tsv")
+SCACHE = fig("pr_partner_skels.pkl")
+G1 = fig("faab_pr_current_roots.tsv")
+G28 = fig("faab_pr_groups_xyz.tsv")
 
 
 def main():
@@ -49,7 +50,7 @@ def main():
           f"{(df.match == 'MISMATCH').sum()} mismatch, {(df.match == 'no segment at xyz').sum()} empty", flush=True)
     for r in df[df.match != "ok"].itertuples():
         print(f"  group {r.group} {r._3} {r.root_id_orig}: pasted root_id_curr {r.root_id_curr}, at xyz {r.root_at_xyz} ({r.match})", flush=True)
-    df.to_csv(os.path.join(OUT, "faab_pr_groups_roots_at_xyz.tsv"), sep="\t", index=False)
+    df.to_csv(fig("faab_pr_groups_roots_at_xyz.tsv"), sep="\t", index=False)
 
     # skeletons for roots not cached
     sk_by = pickle.load(open(SCACHE, "rb"))
@@ -86,8 +87,8 @@ def main():
     print("\n=== terminal-zone pairs + fly names ===", flush=True)
     F.main()
 
-    mir = pd.read_csv(os.path.join(OUT, "faab_pr_groups_mirror.tsv"), sep="\t", dtype={"cell_a": str, "cell_b": str})
-    fly = pd.read_csv(os.path.join(OUT, "faab_pr_groups_flynames_terminal.tsv"), sep="\t", dtype={"cell": str, "partner": str})
+    mir = pd.read_csv(fig("faab_pr_groups_mirror.tsv"), sep="\t", dtype={"cell_a": str, "cell_b": str})
+    fly = pd.read_csv(fig("faab_pr_groups_flynames_terminal.tsv"), sep="\t", dtype={"cell": str, "partner": str})
     mpart, mscore, mnext = {}, {}, {}
     for r in mir.itertuples():
         mpart[r.cell_a], mpart[r.cell_b] = r.cell_b, r.cell_a
@@ -106,7 +107,7 @@ def main():
                          fly_pair=f.proposed_fly_pair if f is not None else "",
                          agree=("yes" if (f is not None and mpart.get(c, "") == f.partner) else ("no" if f is not None else ""))))
     out = pd.DataFrame(rows)
-    out.to_csv(os.path.join(OUT, "faab_pr_groups_pairs.tsv"), sep="\t", index=False)
+    out.to_csv(fig("faab_pr_groups_pairs.tsv"), sep="\t", index=False)
     pd.set_option("display.width", 250)
     print("\n=== per-cell summary ===")
     print(out.to_string(index=False))

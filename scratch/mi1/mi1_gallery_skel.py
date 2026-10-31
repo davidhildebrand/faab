@@ -16,24 +16,25 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from faab.clients.cave import DATASTACK, throttle
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 
 
 def main():
-    by = {int(d.id): d for d in pickle.load(open(os.path.join(OUT, "mi1_dotprops.pkl"), "rb"))}
+    by = {int(d.id): d for d in pickle.load(open(fig("mi1_dotprops.pkl"), "rb"))}
     mi1 = list(by)
-    nuc = pickle.load(open(os.path.join(OUT, "nuclei_cache.pkl"), "rb"))
+    nuc = pickle.load(open(fig("nuclei_cache.pkl"), "rb"))
     soma = set(int(x) for x in nuc["pt_root_id"] if pd.notna(x))
     mi1n = [r for r in mi1 if r in soma]
-    M = pickle.load(open(os.path.join(OUT, "mi1_align_matrix.pkl"), "rb"))
+    M = pickle.load(open(fig("mi1_align_matrix.pkl"), "rb"))
     assert M.shape[0] == len(mi1n), (M.shape, len(mi1n))
     mean_sim = np.nanmean(M, axis=1)
     order = list(np.argsort(-mean_sim))
     print(f"soma-bearing Mi1: {len(mi1n)}")
 
     # ---- fetch REAL morphology (L2 skeletons, current segmentation) ----
-    scache = os.path.join(OUT, "mi1_skeletons.pkl")
+    scache = fig("mi1_skeletons.pkl")
     if os.path.exists(scache):
         sk_by = pickle.load(open(scache, "rb"))
     else:
@@ -78,7 +79,7 @@ def main():
     fig.suptitle("Soma-bearing Mi1 — actual morphology (L2 skeletons), aligned to medoid, "
                  "sorted by consistency", fontsize=14, y=0.995)
     fig.tight_layout(rect=[0, 0, 1, 0.98])
-    fig.savefig(os.path.join(OUT, "mi1_gallery.png"), dpi=200)
+    fig.savefig(fig("mi1_gallery.png"), dpi=200)
     print("saved mi1_gallery.png (real morphology)")
 
     # ---- pairwise nblast_align score matrix (sorted by consistency) ----
@@ -93,7 +94,7 @@ def main():
     ax2.set_title("Pairwise nblast_align scores between soma-bearing Mi1 "
                   "(sorted by consistency; diagonal masked)", fontsize=12)
     fig2.tight_layout()
-    fig2.savefig(os.path.join(OUT, "mi1_score_matrix.png"), dpi=180)
+    fig2.savefig(fig("mi1_score_matrix.png"), dpi=180)
     print("saved mi1_score_matrix.png")
 
 

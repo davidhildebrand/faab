@@ -35,6 +35,7 @@ from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import VOX
 from faab.pr.side import KNOWN_NAME, PREFIX, parse as parse_side
 import faab.nglink as nglink
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
@@ -79,12 +80,12 @@ def read_box(vol, centre_um, half_vox, res):
 def main():
     side, args = parse_side()  # parsed here, not at import: other scripts import read_box with their own arguments
     pfx = PREFIX[side]
-    cache_path = os.path.join(OUT, f"{pfx}bundle_boxes.pkl")
+    cache_path = fig(f"{pfx}bundle_boxes.pkl")
     refresh = "--refresh" in args
     t0 = time.time()
-    known = pd.read_csv(os.path.join(OUT, f"{pfx}lattice_known.tsv"), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
-    pred = pd.read_csv(os.path.join(OUT, f"{pfx}lattice_predicted.tsv"), sep="\t")
-    st_path = os.path.join(OUT, f"{pfx}lattice_seatable_prs.tsv")
+    known = pd.read_csv(fig(f"{pfx}lattice_known.tsv"), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
+    pred = pd.read_csv(fig(f"{pfx}lattice_predicted.tsv"), sep="\t")
+    st_path = fig(f"{pfx}lattice_seatable_prs.tsv")
     st = pd.read_csv(st_path, sep="\t", dtype=str) if os.path.exists(st_path) else pd.DataFrame(columns=["root", "type", "cart"])
     st_type = {r.root: f"SeaTable {r.type}" + (f" cart {r.cart}" if isinstance(r.cart, str) and r.cart not in ("", "nan") else "")
                for r in st.itertuples()}
@@ -224,9 +225,9 @@ def main():
     cl["xyz_centroid"] = cl.c_vox_x.astype(str) + ", " + cl.c_vox_y.astype(str) + ", " + cl.c_vox_z.astype(str)
     cl = cl.sort_values(["n_new", "n_roots"], ascending=False)
     pr = pr.merge(cl[["n_roots", "n_known", "n_new"]], left_on="cluster", right_index=True)
-    pr.to_csv(os.path.join(OUT, f"{pfx}bundles_roots.tsv"), sep="\t", index=False)
-    df.to_csv(os.path.join(OUT, f"{pfx}bundles_all_roots.tsv"), sep="\t", index=False)
-    cl.to_csv(os.path.join(OUT, f"{pfx}bundles_clusters.tsv"), sep="\t")
+    pr.to_csv(fig(f"{pfx}bundles_roots.tsv"), sep="\t", index=False)
+    df.to_csv(fig(f"{pfx}bundles_all_roots.tsv"), sep="\t", index=False)
+    cl.to_csv(fig(f"{pfx}bundles_clusters.tsv"), sep="\t")
     pd.set_option("display.width", 250)
     print(f"\nbundles (single linkage {LINK_UM} um on the +{int(REF_DEPTH)} um centroids): {len(cl)} clusters, "
           f"{int((cl.n_roots >= 4).sum())} with >= 4 roots, {int(((cl.n_roots >= 4) & (cl.n_known == 0)).sum())} of those entirely new")
@@ -255,8 +256,8 @@ def main():
     state["layers"].append({"type": "annotation", "source": {"url": "local://annotations", "transform": {"outputDimensions": DIMS}},
                             "annotations": anns, "name": f"bundle centroids (+{int(REF_DEPTH)} um)", "annotationColor": "#ffe119"})
     url = nglink.to_url(state)
-    open(os.path.join(OUT, f"{pfx}bundles_ng.txt"), "w").write(url + "\n")
-    json.dump(state, open(os.path.join(OUT, f"{pfx}bundles_state.json"), "w"), indent=1)
+    open(fig(f"{pfx}bundles_ng.txt"), "w").write(url + "\n")
+    json.dump(state, open(fig(f"{pfx}bundles_state.json"), "w"), indent=1)
     print(f"\nlink {len(url)} chars saved to figures/{pfx}bundles_ng.txt; live at {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC; "
           f"DONE in {time.time() - t0:.0f} s")
 

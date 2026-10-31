@@ -11,9 +11,10 @@ import numpy as np
 import pandas as pd
 import navis
 from fafbseg import flywire
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
-CACHE = os.path.join(OUT, "dm2_calib_neurons.pkl")
+CACHE = fig("dm2_calib_neurons.pkl")
 
 
 def fafb_dm2_to_metu1():
@@ -24,7 +25,7 @@ def fafb_dm2_to_metu1():
     m1_r = m1[m1["side"] == "right"]["root_id"].astype("int64").tolist()
     print(f"FAFB right: Dm2={len(dm2_r)}  MeTu1={len(m1_r)} -> adjacency ...")
 
-    cache = os.path.join(OUT, "fafb_dm2_metu1_edges.csv")
+    cache = fig("fafb_dm2_metu1_edges.csv")
     if os.path.exists(cache):
         e = pd.read_csv(cache)
     else:

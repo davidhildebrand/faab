@@ -19,6 +19,7 @@ from fafbseg import flywire
 from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import VOX
 from faab.pr.lamina_footprint import flat, md_table, retry
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
@@ -27,7 +28,7 @@ GROUPS = range(9, 14)
 
 def load_paste():
     rows, g, header = [], None, None
-    for ln in open(os.path.join(OUT, "pr_bundles_pairs_paste.tsv")).read().split("\n"):
+    for ln in open(fig("pr_bundles_pairs_paste.tsv")).read().split("\n"):
         cells = ln.rstrip("\n").split("\t")
         if ln.startswith("group "):
             g = int(cells[0].split()[1])
@@ -55,7 +56,7 @@ def main():
     print(f"roots at xyz: {changed} of {len(df)} differ from the pairing table (2026-10-01)", flush=True)
     pr_group = dict(zip(df.root, df.group))
     pr_class = dict(zip(df.root, df.cls))
-    lat = pd.read_csv(os.path.join(OUT, "pr_lattice_known.tsv"), sep="\t")
+    lat = pd.read_csv(fig("pr_lattice_known.tsv"), sep="\t")
     ref_um = lat[["lam_x", "lam_y", "lam_z"]].to_numpy(float).mean(0)
     now = datetime.datetime.now(datetime.timezone.utc)
     when = f"{now:%Y-%m-%d %H:%M} UTC"
@@ -87,7 +88,7 @@ def main():
                          R8_to_R7_other=n(g, "R8", "R7", False), R7_to_R8_other=n(g, "R7", "R8", False),
                          lamina_to_R7_terminal_um=round(L, 1)))
     tab = pd.DataFrame(rows)
-    tab.to_csv(os.path.join(OUT, "pr_r7r8_extra.tsv"), sep="\t", index=False)
+    tab.to_csv(fig("pr_r7r8_extra.tsv"), sep="\t", index=False)
     sites = []
     for r in pp[pp.pre_class.isin(["R7", "R8"]) & pp.post_class.isin(["R7", "R8"])].itertuples():
         sites.append(dict(pre_group=r.pre_group, post_group=r.post_group, direction=f"{r.pre_class}->{r.post_class}",
@@ -110,7 +111,7 @@ def main():
                          own_R7=int(oc.get("R7", 0)), own_R16=int(oc.get("R1-R6", 0)),
                          other_group_PR=int(s.pre.isin(df.root).sum() - len(own)), rest=int(len(s) - s.pre.isin(df.root).sum())))
     r78in = pd.DataFrame(irow)
-    r78in.to_csv(os.path.join(OUT, "pr_r7r8_extra_inputs.tsv"), sep="\t", index=False)
+    r78in.to_csv(fig("pr_r7r8_extra_inputs.tsv"), sep="\t", index=False)
     print("\n## R7-like / R8-like synapses within the SeaTable cartridges (groups 9-13)\n")
     print(md_table(tab))
     print(f"\nPR -> PR synapses between these groups by class: "

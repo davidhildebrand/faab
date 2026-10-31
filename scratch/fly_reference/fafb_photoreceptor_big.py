@@ -13,6 +13,7 @@ if not hasattr(np, "row_stack"):
 import pandas as pd
 from fafbseg import flywire
 from faab.clients.cave import throttle
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 NSAMPLE = 150
@@ -75,9 +76,9 @@ def main():
         conv.append(g.sort_values("n_syn", ascending=False))
 
     pc = pd.DataFrame(per_cell)
-    pc.to_csv(os.path.join(OUT, "fafb_photoreceptor_percell.csv"), index=False)
+    pc.to_csv(fig("fafb_photoreceptor_percell.csv"), index=False)
     cv = pd.concat(conv, ignore_index=True)
-    cv.to_csv(os.path.join(OUT, "fafb_convergence.csv"), index=False)
+    cv.to_csv(fig("fafb_convergence.csv"), index=False)
 
     pd.set_option("display.width", 170)
     print("\n=== FAFB per-cell summary, median (min-max), ALL sampled cells ===")

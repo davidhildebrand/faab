@@ -33,6 +33,7 @@ from openpyxl.utils import get_column_letter
 from faab.config import FIGURES
 from faab.partners.sheet import KEYS, norm_xyz, parse_sheet, utc_stamp
 from faab.pr.prs_tab import as_date
+from faab.config import fig
 
 
 def typed(text, src_value, col_kind, name=""):
@@ -165,7 +166,7 @@ def main():
         for ws in list(wb.worksheets):
             if ws is not out:
                 wb.remove(ws)
-        path = a.out or os.path.join(FIGURES, f"{utc_stamp()}_FAABopticlobetargets-{a.title}.xlsx")
+        path = a.out or fig(f"{utc_stamp()}_FAABopticlobetargets-{a.title}.xlsx")
         wb.save(path)
         print(f"wrote {path}: tab {a.title}, {len(n_lines)} lines, {msg}")
         return
@@ -239,7 +240,7 @@ def main():
         if ws is not out:
             wb.remove(ws)
     out.title = a.title  # the source workbook may already hold a tab of this name, which made openpyxl add a digit
-    path = a.out or os.path.join(FIGURES, f"{utc_stamp()}_FAABopticlobetargets-{a.title}.xlsx")
+    path = a.out or fig(f"{utc_stamp()}_FAABopticlobetargets-{a.title}.xlsx")
     wb.save(path)
     print(f"wrote {path}: tab {out.title}, {len(n_lines)} lines, {len(n_rows)} data rows; "
           f"{len(added)} added rows styled like the row above: {added}; {formulas} source formulas replaced by values"

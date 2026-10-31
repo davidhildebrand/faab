@@ -14,9 +14,10 @@ from fafbseg import flywire
 
 from faab.clients.cave import DATASTACK, throttle
 from faab.config import FIGURES
+from faab.config import fig
 
-SCACHE = os.path.join(FIGURES, "pr_left_skels.pkl")
-known = pd.concat([pd.read_csv(os.path.join(FIGURES, f), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
+SCACHE = fig("pr_left_skels.pkl")
+known = pd.concat([pd.read_csv(fig(f), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
                    for f in ("pr_left_lattice_known.tsv", "pr_left_lattice_noaxis.tsv")]).sort_values("cartridge").reset_index(drop=True)
 sk = pickle.load(open(SCACHE, "rb"))
 need = sorted({int(x) for v in known.r78_ids for x in v.split(",")} - set(sk))

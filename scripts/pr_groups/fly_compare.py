@@ -27,6 +27,7 @@ from faab.clients.neuprint import client as np_client, MALE_CNS
 import neuprint
 from faab.pr.groups_mirror import reflect, THETAS
 from faab.pr.pairing_demo import analyse_group, PAIR_COL, OUT
+from faab.config import fig
 
 warnings.filterwarnings("ignore")
 navis.set_pbars(hide=True)
@@ -182,7 +183,7 @@ def main():
     ef, ea = extent(FF["term"], bodies, FF), extent(FA["term"], outer, FA)
     ef["dataset"], ea["dataset"] = f"Drosophila {src} (one L1 cartridge)", f"FAAB group {g}"
     tab = pd.concat([ef, ea])
-    tab.to_csv(os.path.join(OUT, f"pr_fly_vs_faab_group{g}.tsv"), sep="\t", index=False)
+    tab.to_csv(fig(f"pr_fly_vs_faab_group{g}.tsv"), sep="\t", index=False)
     print(tab.groupby("dataset")[["p90_radius_um", "t_span_um", "d_span_um", "s_span_um"]].median().round(1))
 
     fig, ax = plt.subplots(2, 3, figsize=(18, 11), constrained_layout=True)
@@ -221,7 +222,7 @@ def main():
         C.set_title("terminal-zone cross-section, same scale; dashed = mutual mirror pairs", fontsize=10)
         A.legend(fontsize=7, loc="upper left", markerscale=4)
     fig.suptitle("Same frame, same scale: Drosophila lamina cartridge terminals vs FAAB ommatidial group")
-    png = os.path.join(OUT, f"pr_fly_vs_faab_group{g}.png")
+    png = fig(f"pr_fly_vs_faab_group{g}.png")
     fig.savefig(png, dpi=120)
     print("saved", png)
 

@@ -16,12 +16,13 @@ import os
 import re
 import sys
 import pandas as pd
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
-SRC = os.path.join(OUT, "faab_pr_top10_xyz.tsv")          # internal working table
-ORIG = os.path.join(OUT, "faab_pr_top10_original.txt")
-DST = os.path.join(OUT, "faab_pr_top10_xyz_ascii.txt")
-SHEET = os.path.join(OUT, "faab_pr_top10_sheet.tsv")
+SRC = fig("faab_pr_top10_xyz.tsv")          # internal working table
+ORIG = fig("faab_pr_top10_original.txt")
+DST = fig("faab_pr_top10_xyz_ascii.txt")
+SHEET = fig("faab_pr_top10_sheet.tsv")
 
 HEADERS = ["upstream_PR", "class", "root_id_orig", "root_id_curr", "xyz", "n_syn",
            "pct_of_outp", "PR_conv", "annotation", "status", "pr_date", "proofreader",

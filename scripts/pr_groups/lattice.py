@@ -35,11 +35,12 @@ from scipy.spatial import ConvexHull, Delaunay
 from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import VOX
 import faab.nglink as nglink
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
 TMP = os.path.join(HERE, "..", "tmp")
-SCACHE = os.path.join(OUT, "pr_partner_skels.pkl")
+SCACHE = fig("pr_partner_skels.pkl")
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 ZONE_UM = 35.0
 RINGS = 2
@@ -106,7 +107,7 @@ def main():
     pr["root"] = roots
     print(f"SeaTable right-side PRs: {len(pr)}; cartridges {sorted(pr.cart.dropna().unique(), key=int)}", flush=True)
     pr[["root", "type", "cart", "notes"]].assign(notes=pr["notes"].astype(object).map(_s)).to_csv(
-        os.path.join(OUT, "pr_lattice_seatable_prs.tsv"), sep="\t", index=False)  # for the probe: already-typed PRs
+        fig("pr_lattice_seatable_prs.tsv"), sep="\t", index=False)  # for the probe: already-typed PRs
     for cnum, sub in pr.dropna(subset=["cart"]).groupby("cart"):
         carts[f"c{cnum}"] = dict(r16=[int(r) for r in sub[sub.type == "R1-6"].root],
                                  r78=[int(r) for r in sub[sub.type == "R7-8"].root], source="LRS")
@@ -120,7 +121,7 @@ def main():
 
     # ---- presynaptic sites of the known PRs (bridge search output): orientation + lamina point ----
     syn_by_root = {}
-    syn_path = os.path.join(OUT, "pr_metu_down_synapses.tsv")
+    syn_path = fig("pr_metu_down_synapses.tsv")
     if os.path.exists(syn_path):
         d = pd.read_csv(syn_path, sep="\t", dtype={"pre_pt_root_id": str})
         for rid, sub in d.groupby("pre_pt_root_id"):
@@ -263,8 +264,8 @@ def main():
             df_[f"lam_vox_{a}"] = (df_[f"lam_{a}"] * 1000.0 / v).round(0).astype(int)
     pred["ring"] = [min(max(abs(i - ki), abs(j - kj), abs((i + j) - (ki + kj))) for ki, kj in occupied) for i, j in zip(pred.lat_i, pred.lat_j)]
     pred = pred.sort_values(["inside_hull", "ring", "nearest_known_um"], ascending=[False, True, True])
-    pred.to_csv(os.path.join(OUT, "pr_lattice_predicted.tsv"), sep="\t", index=False)
-    known.to_csv(os.path.join(OUT, "pr_lattice_known.tsv"), sep="\t", index=False)
+    pred.to_csv(fig("pr_lattice_predicted.tsv"), sep="\t", index=False)
+    known.to_csv(fig("pr_lattice_known.tsv"), sep="\t", index=False)
     print(f"predicted sites: {len(pred)} ({int(pred.inside_hull.sum())} inside the known hull, "
           f"{int((pred.ring == 1).sum())} in ring 1, {int((pred.ring == 2).sum())} in ring 2)", flush=True)
     pd.set_option("display.width", 220)
@@ -286,7 +287,7 @@ def main():
         ax.set_ylabel("v (um)")
         ax.set_title(f"lamina points of known cartridges + fitted hexagonal lattice (spacing {s_best:.1f} um)")
         ax.legend(loc="best", fontsize=8)
-        fig.savefig(os.path.join(OUT, "pr_lattice.png"), dpi=130, bbox_inches="tight")
+        fig.savefig(fig("pr_lattice.png"), dpi=130, bbox_inches="tight")
     except Exception as e:
         print("figure failed:", str(e)[:100])
 
@@ -307,8 +308,8 @@ def main():
                         {"type": "annotation", "source": {"url": "local://annotations", "transform": {"outputDimensions": DIMS}},
                          "annotations": ann_pred, "name": "predicted cartridge sites", "annotationColor": "#ffe119"}]
     url = nglink.to_url(state)
-    open(os.path.join(OUT, "pr_lattice_ng.txt"), "w").write(url + "\n")
-    json.dump(state, open(os.path.join(OUT, "pr_lattice_state.json"), "w"), indent=1)
+    open(fig("pr_lattice_ng.txt"), "w").write(url + "\n")
+    json.dump(state, open(fig("pr_lattice_state.json"), "w"), indent=1)
     print(f"link {len(url)} chars saved; DONE in {time.time() - t0:.0f} s")
     print(url)
 

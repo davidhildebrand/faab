@@ -23,10 +23,11 @@ import caveclient
 from fafbseg import flywire
 from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import primary_neurite_point_nm, backbone_midpoint_nm, VOX
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
-SCACHE = os.path.join(OUT, "pr_partner_skels.pkl")
+SCACHE = fig("pr_partner_skels.pkl")
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 HEADERS = ["root_id_orig", "root_id_curr", "xyz", "annotation", "status", "pr_date",
            "proofreader", "chk_date", "checker", "notes"]

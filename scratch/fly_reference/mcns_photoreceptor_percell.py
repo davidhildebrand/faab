@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from neuprint import NeuronCriteria as NC, fetch_neurons, fetch_simple_connections
 from faab.clients.neuprint import client as npclient, MALE_CNS
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 NSAMPLE = 40
@@ -56,7 +57,7 @@ def main():
                         "top3_pct": int(round(o.weight.nlargest(3).sum() / o.weight.sum() * 100)),
                         "singletons": int((o.weight == 1).sum())})
     df = pd.DataFrame(out)
-    df.to_csv(os.path.join(OUT, "mcns_photoreceptor_percell.csv"), index=False)
+    df.to_csv(fig("mcns_photoreceptor_percell.csv"), index=False)
     pd.set_option("display.width", 170)
     print("\nmedian (min-max) per class, ALL sampled cells:")
     for cls, d in df.groupby("class"):

@@ -29,8 +29,9 @@ import numpy as np
 import pandas as pd
 
 from faab.pr.bundles_pairs import OUT
+from faab.config import fig
 
-RDIR = os.path.join(OUT, "refine")
+RDIR = fig("refine")
 TODAY = datetime.date.today().isoformat()
 VOX_UM = np.array([16.0, 16.0, 45.0]) / 1000.0
 PASTES = ["pr_bundles_pairs_paste.tsv", "pr_bundles_pairs_paste_extra.tsv", "refine/new_groups.tsv"]
@@ -40,7 +41,7 @@ def load_rows():
     """group -> list of row dicts: the same tables groups_refine.py reads, including earlier regroup overrides"""
     groups = {}
     for fn in PASTES + ["refine/regroup.tsv"]:
-        p = os.path.join(OUT, fn)
+        p = fig(fn)
         if not os.path.exists(p):
             continue
         g, header = None, None

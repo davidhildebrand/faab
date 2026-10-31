@@ -29,10 +29,11 @@ from cloudvolume import CloudVolume
 from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import VOX
 import faab.nglink as nglink
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
-BOXES = os.path.join(OUT, "pr_probe_boxes.pkl")
+BOXES = fig("pr_probe_boxes.pkl")
 DEPTHS_UM = [-15.0, 0.0, 15.0, 30.0, 45.0, 60.0]
 BOX_HALF_UM = (3.0, 3.0, 0.7)  # 6 x 6 x 1.4 um box (cartridge spacing ~5.9 um; lattice residuals up to ~2.5 um)
 MIN_SV_VOX = 100               # supervoxel slivers below this (mip-1 voxels, 4.6e-5 um3 each) are ignored
@@ -118,8 +119,8 @@ def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     mode = args[0] if args else "both"
     refresh = "--refresh" in sys.argv
-    known = pd.read_csv(os.path.join(OUT, "pr_lattice_known.tsv"), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
-    pred = pd.read_csv(os.path.join(OUT, "pr_lattice_predicted.tsv"), sep="\t")
+    known = pd.read_csv(fig("pr_lattice_known.tsv"), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
+    pred = pd.read_csv(fig("pr_lattice_predicted.tsv"), sep="\t")
     known_ids = set()
     for col in ("r16_ids", "r78_ids"):
         for s in known[col].fillna(""):
@@ -168,14 +169,14 @@ def main():
     agg["beyond"] = agg._depths.map(lambda d: any(x <= -15.0 for x in d))
     agg["known_PR"] = agg.root.isin(known_ids)
     # PRs already typed in SeaTable (right side, R1-6 / R7-8; written by faab_pr_lattice.py) but not in a known cartridge
-    st_path = os.path.join(OUT, "pr_lattice_seatable_prs.tsv")
+    st_path = fig("pr_lattice_seatable_prs.tsv")
     st = pd.read_csv(st_path, sep="\t", dtype=str) if os.path.exists(st_path) else pd.DataFrame(columns=["root", "type", "cart"])
     st_type = {r.root: f"SeaTable {r.type}" + (f" cartridge {r.cart}" if isinstance(r.cart, str) and r.cart not in ("", "nan") else "")
                for r in st.itertuples()}
     agg["seatable"] = agg.root.map(st_type).fillna("")
     agg["depths"] = agg._depths.map(lambda d: ",".join(f"{int(x):+d}" for x in d))
     agg = agg.drop(columns="_depths")
-    agg.to_csv(os.path.join(OUT, "pr_probe_hits.tsv"), sep="\t", index=False)
+    agg.to_csv(fig("pr_probe_hits.tsv"), sep="\t", index=False)
     PRC = ["PR-like", "PR-axon-like"]
 
     # ---- calibration on the known cartridges ----
@@ -209,7 +210,7 @@ def main():
         cand["n_sites"] = cand.groupby("root").cart.transform("size")
         cand = cand.sort_values(["root", "vox_total", "ring"], ascending=[True, False, True]).drop_duplicates("root")
         cand = cand.sort_values(["cart", "class", "n_depths", "vox_total"], ascending=[True, True, False, False])
-        cand.to_csv(os.path.join(OUT, "pr_probe_candidates.tsv"), sep="\t", index=False)
+        cand.to_csv(fig("pr_probe_candidates.tsv"), sep="\t", index=False)
         known_hits = agg[(agg.kind == "predicted") & agg.known_PR].groupby("cart").root.nunique()
         summ = cand.groupby("cart").agg(n_cand=("root", "size"), full=("class", lambda s: int((s == "PR-like").sum())),
                                         frag=("class", lambda s: int((s == "PR-axon-like").sum())),
@@ -241,8 +242,8 @@ def main():
         state["layers"].append({"type": "annotation", "source": {"url": "local://annotations", "transform": {"outputDimensions": DIMS}},
                                 "annotations": anns, "name": "predicted cartridge sites", "annotationColor": "#ffe119"})
         url = nglink.to_url(state)
-        open(os.path.join(OUT, "pr_probe_ng.txt"), "w").write(url + "\n")
-        json.dump(state, open(os.path.join(OUT, "pr_probe_state.json"), "w"), indent=1)
+        open(fig("pr_probe_ng.txt"), "w").write(url + "\n")
+        json.dump(state, open(fig("pr_probe_state.json"), "w"), indent=1)
         print(f"link {len(url)} chars saved to figures/pr_probe_ng.txt")
     print(f"live at {now:%Y-%m-%d %H:%M} UTC\nDONE")
 

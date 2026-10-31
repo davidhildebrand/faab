@@ -13,6 +13,7 @@ import sys
 
 import numpy as np
 import pandas as pd
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 
@@ -20,7 +21,7 @@ OUT = os.path.join(REPO, "figures")
 def main():
     g = int(sys.argv[1])
     ring_max = float(sys.argv[2]) if len(sys.argv) > 2 else 2.5
-    df = pd.read_csv(os.path.join(OUT, f"pr_bundle_track_group{g}.tsv"), sep="\t")
+    df = pd.read_csv(fig(f"pr_bundle_track_group{g}.tsv"), sep="\t")
     df = df[df.complete]
     outer_roots = sorted(df[~df.cell.isin(["R7", "R8"])].root.unique())
     term_name = dict(zip(df.root, df.cell))

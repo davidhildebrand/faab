@@ -9,7 +9,7 @@ Read-only. fafbseg L2 fetches throttled; neuPrint is query-only. Neurons cached.
 
     .venv/bin/python faab/dm2_calibration.py
 """
-from faab.config import REPO
+from faab.config import REPO, fig
 import os
 import time
 import pickle
@@ -27,7 +27,7 @@ from faab.clients.neuprint import client, OPTIC_LOBE, MALE_CNS
 
 warnings.filterwarnings("ignore")
 OUT = os.path.join(REPO, "figures")
-CACHE = os.path.join(OUT, "dm2_calib_neurons.pkl")
+CACHE = fig("dm2_calib_neurons.pkl")
 RESAMPLE = 1.0   # micron spacing to standardize density across pipelines
 K = 5
 
@@ -187,7 +187,7 @@ def main():
         print(res.round(3).to_string())
         print(f"\n--- {tag}: mean score by target category ---")
         print(res.groupby("cat")["mean_tmpl"].agg(["mean", "min", "max", "count"]).round(3).to_string())
-        res.to_csv(os.path.join(OUT, f"dm2_calib_{'on' if scale else 'off'}.csv"))
+        res.to_csv(fig(f"dm2_calib_{'on' if scale else 'off'}.csv"))
 
 
 if __name__ == "__main__":

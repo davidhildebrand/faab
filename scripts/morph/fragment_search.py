@@ -42,8 +42,9 @@ from faab import nglink
 from faab.clients.cave import DATASTACK, client as cave_client, throttle
 from faab.config import FIGURES
 from faab.partners.sheet import utc_stamp
+from faab.config import fig
 
-SKEL = os.path.join(FIGURES, "fragment_skeletons.pkl")
+SKEL = fig("fragment_skeletons.pkl")
 VOXNM = np.array([16.0, 16.0, 45.0])
 MIN_SV_VOX = 30     # supervoxel slivers below this many mip-1 voxels are ignored
 MIN_HIT_VOX = 100   # a root counts as present in a box with >= this many mip-1 voxels (~0.005 um3)
@@ -296,7 +297,7 @@ def main():
     out.loc[scored, "score"] = (s.recall.rank(pct=True) + s.precision.rank(pct=True) + s.gain.rank(pct=True)
                                 + (-s.gap_um).rank(pct=True) + (s.size_flag == "ok") * 1.0)
     out = out.sort_values(["score", "boxes"], ascending=[False, False], na_position="last")
-    base_path = os.path.join(FIGURES, f"{stamp}_fragment_search_{a.tag}")
+    base_path = fig(f"{stamp}_fragment_search_{a.tag}")
     out.to_csv(base_path + ".tsv", sep="\t", index=False)
     pd.set_option("display.width", 250)
     pd.set_option("display.max_columns", 30)

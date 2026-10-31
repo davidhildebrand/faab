@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 
 from faab.pr.groups_mirror import load_groups, prep, SCACHE, OUT
 from faab.pr.pairing_demo import presyn_centroid
+from faab.config import fig
 
 warnings.filterwarnings("ignore")
 PAIR_COL = {"R2/R5": "#7F77DD", "R1/R6": "#D85A30", "R3/R4": "#1D9E75", "R7": "#A32D2D", "R8": "#0F6E56"}
@@ -32,7 +33,7 @@ def main():
     cells = load_groups()[g]
     sk = pickle.load(open(SCACHE, "rb"))
     names = {}
-    pairs = pd.read_csv(os.path.join(OUT, "faab_pr_groups_pairs.tsv"), sep="\t", dtype=str)
+    pairs = pd.read_csv(fig("faab_pr_groups_pairs.tsv"), sep="\t", dtype=str)
     for r in pairs[pairs.group == str(g)].itertuples():
         names[r.root_used] = r.fly_pair
     for r, c in cells:
@@ -116,7 +117,7 @@ def main():
     D.set_title("D  mirror pairs in the flattened frame: midpoint distance from the centre (solid) and half-separation (dotted)")
     D.legend(fontsize=8)
     fig.suptitle(f"Group {g}: bundle flattened slice by slice (offsets from the mean of all axons in each {STEP:.0f}-um slice)")
-    png = os.path.join(OUT, f"pr_bundle_flatten_group{g}.png")
+    png = fig(f"pr_bundle_flatten_group{g}.png")
     fig.savefig(png, dpi=120)
     print("saved", png)
     # numbers: cyclic order at a few depths

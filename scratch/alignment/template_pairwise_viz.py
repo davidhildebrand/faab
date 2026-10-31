@@ -21,6 +21,7 @@ import caveclient
 from fafbseg import flywire
 
 from faab.clients.cave import latest_roots, throttle, DATASTACK
+from faab.config import fig
 
 IDS = [648518347611904256, 648518347550912741, 648518347638273763]
 OUT = os.path.join(REPO, "figures")
@@ -36,7 +37,7 @@ def short(i):
 
 def fetch_skeletons_um():
     """Read-only L2 skeleton fetch (refined), returned in microns. Cached."""
-    cache = os.path.join(OUT, "skel_cache.pkl")
+    cache = fig("skel_cache.pkl")
     if os.path.exists(cache):
         sk, roots = pickle.load(open(cache, "rb"))
         print("loaded cached skeletons:", [short(r) for r in roots])
@@ -111,7 +112,7 @@ def main():
                  y=0.99, fontsize=13)
     fig.tight_layout(rect=[0, 0.05, 1, 0.96])
 
-    out = os.path.join(OUT, "template_pairwise.png")
+    out = fig("template_pairwise.png")
     fig.savefig(out, dpi=150, bbox_inches="tight")
     print("\nscores vs template:", {k: round(v, 3) for k, v in scores.items()})
     print("saved figure ->", out)

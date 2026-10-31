@@ -19,7 +19,9 @@ import os
 import re
 import shutil
 
-REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from faab.config import FIG_TOPICS
+
+REPO =os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 FAAB = os.path.dirname(REPO)
 FIG = os.path.join(REPO, "figures")
 EXT = r"(?:tsv|pkl|json|txt|png|html|md|csv|xlsx|npz|svg|pdf|log)"
@@ -52,16 +54,25 @@ def main():
     for f in a.fix_refs:
         files += sorted(glob.glob(os.path.join(f, "*.md"))) if os.path.isdir(f) else [f]
     notes = "\n".join(open(f, encoding="utf-8").read() for f in files)
-    names = sorted(n for n in os.listdir(FIG) if not n.startswith(".") and n != "archive")
-    stamped = {n: STAMP.sub("", n) for n in names if STAMP.search(n)}
+    topics = {t for t, _ in FIG_TOPICS} | {"misc"}
+    names = []  # paths relative to figures/: top-level entries, and the files inside the topic folders
+    for n in sorted(os.listdir(FIG)):
+        if n.startswith(".") or n == "archive":
+            continue
+        if n in topics and os.path.isdir(os.path.join(FIG, n)):
+            names += [f"{n}/{m}" for m in sorted(os.listdir(os.path.join(FIG, n))) if not m.startswith(".")]
+        else:
+            names.append(n)
+    base = lambda rel: rel.split("/")[-1]
+    stamped = {n: STAMP.sub("", base(n)) for n in names if STAMP.search(base(n))}
     newest = {}
     for n, series in stamped.items():
-        if series not in newest or max(STAMP.findall(n)) > max(STAMP.findall(newest[series])):
+        if series not in newest or max(STAMP.findall(base(n))) > max(STAMP.findall(base(newest[series]))):
             newest[series] = n
     keep, moves = [], []
     for n in names:
         path = os.path.join(FIG, n)
-        if n in a.keep:
+        if base(n) in a.keep:
             keep.append(n)
         elif n in stamped:
             if newest[stamped[n]] == n:
@@ -69,11 +80,11 @@ def main():
             else:
                 moves.append((n, "superseded"))
         elif os.path.isdir(path):
-            if n in words:
+            if base(n) in words:
                 keep.append(n)
             else:
                 moves.append((n, "outputs"))
-        elif any(p.fullmatch(n) for p in pats) or re.search(r"figures/" + re.escape(n) + r"(?![\w]|\.\w)", notes):
+        elif any(p.fullmatch(base(n)) for p in pats) or re.search(r"figures/" + re.escape(n) + r"(?![\w]|\.\w)", notes):
             keep.append(n)  # read by the code, or named in the notes (deliverables such as html pages)
         else:
             moves.append((n, "outputs"))
@@ -87,7 +98,7 @@ def main():
         t = s
         for n, k in moves:
             t = re.sub(r"(?<![\w/])((?:faab/)?figures/)" + re.escape(n) + r"(?![\w]|\.\w)",
-                       lambda m, n=n, k=k: m.group(1) + f"archive/{os.path.basename(dest)}/{k}/{n}", t)
+                       lambda m, n=n, k=k: m.group(1) + f"archive/{os.path.basename(dest)}/{k}/{base(n)}", t)
         if t != s:
             print(f"  refs rewritten in {os.path.basename(f)}" + ("" if a.apply else " (dry run)"))
             if a.apply:
@@ -100,9 +111,9 @@ def main():
         with open(os.path.join(dest, "MANIFEST.tsv"), "a", encoding="utf-8") as fh:
             for n, k in moves:
                 os.makedirs(os.path.join(dest, k), exist_ok=True)
-                shutil.move(os.path.join(FIG, n), os.path.join(dest, k, n))
-                fh.write(f"{n}\t{os.path.relpath(os.path.join(dest, k, n), FIG)}\n")
-    print(f"done; figures now holds {len(os.listdir(FIG))} entries")
+                shutil.move(os.path.join(FIG, n), os.path.join(dest, k, base(n)))
+                fh.write(f"{n}\t{os.path.relpath(os.path.join(dest, k, base(n)), FIG)}\n")
+    print(f"done; figures now holds {len(names) - len(moves)} kept entries")
 
 
 if __name__ == "__main__":

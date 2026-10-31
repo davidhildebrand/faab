@@ -4,13 +4,14 @@ Writes figures/pr_groups9plus_changes.txt (' | ' separated, no dash rows) and pr
 from faab.config import REPO
 import os
 from collections import Counter
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 
 
 def read(fn):
     rows, g, header = {}, None, None
-    for ln in open(os.path.join(OUT, fn)).read().split("\n"):
+    for ln in open(fig(fn)).read().split("\n"):
         c = ln.split("\t")
         if ln.startswith("group "):
             g = int(c[0].split()[1])
@@ -65,6 +66,6 @@ for (g, ro), d in sorted(new.items()):
                 o.get("partner_root_id_curr", "") if o else "", d.get("fly_pair", ""), d.get("partner_root_id_curr", ""),
                 d.get("confidence", ""), note[:160]])
 lines = [" | ".join(cols)] + [" | ".join(r) for r in out]
-open(os.path.join(OUT, "pr_groups9plus_changes.txt"), "w").write("\n".join(lines) + "\n")
+open(fig("pr_groups9plus_changes.txt"), "w").write("\n".join(lines) + "\n")
 print(f"{len(out)} rows changed in {len({r[0] for r in out})} groups; by kind: {dict(kinds)}")
 print(f"unchanged rows: {len(new) - len(out)}")

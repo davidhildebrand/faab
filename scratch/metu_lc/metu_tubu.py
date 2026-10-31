@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from sklearn.cluster import SpectralCoclustering
 
 from faab.clients.cave import throttle, DATASTACK
+from faab.config import fig
 
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 OUT = os.path.join(REPO, "figures")
@@ -64,10 +65,10 @@ def main():
     ax.set_xlabel("TuBu (reordered by co-cluster)")
     ax.set_ylabel("MeTu (reordered by co-cluster)")
     ax.set_title("(aedes) MeTu x TuBu connectivity, spectral co-clustered (k=4)")
-    fig.tight_layout(); fig.savefig(os.path.join(OUT, "faab_metu_tubu_coclust.png"), dpi=150)
+    fig.tight_layout(); fig.savefig(fig("faab_metu_tubu_coclust.png"), dpi=150)
 
     pd.DataFrame({"root_id": mat.index.astype("int64"), "metu_tubu_cluster_k4": co.row_labels_}
-                 ).to_csv(os.path.join(OUT, "faab_metu_tubu_clusters.csv"), index=False)
+                 ).to_csv(fig("faab_metu_tubu_clusters.csv"), index=False)
     print("saved faab_metu_tubu_coclust.png + faab_metu_tubu_clusters.csv")
 
 

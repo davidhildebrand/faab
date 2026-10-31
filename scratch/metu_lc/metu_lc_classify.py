@@ -5,12 +5,13 @@ import os
 import pickle
 import numpy as np
 import pandas as pd
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 
 
 def main():
-    R = pickle.load(open(os.path.join(OUT, "metu_lc_nblast.pkl"), "rb"))
+    R = pickle.load(open(fig("metu_lc_nblast.pkl"), "rb"))
     df = R["df"]
     mm = df[df.label == "MeTu4"]
     med = mm.sim_MeTu4.median()                 # a real MeTu4 is ~this MeTu4-like
@@ -35,14 +36,14 @@ def main():
         print(t2[cols].to_string(index=False, float_format=fmt))
     print(f"\nremaining LC (stay LC): {len(lc) - len(t1) - len(t2)}")
 
-    open(os.path.join(OUT, "metu4_cand_tier1.txt"), "w").write(
+    open(fig("metu4_cand_tier1.txt"), "w").write(
         "\n".join(str(r) for r in t1.root) + "\n")
-    open(os.path.join(OUT, "metu4_cand_tier2.txt"), "w").write(
+    open(fig("metu4_cand_tier2.txt"), "w").write(
         "\n".join(str(r) for r in t2.root) + "\n")
     # MeTu4 reference ids for the ng link
-    open(os.path.join(OUT, "metu4_ref.txt"), "w").write(
+    open(fig("metu4_ref.txt"), "w").write(
         "\n".join(str(r) for r in mm.root) + "\n")
-    t1[cols].to_csv(os.path.join(OUT, "metu4_tier1.csv"), index=False)
+    t1[cols].to_csv(fig("metu4_tier1.csv"), index=False)
     print("\nsaved metu4_cand_tier1.txt / tier2.txt / metu4_ref.txt / metu4_tier1.csv\nDONE")
 
 

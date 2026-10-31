@@ -1,6 +1,6 @@
 """Tidy FAAB/tmp: keep only what the repo code reads from tmp, archive everything else (never delete).
 
-KEEP (stays in tmp/): every tmp entry whose name appears in the repo code (faab/src, faab/scripts: e.g.
+KEEP (stays in tmp/): every tmp entry whose name appears in the repo code (faab/src, faab/scripts, faab/scratch: e.g.
 pr_groups_pasted.tsv, nuclei_v1_aedes_v542.tsv, paths_cache, t4t5_knn.tsv), the newest *_Backup.xlsx workbook,
 archive/, dotfiles, and any --keep NAME. Everything else moves to tmp/archive/<YYYYMMDD>[<suffix>]/{scripts,logs,
 sheets,data,dirs}/ with a MANIFEST.tsv (name -> new path). With --fix-refs, references 'tmp/<name>' in the given text
@@ -22,7 +22,7 @@ TMP = os.path.join(FAAB, "tmp")
 
 def code_text():
     parts = []
-    for d in ("src", "scripts"):
+    for d in ("src", "scripts", "scratch"):  # scratch too: its kept analyses read tmp inputs (2026-10-30 lesson)
         for p in glob.glob(os.path.join(REPO, d, "**", "*.py"), recursive=True):
             parts.append(open(p, encoding="utf-8", errors="ignore").read())
     return "\n".join(parts)

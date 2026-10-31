@@ -24,6 +24,7 @@ from scipy.cluster.hierarchy import linkage, fcluster, leaves_list
 from scipy.spatial.distance import squareform
 
 from faab.morph import fetch_dotprops_um
+from faab.config import fig
 
 warnings.filterwarnings("ignore")
 navis.set_pbars(hide=True)
@@ -35,7 +36,7 @@ CUT = 0.5  # cluster cut on aligned similarity (distance 1 - score)
 
 def main():
     t0 = time.time()
-    bridge = pd.read_csv(os.path.join(OUT, "pr_metu_bridge.tsv"), sep="\t", dtype={"root": str})
+    bridge = pd.read_csv(fig("pr_metu_bridge.tsv"), sep="\t", dtype={"root": str})
     strong = bridge[bridge.path_strength >= MIN_SYN].copy()
     lmc = bridge[bridge.flytable.astype(str).str.contains("L1-L5") & (bridge.path_strength < MIN_SYN)].copy()
     cells = pd.concat([strong.assign(role="bridge"), lmc.assign(role="LMC reference")]).drop_duplicates("root")
@@ -43,7 +44,7 @@ def main():
     cells.loc[(cells.syn_from_R7R8 > 0) & (cells.syn_from_R1R6 > 0), "pr_input"] = "mixed"
     print(f"{len(strong)} bridges (>= {MIN_SYN} syn both legs) + {len(lmc)} LMC references", flush=True)
 
-    cache = os.path.join(OUT, "bridge_dotprops.pkl")
+    cache = fig("bridge_dotprops.pkl")
     dps = pickle.load(open(cache, "rb")) if os.path.exists(cache) else {}
     need = [r for r in cells.root if r not in dps]
     if need:
@@ -68,8 +69,8 @@ def main():
     np.fill_diagonal(al.values, 1.0)
     print(f"aligned NBLAST done {time.time() - t0:.0f} s", flush=True)
     plain.index = plain.columns = ids
-    plain.round(3).to_csv(os.path.join(OUT, "bridge_nblast_plain.tsv"), sep="\t")
-    al.round(3).to_csv(os.path.join(OUT, "bridge_nblast_aligned.tsv"), sep="\t")
+    plain.round(3).to_csv(fig("bridge_nblast_plain.tsv"), sep="\t")
+    al.round(3).to_csv(fig("bridge_nblast_aligned.tsv"), sep="\t")
 
     D = 1 - al.values
     D = np.clip((D + D.T) / 2, 0, None)
@@ -88,7 +89,7 @@ def main():
     cells = cells.sort_values(["cluster", "mean_aligned_to_cluster"], ascending=[True, False])
     keep = ["root", "role", "pr_input", "syn_from_R7R8", "syn_from_R1R6", "syn_to_MeTu", "n_MeTu", "n_points", "extent_um",
             "cluster", "mean_aligned_to_cluster", "mean_aligned_to_all", "mean_plain_to_all", "flytable"]
-    cells[keep].to_csv(os.path.join(OUT, "bridge_nblast_cells.tsv"), sep="\t", index=False)
+    cells[keep].to_csv(fig("bridge_nblast_cells.tsv"), sep="\t", index=False)
     pd.set_option("display.width", 250)
     print("\nper cell:")
     print(cells[keep].to_string(index=False))
@@ -119,7 +120,7 @@ def main():
             ax.set_title(title)
         fig.colorbar(im, ax=axes, fraction=0.02, label="normalised mean NBLAST")
         fig.suptitle(f"PR->MeTu bridge cells (>= {MIN_SYN} syn both legs) + LMC references; clusters cut at {CUT}")
-        fig.savefig(os.path.join(OUT, "bridge_nblast.png"), dpi=130, bbox_inches="tight")
+        fig.savefig(fig("bridge_nblast.png"), dpi=130, bbox_inches="tight")
         print("saved figures/bridge_nblast.png")
     except Exception as e:
         print("figure failed:", str(e)[:100])

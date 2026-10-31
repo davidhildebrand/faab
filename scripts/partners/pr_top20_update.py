@@ -28,12 +28,13 @@ import caveclient
 from fafbseg import flywire
 from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import primary_neurite_point_nm, backbone_midpoint_nm, VOX
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
 TMP = os.path.join(HERE, "..", "tmp")
-SCACHE = os.path.join(OUT, "pr_partner_skels.pkl")
-LIN = os.path.join(OUT, "pr_partner_lineage.json")
+SCACHE = fig("pr_partner_skels.pkl")
+LIN = fig("pr_partner_lineage.json")
 TOPN = 20
 SHEET_COLS = ["upstream_PR", "class", "root_id_orig", "root_id_curr", "xyz", "n_syn", "pct_of_outp",
               "PR_conv", "annotation", "status", "pr_date", "proofreader", "chk_date", "checker",
@@ -372,8 +373,8 @@ def main():
 
     cols = SHEET_COLS + ["n_syn_prev", "update"]
     df = pd.DataFrame(new_rows)[["rank"] + cols]
-    df.to_csv(os.path.join(OUT, "faab_pr_top20_update.tsv"), sep="\t", index=False)
-    with open(os.path.join(OUT, "faab_pr_top20_update_blocks.tsv"), "w") as f:
+    df.to_csv(fig("faab_pr_top20_update.tsv"), sep="\t", index=False)
+    with open(fig("faab_pr_top20_update_blocks.tsv"), "w") as f:
         for o in pr_orig:
             f.write(f"{o}  [{pr_class[o]}]  {tot.get(o, 0)} output synapses across {npart.get(o, 0)} partners  "
                     f"(live {now:%Y-%m-%d}, root {pr_curr[o]})\n")
@@ -382,8 +383,8 @@ def main():
                 f.write("\t".join(str(r[c]) for c in cols) + "\n")
             f.write("\n")
     json.dump({"live_utc": f"{now:%Y-%m-%d %H:%M}", "pr_roots": pr_curr, "totals": {o: [tot.get(o, 0), npart.get(o, 0)] for o in pr_orig}},
-              open(os.path.join(OUT, "faab_pr_top20_update_meta.json"), "w"), indent=1)
-    print(open(os.path.join(OUT, "faab_pr_top20_update_blocks.tsv")).read())
+              open(fig("faab_pr_top20_update_meta.json"), "w"), indent=1)
+    print(open(fig("faab_pr_top20_update_blocks.tsv")).read())
     print(f"DONE in {time.time() - t0:.0f} s")
 
 

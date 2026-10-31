@@ -35,9 +35,10 @@ from faab.clients.cave import DATASTACK, throttle
 from faab.config import FIGURES
 from faab.partners.top10_xyz import VOX
 import faab.nglink as nglink
+from faab.config import fig
 
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
-SCACHE = os.path.join(FIGURES, "pr_left_skels.pkl")
+SCACHE = fig("pr_left_skels.pkl")
 SPACING_UM = 5.9   # right-side hexagonal lattice spacing (lattice.py, 2026-10-01)
 RINGS = 4
 ZONE_UM = 35.0
@@ -74,7 +75,7 @@ def main():
     pr["root"] = [int(x) for x in np.asarray(client.chunkedgraph.get_roots([int(_s(v)) for v in pr["supervoxel_id"]]))]
     print(f"SeaTable left-side PRs: {len(pr)}; cartridges {sorted(pr.cart.dropna().unique(), key=int)}", flush=True)
     pr[["root", "type", "cart", "notes"]].assign(notes=pr["notes"].astype(object).map(_s)).to_csv(
-        os.path.join(FIGURES, "pr_left_lattice_seatable_prs.tsv"), sep="\t", index=False)
+        fig("pr_left_lattice_seatable_prs.tsv"), sep="\t", index=False)
     carts = {f"L{c}": dict(r16=[int(r) for r in sub[sub.type == "R1-6"].root], r78=[int(r) for r in sub[sub.type == "R7-8"].root])
              for c, sub in pr.dropna(subset=["cart"]).groupby("cart")}
 
@@ -107,7 +108,7 @@ def main():
     print(allk[["cartridge", "n_r16", "n_r78", "lamina_from", "length_um", "lam_vox_x", "lam_vox_y", "lam_vox_z"]].to_string(index=False), flush=True)
     noaxis = allk[allk.length_um < OWN_AXIS_MIN_UM]
     known = allk[allk.length_um >= OWN_AXIS_MIN_UM].reset_index(drop=True)
-    noaxis.to_csv(os.path.join(FIGURES, "pr_left_lattice_noaxis.tsv"), sep="\t", index=False)
+    noaxis.to_csv(fig("pr_left_lattice_noaxis.tsv"), sep="\t", index=False)
     print(f"usable cartridges (R1-R6 reach >= {OWN_AXIS_MIN_UM:.0f} um): {known.cartridge.tolist()}; without an axis (no sites): "
           f"{noaxis.cartridge.tolist()}", flush=True)
     if known.empty:
@@ -142,8 +143,8 @@ def main():
     pred = pd.DataFrame(pred)
     for a, v in zip("xyz", VOX):
         pred[f"lam_vox_{a}"] = (pred[f"lam_{a}"] * 1000.0 / v).round(0).astype(int)
-    known.to_csv(os.path.join(FIGURES, "pr_left_lattice_known.tsv"), sep="\t", index=False)
-    pred.to_csv(os.path.join(FIGURES, "pr_left_lattice_predicted.tsv"), sep="\t", index=False)
+    known.to_csv(fig("pr_left_lattice_known.tsv"), sep="\t", index=False)
+    pred.to_csv(fig("pr_left_lattice_predicted.tsv"), sep="\t", index=False)
     print(f"sites: {len(known)} known + {len(pred)} predicted ({pred.patch.value_counts().to_dict()}; "
           f"{RINGS} rings at {SPACING_UM} um, perpendicular to the axis)", flush=True)
 
@@ -164,7 +165,7 @@ def main():
                          "annotations": ann_known, "name": "cartridge lamina points", "annotationColor": "#2ecc71"},
                         {"type": "annotation", "source": {"url": "local://annotations", "transform": {"outputDimensions": DIMS}},
                          "annotations": ann_pred, "name": "census sites", "annotationColor": "#ffe119"}]
-    open(os.path.join(FIGURES, "pr_left_sites_ng.txt"), "w").write(nglink.to_url(state) + "\n")
+    open(fig("pr_left_sites_ng.txt"), "w").write(nglink.to_url(state) + "\n")
     throttle(t)
     sid = client.state.upload_state_json(state)
     print(f"short link: {client.state.build_neuroglancer_url(sid, ngl_url='https://spelunker.cave-explorer.org')}")

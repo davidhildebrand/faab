@@ -13,6 +13,7 @@ import caveclient
 import seaserpent as ss
 from fafbseg import flywire
 from faab.clients.cave import DATASTACK, throttle
+from faab.config import fig
 
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 OUT = os.path.join(REPO, "figures")
@@ -65,7 +66,7 @@ def main():
 
     pickle.dump({"dotprops": by, "label_by_root": lab_by_root, "status_by_root": stat_by_root,
                  "svid_by_root": {c: s for c, s in zip(cur, svid)}},
-                open(os.path.join(OUT, "metu_lc_dotprops_fresh.pkl"), "wb"))
+                open(fig("metu_lc_dotprops_fresh.pkl"), "wb"))
     print("\nsaved metu_lc_dotprops_fresh.pkl\nDONE", flush=True)
 
 

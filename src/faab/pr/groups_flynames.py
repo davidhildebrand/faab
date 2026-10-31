@@ -22,6 +22,7 @@ import pandas as pd
 import navis
 
 from faab.pr.groups_mirror import load_groups, prep, reflect, THETAS, SCACHE, OUT
+from faab.config import fig
 
 warnings.filterwarnings("ignore")
 navis.set_pbars(hide=True)
@@ -127,7 +128,7 @@ def main():
             print("  " + note_extra)
     pd.DataFrame(all_rows, columns=["group", "cell", "t_um", "d_um", "self_mirror", "partner",
                                     "pair_score", "proposed_fly_pair"]).to_csv(
-        os.path.join(OUT, "faab_pr_groups_flynames.tsv"), sep="\t", index=False)
+        fig("faab_pr_groups_flynames.tsv"), sep="\t", index=False)
     print(f"\nassumptions: R2/R5 = pair farthest from the plane; R1/R6 = straddling pair nearest the R7/R8 "
           f"axons (R7 is recruited between R1 and R6 in the fly); R3/R4 = the other straddling pair.")
     print(f"DONE in {time.time() - t0:.0f} s")

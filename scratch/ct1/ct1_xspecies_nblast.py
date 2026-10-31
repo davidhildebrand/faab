@@ -20,6 +20,7 @@ from fafbseg import flywire
 
 from faab.clients.cave import DATASTACK, latest_roots, throttle
 from faab.clients.neuprint import client as npclient, MALE_CNS
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 AEDES = {"A": 648518347638241763, "B": 648518347495933144}
@@ -87,7 +88,7 @@ def main():
             print(f"    {a} vs fly {f}: {M[idx[a], idx[f]]:.3f}")
     print(f"  fly CT1_L vs CT1_R (same-type reference): {M[idx['CT1_L'], idx['CT1_R']]:.3f}")
     print(f"  Aedes A vs B: {M[idx['A'], idx['B']]:.3f}")
-    pickle.dump({"labels": lab, "M": M}, open(os.path.join(OUT, "ct1_xspecies_nblast.pkl"), "wb"))
+    pickle.dump({"labels": lab, "M": M}, open(fig("ct1_xspecies_nblast.pkl"), "wb"))
     print("\nsaved ct1_xspecies_nblast.pkl\nDONE", flush=True)
 
 

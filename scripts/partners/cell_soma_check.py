@@ -18,6 +18,7 @@ import pandas as pd
 import caveclient
 from faab.clients.cave import DATASTACK
 from faab.partners.top10_xyz import VOX
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
@@ -29,8 +30,8 @@ def vox(p_nm):
 
 
 def main():
-    leaves = pickle.load(open(os.path.join(OUT, "l2_leaves.pkl"), "rb")) if os.path.exists(os.path.join(OUT, "l2_leaves.pkl")) else {}
-    chunks = pickle.load(open(os.path.join(OUT, "l2_chunkdata.pkl"), "rb")) if os.path.exists(os.path.join(OUT, "l2_chunkdata.pkl")) else {}
+    leaves = pickle.load(open(fig("l2_leaves.pkl"), "rb")) if os.path.exists(fig("l2_leaves.pkl")) else {}
+    chunks = pickle.load(open(fig("l2_chunkdata.pkl"), "rb")) if os.path.exists(fig("l2_chunkdata.pkl")) else {}
     ids = leaves.get(ROOT)
     if ids:
         rows = []
@@ -69,7 +70,7 @@ def main():
         if n_cand == 0:
             print("  no compact cluster of that size: no soma candidate from chunk volumes")
     else:
-        sk = pickle.load(open(os.path.join(OUT, "pr_partner_skels.pkl"), "rb"))
+        sk = pickle.load(open(fig("pr_partner_skels.pkl"), "rb"))
         s = sk.get(ROOT)
         if s is None:
             print(f"root {ROOT}: not in the L2 chunk cache nor the skeleton cache")

@@ -17,12 +17,13 @@ import pandas as pd
 import caveclient
 from faab.clients.cave import DATASTACK
 from faab.partners.top10_xyz import primary_neurite_point_nm, backbone_midpoint_nm, VOX
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
-TSV = os.path.join(OUT, "faab_pr_top10_xyz.tsv")
-CHK = os.path.join(OUT, "pr_partner_split_check.json")
-SCACHE = os.path.join(OUT, "pr_partner_skels.pkl")
+TSV = fig("faab_pr_top10_xyz.tsv")
+CHK = fig("pr_partner_split_check.json")
+SCACHE = fig("pr_partner_skels.pkl")
 
 
 def main():

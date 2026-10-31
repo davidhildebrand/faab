@@ -46,6 +46,7 @@ from faab.clients.cave import DATASTACK, client as cave_client, roots_at_xyz, th
 from faab.config import FIGURES, TMP
 from faab.partners.sheet import utc_stamp
 from faab.pr.prs_tab import as_date
+from faab.config import fig
 
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 CLS = ("superclass", "class", "subclass", "subsubclass", "type")
@@ -56,7 +57,7 @@ COLS = ["hop", "PR_root_id", "PRtype", "hop1_root_id", "hop2_root_id", "root_id_
 STYLE_ALIAS = {"upstream_PR": "PR_root_id", "hop": "PR_root_id", "hop2_root_id": "hop1_root_id", "nsyn_out": "nsyn",
                "T4T5_reached": "h1_conv", "cable_um": "syn_pct", "neuropils": "notes", "tracked_in": "notes"}
 WIDTH = {"hop": 5, "nsyn_out": 9, "T4T5_reached": 12, "cable_um": 9, "neuropils": 30, "tracked_in": 30}
-SKEL = os.path.join(FIGURES, "fragment_skeletons.pkl")
+SKEL = fig("fragment_skeletons.pkl")
 VOX = np.array([16.0, 16.0, 45.0])
 _t = [0.0]
 
@@ -335,7 +336,7 @@ def main():
     lines += [("note", t) for t in notes]
 
     # ---- TSV
-    base = os.path.join(FIGURES, f"{stamp}_FAABopticlobetargets-{a.title}")
+    base = fig(f"{stamp}_FAABopticlobetargets-{a.title}")
     with open(base + ".tsv", "w", encoding="utf-8") as fh:
         for kind, v in lines:
             if kind == "data":

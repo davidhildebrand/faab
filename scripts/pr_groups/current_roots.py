@@ -17,10 +17,11 @@ import caveclient
 from fafbseg import flywire
 from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import backbone_midpoint_nm, VOX
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
-DST = os.path.join(OUT, "faab_pr_current_roots.tsv")
-SCACHE = os.path.join(OUT, "pr_partner_skels.pkl")
+DST = fig("faab_pr_current_roots.tsv")
+SCACHE = fig("pr_partner_skels.pkl")
 PRS = {648518347649903570: "R1-R6", 648518347649905106: "R1-R6", 648518347642147360: "R1-R6",
        648518347626884562: "R1-R6", 648518347643620818: "R1-R6", 648518347567256005: "R1-R6",
        648518347777360890: "R7-R8", 648518347626873298: "R7-R8"}

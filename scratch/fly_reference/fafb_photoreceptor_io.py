@@ -15,6 +15,7 @@ if not hasattr(np, "row_stack"):
 import pandas as pd
 from fafbseg import flywire
 from faab.clients.cave import throttle
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 NSAMPLE = 40
@@ -71,8 +72,8 @@ def main():
     print("\n=== FAFB/FlyWire photoreceptor reference (median of IQR cells) ===")
     pd.set_option("display.width", 170)
     print(df.to_string(index=False))
-    df.to_csv(os.path.join(OUT, "fafb_photoreceptor_ref.csv"), index=False)
-    pd.concat(per_cell_all).to_csv(os.path.join(OUT, "fafb_photoreceptor_percell.csv"),
+    df.to_csv(fig("fafb_photoreceptor_ref.csv"), index=False)
+    pd.concat(per_cell_all).to_csv(fig("fafb_photoreceptor_percell.csv"),
                                    index=False)
     print("\nsaved fafb_photoreceptor_ref.csv + fafb_photoreceptor_percell.csv\nDONE")
 

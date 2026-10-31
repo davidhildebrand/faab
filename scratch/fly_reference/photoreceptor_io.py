@@ -13,6 +13,7 @@ if not hasattr(np, "row_stack"):
 import pandas as pd
 import caveclient
 from faab.clients.cave import DATASTACK, throttle
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 
@@ -93,7 +94,7 @@ def main():
         else:
             print("      (no output synapses)")
 
-    df.to_csv(os.path.join(OUT, "photoreceptor_io.csv"), index=False)
+    df.to_csv(fig("photoreceptor_io.csv"), index=False)
     allp = []
     for r in ALL:
         op, ip = per_cell_partners[r]
@@ -103,7 +104,7 @@ def main():
         for pid, n in ip.items():
             allp.append({"cell": r, "class": LABEL[r], "direction": "input",
                          "partner": int(pid), "n_syn": int(n)})
-    pd.DataFrame(allp).to_csv(os.path.join(OUT, "photoreceptor_partners.csv"), index=False)
+    pd.DataFrame(allp).to_csv(fig("photoreceptor_partners.csv"), index=False)
     print("\nsaved photoreceptor_io.csv + photoreceptor_partners.csv")
     print("DONE")
 

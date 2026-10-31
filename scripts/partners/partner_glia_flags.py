@@ -21,11 +21,12 @@ import pandas as pd
 import caveclient
 from fafbseg import flywire
 from faab.clients.cave import DATASTACK, throttle
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
-SCACHE = os.path.join(OUT, "pr_partner_skels.pkl")
-TSV = os.path.join(OUT, "faab_pr_top20_update.tsv")
+SCACHE = fig("pr_partner_skels.pkl")
+TSV = fig("faab_pr_top20_update.tsv")
 PRE_DENSITY_CUT = 10.6
 MIN_CABLE = 100.0
 FLAG = "possible glia?"
@@ -82,7 +83,7 @@ def main():
     out = pd.DataFrame(rows, columns=["root_id_curr", "n_pre", "n_post", "pre_frac", "cable_um", "pre_per_100um",
                                       "flag", "n_PRs", "max_syn_from_PR", "annotation", "notes"])
     out = out.sort_values(["flag", "pre_per_100um"])
-    out.to_csv(os.path.join(OUT, "partner_glia_flags.tsv"), sep="\t", index=False)
+    out.to_csv(fig("partner_glia_flags.tsv"), sep="\t", index=False)
     pd.set_option("display.width", 250)
     pd.set_option("display.max_colwidth", 45)
     print(out.flag.value_counts().to_string())
@@ -91,7 +92,7 @@ def main():
     print(f"\nfragments: {int((out.flag == 'fragment (too small to judge)').sum())} cells under {MIN_CABLE:.0f} um")
 
     # ---- write "possible glia?" into the table's followups column (photoreceptors exempt) ----
-    meta_path = os.path.join(OUT, "faab_pr_top20_update_meta.json")
+    meta_path = fig("faab_pr_top20_update_meta.json")
     pr_roots = set(json.load(open(meta_path))["pr_roots"].values()) if os.path.exists(meta_path) else set()
     by_root = {str(r.root_id_curr): r for r in out.itertuples()}
     full = pd.read_csv(TSV, sep="\t", dtype=str).fillna("")

@@ -12,9 +12,10 @@ import re
 import pandas as pd
 
 from faab.config import FIGURES, TMP
+from faab.config import fig
 
-log = pd.read_csv(sorted(glob.glob(os.path.join(FIGURES, "*_seatable_sync_changes.tsv")))[-1], sep="\t", dtype=str).fillna("")
-m = pd.read_csv(sorted(glob.glob(os.path.join(FIGURES, "*_seatable_match.tsv")))[-1], sep="\t", dtype=str).fillna("")
+log = pd.read_csv(sorted(glob.glob(fig("*_seatable_sync_changes.tsv")))[-1], sep="\t", dtype=str).fillna("")
+m = pd.read_csv(sorted(glob.glob(fig("*_seatable_match.tsv")))[-1], sep="\t", dtype=str).fillna("")
 cell = {(t, int(r)): a for t, r, a in zip(m.tab, m.row, m.root_at_xyz)}
 orig = {(t, int(r)): o for t, r, o in zip(m.tab, m.row, m.root_id_orig)}
 sh = log[log.why == "generated notes shortened"].copy()

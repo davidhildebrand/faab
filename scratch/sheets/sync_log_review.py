@@ -6,8 +6,9 @@ import os
 import pandas as pd
 
 from faab.config import FIGURES
+from faab.config import fig
 
-path = sorted(glob.glob(os.path.join(FIGURES, "*_seatable_sync_changes.tsv")))[-1]
+path = sorted(glob.glob(fig("*_seatable_sync_changes.tsv")))[-1]
 L = pd.read_csv(path, sep="\t", dtype=str).fillna("")
 pd.set_option("display.width", 250)
 pd.set_option("display.max_rows", 200)

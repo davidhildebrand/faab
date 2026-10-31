@@ -11,6 +11,7 @@ import caveclient
 import seaserpent as ss
 
 from faab.clients.cave import throttle, DATASTACK
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
@@ -21,7 +22,7 @@ def to_int64(s):
 
 
 def main():
-    dp = pickle.load(open(os.path.join(OUT, "mi1_dotprops.pkl"), "rb"))
+    dp = pickle.load(open(fig("mi1_dotprops.pkl"), "rb"))
     mi1 = [int(d.id) for d in dp]
     mi1set = set(mi1)
     print(f"putative Mi1: {len(mi1)}")
@@ -64,7 +65,7 @@ def main():
     cov = cov.merge(e2.groupby("partner")["mi1"].nunique().rename("n_mi1_up"), on="partner", how="left")
     cov = cov.join(ann, on="partner").fillna({"n_mi1_down": 0, "n_mi1_up": 0})
     cov = cov.sort_values("n_mi1", ascending=False).reset_index(drop=True)
-    cov.to_csv(os.path.join(OUT, "mi1_net_partners.csv"), index=False)
+    cov.to_csv(fig("mi1_net_partners.csv"), index=False)
 
     pd.set_option("display.width", 160)
     print(f"\ntotal distinct partners of the {len(mi1)} Mi1: {len(cov)}")

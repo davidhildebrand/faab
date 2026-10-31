@@ -16,10 +16,11 @@ import pandas as pd
 from scipy.optimize import minimize
 
 from faab.glia.shape import OUT, MIN_CABLE, PRE_CUT, fmt
+from faab.config import fig
 
 PR_PAT = re.compile(r"\bR[1-8]\b|photoreceptor", re.I)  # rows already identified as a photoreceptor
-TABLE = os.path.join(OUT, "faab_pr_top20_update.tsv")
-MODEL = os.path.join(OUT, "glia_logistic_model.json")
+TABLE = fig("faab_pr_top20_update.tsv")
+MODEL = fig("glia_logistic_model.json")
 
 
 def write_p_column(judge):
@@ -27,7 +28,7 @@ def write_p_column(judge):
     and photoreceptors. Run after faab_glia_l2_fetch.py and before faab_pr_top20_render.py."""
     if not os.path.exists(TABLE):
         return
-    meta_path = os.path.join(OUT, "faab_pr_top20_update_meta.json")
+    meta_path = fig("faab_pr_top20_update_meta.json")
     pr_roots = set(json.load(open(meta_path))["pr_roots"].values()) if os.path.exists(meta_path) else set()
     p_by = {str(r.root): float(r.p_glia) for r in judge.itertuples()}
     full = pd.read_csv(TABLE, sep="\t", dtype=str).fillna("")
@@ -41,7 +42,7 @@ def write_p_column(judge):
     print(f"\np_glia column written for {sum(1 for v in vals if v)} of {len(full)} table rows "
           f"(blank: fragments/single chunks and photoreceptor rows)")
 
-SRC = sys.argv[1] if len(sys.argv) > 1 else os.path.join(OUT, "glia_shape_skel.tsv")
+SRC = sys.argv[1] if len(sys.argv) > 1 else fig("glia_shape_skel.tsv")
 M1, M2 = "pre_per_100um", (sys.argv[2] if len(sys.argv) > 2 else "vol_per_L1")  # 2nd feature: vol_per_L1 | fill | ...
 TAG = ("_l2" if SRC.endswith("_l2.tsv") else "") + ("" if M2 == "vol_per_L1" else f"_{M2}")
 EPS1, EPS2 = 0.1, 1e-6
@@ -130,7 +131,7 @@ def main():
     print(f"\nborderline (p 0.2-0.5, called neuron): {len(near)}")
     if len(near):
         print(near[cols].to_string(index=False))
-    judge.sort_values("p_glia", ascending=False).to_csv(os.path.join(OUT, f"glia_logistic_partners{TAG}.tsv"),
+    judge.sort_values("p_glia", ascending=False).to_csv(fig(f"glia_logistic_partners{TAG}.tsv"),
                                                         sep="\t", index=False)
     if TAG == "_l2":  # recommended configuration: exact volumes + volume per extent
         json.dump({"features": [M1, M2], "eps": [EPS1, EPS2], "w": [float(w[0]), float(w[1])], "c": float(c),

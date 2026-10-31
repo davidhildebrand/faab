@@ -11,9 +11,10 @@ import pandas as pd
 
 from faab.config import FIGURES
 from faab.pr.side import PREFIX, parse as parse_side
+from faab.config import fig
 
 side, _ = parse_side()
-df = pd.read_csv(os.path.join(FIGURES, f"{PREFIX[side]}bundles_roots_verified.tsv"), sep="\t", dtype={"root": str, "known": str})
+df = pd.read_csv(fig(f"{PREFIX[side]}bundles_roots_verified.tsv"), sep="\t", dtype={"root": str, "known": str})
 df["known"] = df.known.fillna("")
 
 

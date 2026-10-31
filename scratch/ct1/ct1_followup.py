@@ -18,6 +18,7 @@ from neuprint import NeuronCriteria as NC, fetch_neurons, fetch_simple_connectio
 from navis.interfaces import neuprint as nvneu
 from faab.clients.neuprint import client as npclient, MALE_CNS
 from faab.clients.cave import throttle, DATASTACK
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 NET = 648518347700703374
@@ -88,7 +89,7 @@ def main():
             if col == 0: ax.set_ylabel(vn)
     fig.suptitle("CT1: Drosophila male-CNS (navy) vs FAAB putative (red)", y=0.99)
     fig.tight_layout(rect=[0, 0, 1, 0.96])
-    fig.savefig(os.path.join(OUT, "ct1_sidebyside.png"), dpi=140)
+    fig.savefig(fig("ct1_sidebyside.png"), dpi=140)
     print("\n[2] saved ct1_sidebyside.png")
 
 

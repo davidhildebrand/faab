@@ -9,18 +9,19 @@ import navis
 import numpy as np
 import pandas as pd
 
-FIG = "/Users/davidh/Data/Vibe/FAAB/faab/figures/"
+from faab.config import fig
+
 TMP = "/Users/davidh/Data/Vibe/FAAB/tmp/"
 K = 7
 
 
 def main():
-    cache = pickle.load(open(FIG + "type_copies_dotprops.pkl", "rb"))
+    cache = pickle.load(open(fig("type_copies_dotprops.pkl"), "rb"))
     st = pd.read_csv(TMP + "t4t5_seatable_20261026.tsv", sep="\t", dtype=str).fillna("").drop_duplicates("root_now").set_index("root_now")
     sv = pd.read_csv(TMP + "t4t5_query_survey.tsv", sep="\t", dtype=str)
     refs = sorted(st.index[st.label.str.contains(r"\bT4|\bT5", regex=True)])
     negs = sorted(r for r in st.index[st.label.str.contains("L1-L5|LMC", regex=True)] if r not in refs)
-    mi1 = {f"Mi1:{n.id}": n for n in pickle.load(open(FIG + "mi1_dotprops.pkl", "rb")) if len(n.points) >= 10}
+    mi1 = {f"Mi1:{n.id}": n for n in pickle.load(open(fig("mi1_dotprops.pkl"), "rb")) if len(n.points) >= 10}
     queries = [r for r in sv.now if r not in refs]
     group = dict(zip(sv.now, sv.line))
     neuron = {**{r: cache[r] for r in refs + negs + queries}, **mi1}
@@ -133,7 +134,7 @@ def main():
                "ids": list(q[q.call != "T4/T5-like"].cell)}]
     spec = {"meshes": [{"kind": "brain", "alpha": 1.0}], "neurons": layers, "view": "anterior", "layout": "3d",
             "select": layers[2]["name"], "image": True}
-    base = os.path.join(FIG, f"{utc_stamp()}_t4t5_query_match")
+    base = fig(f"{utc_stamp()}_t4t5_query_match")
     json.dump(spec, open(base + "_spec.json", "w"), indent=1)
     open(base + "_ng.txt", "w").write(nglink.to_url(nglink.build(spec)) + "\n")
     d.to_csv(base + ".tsv", sep="\t", index=False)

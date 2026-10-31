@@ -22,14 +22,15 @@ if not hasattr(np, "row_stack"):
     np.row_stack = np.vstack
 import pandas as pd
 import navis
+from faab.config import fig
 
 warnings.filterwarnings("ignore")
 navis.set_pbars(hide=True)
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
-SCACHE = os.path.join(OUT, "pr_partner_skels.pkl")
-G1 = os.path.join(OUT, "faab_pr_current_roots.tsv")
-G28 = os.path.join(OUT, "faab_pr_groups_xyz.tsv")
+SCACHE = fig("pr_partner_skels.pkl")
+G1 = fig("faab_pr_current_roots.tsv")
+G28 = fig("faab_pr_groups_xyz.tsv")
 THETAS = np.arange(0, 180, 3)
 
 
@@ -126,8 +127,8 @@ def main():
 
     pd.DataFrame(rows, columns=["group", "cell_a", "cell_b", "mirror_ab", "mirror_ba", "in_place",
                                 "next_best_mirror", "theta_deg"]).to_csv(
-        os.path.join(OUT, "faab_pr_groups_mirror.tsv"), sep="\t", index=False)
-    open(os.path.join(OUT, "faab_pr_groups_mirror.txt"), "w").write("\n".join(lines) + "\n")
+        fig("faab_pr_groups_mirror.tsv"), sep="\t", index=False)
+    open(fig("faab_pr_groups_mirror.txt"), "w").write("\n".join(lines) + "\n")
 
     # figure: each group viewed down its bundle axis, mirror pairs coloured, plane drawn
     try:
@@ -156,7 +157,7 @@ def main():
             ax.set_xlabel("um")
         fig.suptitle("R1-R6 per ommatidium, projected along the axon-bundle axis; dashed = best mirror plane; "
                      "orange = R7/R8; grey = unpaired", fontsize=11)
-        fig.savefig(os.path.join(OUT, "faab_pr_groups_mirror.png"), dpi=120, bbox_inches="tight")
+        fig.savefig(fig("faab_pr_groups_mirror.png"), dpi=120, bbox_inches="tight")
         print("saved figure", flush=True)
     except Exception as e:
         print("figure failed:", str(e)[:80])

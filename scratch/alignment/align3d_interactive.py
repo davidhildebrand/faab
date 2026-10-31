@@ -14,9 +14,10 @@ import navis
 from navis.transforms.align import align_rigid
 
 from faab.clients.cave import latest_roots, throttle, DATASTACK
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
-CACHE = os.path.join(OUT, "skel_cache.pkl")
+CACHE = fig("skel_cache.pkl")
 IDS = [648518347611904256, 648518347550912741, 648518347638273763]
 
 TEMPLATE_COLOR = (0.47, 0.47, 0.47)
@@ -70,7 +71,7 @@ def main():
         showlegend=True,
     )
 
-    out = os.path.join(OUT, "align3d_interactive.html")
+    out = fig("align3d_interactive.html")
     fig.write_html(out, include_plotlyjs=True, full_html=True)
     print("wrote interactive 3D ->", out)
 

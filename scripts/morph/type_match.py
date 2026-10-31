@@ -40,11 +40,12 @@ from faab import nglink
 from faab.clients.cave import DATASTACK, client as cave_client, throttle
 from faab.config import FIGURES
 from faab.partners.sheet import utc_stamp
+from faab.config import fig
 
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 CLS = ("superclass", "class", "subclass", "subsubclass", "type")
 POINTS = 1500
-CACHE = os.path.join(FIGURES, "type_copies_dotprops.pkl")
+CACHE = fig("type_copies_dotprops.pkl")
 _t = [0.0]
 
 
@@ -200,7 +201,7 @@ def main():
           f"{ref_pts:.0f}; too small to align: {len(small)}", flush=True)
 
     # ---- pose-invariant NBLAST, both directions, chunked + resumable
-    spath = os.path.join(FIGURES, f"type_match_{a.tag}_scores.pkl")
+    spath = fig(f"type_match_{a.tag}_scores.pkl")
     store = pickle.load(open(spath, "rb")) if os.path.exists(spath) else {}
     if store.get("refs") != refs:
         store = {"refs": refs, "fwd": {}, "rev": {}}
@@ -254,7 +255,7 @@ def main():
                                                 call=f"too small to align (< {a.min_points} points)",
                                                 group=[qmap.group.get(k, np.nan) for k in small]))])
     out = out.sort_values(["role", "top5"], ascending=[True, False])
-    base = os.path.join(FIGURES, f"{stamp}_type_match_{a.tag}")
+    base = fig(f"{stamp}_type_match_{a.tag}")
     out.to_csv(base + ".tsv", sep="\t", index=False)
 
     print(f"\ncontrols (top5 = mean of 5 best scores vs references):")

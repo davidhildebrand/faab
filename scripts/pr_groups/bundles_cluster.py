@@ -26,12 +26,13 @@ from scipy.spatial.distance import squareform
 from faab.partners.top10_xyz import VOX
 from faab.pr.side import KNOWN_NAME, PREFIX, parse as parse_side
 import faab.nglink as nglink
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
 SIDE, ARGS = parse_side()
 PFX = PREFIX[SIDE]
-CACHE = os.path.join(OUT, f"{PFX}bundle_boxes.pkl")
+CACHE = fig(f"{PFX}bundle_boxes.pkl")
 DEPTHS_UM = [45.0, 60.0, 75.0, 90.0]
 REF_DEPTH = 75.0
 MIN_HIT_VOX = 2000
@@ -53,8 +54,8 @@ PALETTE = ["#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4", "#4
 def main():
     cache = pickle.load(open(CACHE, "rb"))
     boxes, sv2root = cache["boxes"], cache["sv2root"]
-    known = pd.read_csv(os.path.join(OUT, f"{PFX}lattice_known.tsv"), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
-    st_path = os.path.join(OUT, f"{PFX}lattice_seatable_prs.tsv")
+    known = pd.read_csv(fig(f"{PFX}lattice_known.tsv"), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
+    st_path = fig(f"{PFX}lattice_seatable_prs.tsv")
     st = pd.read_csv(st_path, sep="\t", dtype=str) if os.path.exists(st_path) else pd.DataFrame(columns=["root", "type", "cart"])
     st_type = {r.root: f"SeaTable {r.type}" + (f" cart {r.cart}" if isinstance(r.cart, str) and r.cart not in ("", "nan") else "")
                for r in st.itertuples()}
@@ -69,7 +70,7 @@ def main():
     mean_axis = axes.mean(0)
     mean_axis /= np.linalg.norm(mean_axis)
     # local axis: that of the nearest site (known or predicted, interpolated axes) at the reference depth
-    pred = pd.read_csv(os.path.join(OUT, f"{PFX}lattice_predicted.tsv"), sep="\t")
+    pred = pd.read_csv(fig(f"{PFX}lattice_predicted.tsv"), sep="\t")
     site_axes = np.vstack([axes, pred[["ax_x", "ax_y", "ax_z"]].values])
     site_axes /= np.linalg.norm(site_axes, axis=1, keepdims=True)
     site_lam = np.vstack([known[["lam_x", "lam_y", "lam_z"]].values, pred[["lam_x", "lam_y", "lam_z"]].values])
@@ -191,9 +192,9 @@ def main():
     cl["xyz_centroid"] = cl.c_vox_x.astype(str) + ", " + cl.c_vox_y.astype(str) + ", " + cl.c_vox_z.astype(str)
     cl = cl.sort_values(["n_new", "n_roots"], ascending=False)
     pr = pr.merge(cl[["n_roots", "n_known", "n_new"]], left_on="cluster", right_index=True)
-    pr.to_csv(os.path.join(OUT, f"{PFX}bundles_roots.tsv"), sep="\t", index=False)
-    df.to_csv(os.path.join(OUT, f"{PFX}bundles_all_roots.tsv"), sep="\t", index=False)
-    cl.to_csv(os.path.join(OUT, f"{PFX}bundles_clusters.tsv"), sep="\t")
+    pr.to_csv(fig(f"{PFX}bundles_roots.tsv"), sep="\t", index=False)
+    df.to_csv(fig(f"{PFX}bundles_all_roots.tsv"), sep="\t", index=False)
+    cl.to_csv(fig(f"{PFX}bundles_clusters.tsv"), sep="\t")
     pd.set_option("display.width", 250)
     print(f"\naverage-linkage clusters at {LINK_UM} um: {len(cl)}; sizes {cl.n_roots.value_counts().sort_index().to_dict()}")
     print("clusters containing known PRs (calibration):")
@@ -221,8 +222,8 @@ def main():
     state["layers"].append({"type": "annotation", "source": {"url": "local://annotations", "transform": {"outputDimensions": DIMS}},
                             "annotations": anns, "name": f"bundle centroids (+{int(REF_DEPTH)} um above the lamina)", "annotationColor": "#ffe119"})
     url = nglink.to_url(state)
-    open(os.path.join(OUT, f"{PFX}bundles_ng.txt"), "w").write(url + "\n")
-    json.dump(state, open(os.path.join(OUT, f"{PFX}bundles_state.json"), "w"), indent=1)
+    open(fig(f"{PFX}bundles_ng.txt"), "w").write(url + "\n")
+    json.dump(state, open(fig(f"{PFX}bundles_state.json"), "w"), indent=1)
     print(f"\nlink {len(url)} chars saved to figures/{PFX}bundles_ng.txt ({datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC)")
 
 

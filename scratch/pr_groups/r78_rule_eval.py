@@ -8,8 +8,9 @@ import numpy as np
 import pandas as pd
 
 from faab.config import FIGURES
+from faab.config import fig
 
-path = sorted(glob.glob(os.path.join(FIGURES, "*_pr_classes_mesh_shares.tsv")))[-1]
+path = sorted(glob.glob(fig("*_pr_classes_mesh_shares.tsv")))[-1]
 g = pd.read_csv(path, sep="\t")
 g = g[g.n_pre >= 10].copy()
 g["in_per_out"] = (g.n_post / g.n_pre).round(3)

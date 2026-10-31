@@ -25,10 +25,11 @@ import caveclient
 import navis
 from fafbseg import flywire
 from faab.clients.cave import DATASTACK, throttle
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
-SCACHE = os.path.join(OUT, "pr_partner_skels.pkl")
+SCACHE = fig("pr_partner_skels.pkl")
 SHEET = os.path.join(HERE, "..", "tmp", "sheet_partners.tsv")
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 N_NEURON_SAMPLE = 40
@@ -167,7 +168,7 @@ def main():
     if vol:
         df["nucleus_vol"] = df.root.map(vol)
 
-    df.to_csv(os.path.join(OUT, "glia_metrics.tsv"), sep="\t", index=False)
+    df.to_csv(fig("glia_metrics.tsv"), sep="\t", index=False)
 
     # ---- report ----
     pd.set_option("display.width", 250)

@@ -24,12 +24,13 @@ import caveclient
 from faab.clients.cave import DATASTACK
 from faab.partners.top10_xyz import VOX
 from faab.partners.no_soma_batch import local_volume, retry, vox, SOMA_UM3
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
-TSV = os.path.join(OUT, "faab_pr_top20_update.tsv")
-META = os.path.join(OUT, "faab_pr_top20_update_meta.json")
-OVR = os.path.join(OUT, "soma_overrides.tsv")
+TSV = fig("faab_pr_top20_update.tsv")
+META = fig("faab_pr_top20_update_meta.json")
+OVR = fig("soma_overrides.tsv")
 PR_PAT = re.compile(r"\bR[1-8]\b|photoreceptor", re.I)
 
 
@@ -38,8 +39,8 @@ def main():
     pr_roots = set(json.load(open(META))["pr_roots"].values())
     ovr = pd.read_csv(OVR, sep="\t", dtype=str).fillna("") if os.path.exists(OVR) else pd.DataFrame()
     ovr_by = {r.root_id_curr: r for r in ovr.itertuples()} if len(ovr) else {}
-    leaves = pickle.load(open(os.path.join(OUT, "l2_leaves.pkl"), "rb"))
-    chunks = pickle.load(open(os.path.join(OUT, "l2_chunkdata.pkl"), "rb"))
+    leaves = pickle.load(open(fig("l2_leaves.pkl"), "rb"))
+    chunks = pickle.load(open(fig("l2_chunkdata.pkl"), "rb"))
 
     roots = sorted({int(r) for r in df.root_id_curr if r.isdigit()} - {int(r) for r in pr_roots})
     client = caveclient.CAVEclient(DATASTACK)

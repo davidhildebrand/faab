@@ -45,6 +45,7 @@ import pandas as pd
 from faab.config import DATA, FIGURES, TMP, VOX
 from faab.partners.sheet import fmt_vox, norm_xyz
 from faab.pr import prs_tab as T
+from faab.config import fig
 
 RING_PLOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pr_ring_plot.py")
 LINEAGE_CACHE = os.path.join(TMP, "pr_sheet_check_lineage.json")
@@ -258,7 +259,7 @@ def cmd_ring(a):
     wb, ws = T.load(a.book)
     bl = [b for b in T.blocks(ws) if (b.group in a.groups if a.groups else b.section == "targets")]
     if a.run:
-        tsv = os.path.join(FIGURES, "prs_tab_groups.tsv")
+        tsv = fig("prs_tab_groups.tsv")
         group_table(ws, bl).to_csv(tsv, sep="\t", index=False)
         for b in bl:
             print(f"\n===== pr_ring_plot.py group {b.group}", flush=True)
@@ -281,7 +282,7 @@ def cmd_ring(a):
             if fresh:
                 ws.cell(r, col)._style = copy.copy(ws.cell(r, col - 1)._style)
         ws.cell(b.header_row, col).value = label
-        p = os.path.join(FIGURES, f"pr_ring_plot_g{b.group}_names.tsv")
+        p = fig(f"pr_ring_plot_g{b.group}_names.tsv")
         if not os.path.exists(p):
             summary.append(f"g{b.group}: no ring result")
             continue

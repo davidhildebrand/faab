@@ -10,8 +10,9 @@ import pandas as pd
 
 from faab.clients.cave import client as cave_client, throttle
 from faab.config import FIGURES
+from faab.config import fig
 
-path = sorted(glob.glob(os.path.join(FIGURES, "*_seatable_match.tsv")))[-1]
+path = sorted(glob.glob(fig("*_seatable_match.tsv")))[-1]
 d = pd.read_csv(path, sep="\t", dtype=str).fillna("")
 cur = d.root_id_curr.str.fullmatch(r"\d{15,}")
 diff = d[cur & (d.root_id_curr != d.root_at_xyz)].copy()

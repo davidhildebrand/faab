@@ -17,9 +17,10 @@ import matplotlib.pyplot as plt
 from scipy.spatial import cKDTree
 
 from faab.clients.cave import throttle, DATASTACK
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
-CACHE = os.path.join(OUT, "mi1_dotprops.pkl")
+CACHE = fig("mi1_dotprops.pkl")
 
 RAW = """
 648518347611904256, 648518347550912741, 648518347638273763, 648518347638461063 648518347630364807 648518347759173922,
@@ -88,7 +89,7 @@ def main():
     np.fill_diagonal(Sm, np.nan)
     comp["mean_consistency"] = [np.nanmean(Sm[i]) for i in range(len(rids))]
     comp = comp.sort_values(["bbox_diag_um"], ascending=False).reset_index(drop=True)
-    comp.to_csv(os.path.join(OUT, "mi1_completeness.csv"), index=False)
+    comp.to_csv(fig("mi1_completeness.csv"), index=False)
 
     print("\n=== completeness + consistency (sorted by size) ===")
     print(comp[["root_id", "n_pts", "bbox_diag_um", "mean_consistency"]].head(30).to_string(index=False))
@@ -111,7 +112,7 @@ def main():
                 overlaps.append({"small": small, "big": big, "frac_small_in_big": round(float(frac), 2),
                                  "n_small": npts[small], "n_big": npts[big]})
     ov = pd.DataFrame(overlaps).sort_values("frac_small_in_big", ascending=False) if overlaps else pd.DataFrame()
-    ov.to_csv(os.path.join(OUT, "mi1_overlaps.csv"), index=False)
+    ov.to_csv(fig("mi1_overlaps.csv"), index=False)
     print(f"\n=== overlapping pairs (small >50% inside big -> fragment/duplicate/wrong-type) : {len(ov)} ===")
     if len(ov):
         print(ov.head(25).to_string(index=False))
@@ -123,7 +124,7 @@ def main():
     im = ax.imshow(np.nan_to_num(Sm[np.ix_(idx, idx)]), cmap="viridis", vmin=0, vmax=1)
     ax.set_title("Putative aedes Mi1 — centered NBLAST consistency (sorted by size)")
     fig.colorbar(im, ax=ax, shrink=0.7)
-    fig.tight_layout(); fig.savefig(os.path.join(OUT, "mi1_consistency.png"), dpi=130)
+    fig.tight_layout(); fig.savefig(fig("mi1_consistency.png"), dpi=130)
     print("\nsaved mi1_completeness.csv, mi1_overlaps.csv, mi1_consistency.png")
 
 

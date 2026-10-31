@@ -25,6 +25,7 @@ import caveclient
 from fafbseg import flywire
 from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import VOX
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
@@ -125,7 +126,7 @@ def main():
         print(f"grouped PRs added as sources: {n_new} (of {len(g)})", flush=True)
     cells = pd.DataFrame(rows).drop_duplicates("root")
     print(f"hidden PRs included: {int(cells.hidden.sum())}", flush=True)
-    cells.to_csv(os.path.join(OUT, "pr_metu_link_cells.tsv"), sep="\t", index=False)
+    cells.to_csv(fig("pr_metu_link_cells.tsv"), sep="\t", index=False)
     print("link cells by kind:", cells.kind.value_counts().to_dict(), flush=True)
     prs = sorted(cells[cells.kind == "PR"].root)
     metus = sorted(cells[cells.kind == "MeTu"].root)
@@ -146,8 +147,8 @@ def main():
     if len(direct):
         print(direct.groupby(["pre_pt_root_id", "post_pt_root_id"]).size().to_string(), flush=True)
 
-    down.to_csv(os.path.join(OUT, "pr_metu_down_synapses.tsv"), sep="\t", index=False)
-    up.to_csv(os.path.join(OUT, "pr_metu_up_synapses.tsv"), sep="\t", index=False)
+    down.to_csv(fig("pr_metu_down_synapses.tsv"), sep="\t", index=False)
+    up.to_csv(fig("pr_metu_up_synapses.tsv"), sep="\t", index=False)
     pr_class = {int(r.root): r.cls for r in cells[cells.kind == "PR"].itertuples()}
     down["pr_class"] = down.pre_pt_root_id.map(pr_class)
     d_cnt = down.groupby("post_pt_root_id").agg(syn_from_PR=("id", "size"), n_PR=("pre_pt_root_id", "nunique"),
@@ -161,7 +162,7 @@ def main():
     bridge["flytable"] = [lab.get(int(r), "") for r in bridge.root]
     print(f"PR classes in the link: {pd.Series(pr_class).value_counts().to_dict()}; hidden R7-8 ids not used: "
           f"{[h for h in hidden if 'R7-8' in lab.get(h, '').upper()]}", flush=True)
-    part = pd.read_csv(os.path.join(OUT, "faab_pr_top20_update.tsv"), sep="\t", dtype=str).fillna("")
+    part = pd.read_csv(fig("faab_pr_top20_update.tsv"), sep="\t", dtype=str).fillna("")
     in_tab = set(part.root_id_curr)
     pinfo = part.groupby("root_id_curr").agg(notes=("notes", lambda s: "; ".join(sorted(set(x for x in s if x)))),
                                             status=("status", lambda s: "; ".join(sorted(set(x for x in s if x)))))
@@ -170,7 +171,7 @@ def main():
     bridge["table_notes"] = [pinfo.notes.get(str(r), "") for r in bridge.root]
     bridge["in_link"] = [int(r) in set(cells.root) for r in bridge.root]
     bridge = bridge.sort_values(["path_strength", "syn_from_PR", "syn_to_MeTu"], ascending=False)
-    bridge.to_csv(os.path.join(OUT, "pr_metu_bridge.tsv"), sep="\t", index=False)
+    bridge.to_csv(fig("pr_metu_bridge.tsv"), sep="\t", index=False)
     pd.set_option("display.width", 250)
     pd.set_option("display.max_colwidth", 40)
     print(f"\nBRIDGE cells (downstream of a PR and upstream of a MeTu): {len(bridge)}")

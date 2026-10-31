@@ -21,6 +21,7 @@ import navis
 
 from faab.pr.groups_mirror import load_groups, prep, reflect, THETAS, SCACHE, OUT
 from faab.pr.groups_flynames import table
+from faab.config import fig
 
 warnings.filterwarnings("ignore")
 navis.set_pbars(hide=True)
@@ -135,7 +136,7 @@ def main():
             print("  " + conf)
     pd.DataFrame(all_rows, columns=["group", "cell", "terminal_nodes", "t_um", "d_um", "partner",
                                     "pair_score", "next_best", "proposed_fly_pair"]).to_csv(
-        os.path.join(OUT, "faab_pr_groups_flynames_terminal.tsv"), sep="\t", index=False)
+        fig("faab_pr_groups_flynames_terminal.tsv"), sep="\t", index=False)
     print(f"\nDONE in {time.time() - t0:.0f} s")
 
 

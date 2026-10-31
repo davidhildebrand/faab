@@ -15,10 +15,11 @@ import time
 import numpy as np
 import pandas as pd
 import caveclient
+from faab.config import fig
 
 DATASTACK = "wclee_aedes_brain"
 OUT = os.path.join(REPO, "figures")
-SRC = os.path.join(OUT, "faab_pr_top10_xyz.tsv")
+SRC = fig("faab_pr_top10_xyz.tsv")
 PAUSE = 5.0
 
 

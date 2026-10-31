@@ -6,12 +6,13 @@ import pickle
 import numpy as np
 import caveclient
 from faab.clients.cave import DATASTACK
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 
 
 def main():
-    D = pickle.load(open(os.path.join(OUT, "metu_lc_dotprops.pkl"), "rb"))
+    D = pickle.load(open(fig("metu_lc_dotprops.pkl"), "rb"))
     by = D["dotprops"]; lab = D["label_by_root"]
     ann_ids = [int(i) for i in lab]                       # all 165 annotated roots
     print(f"annotated ids: {len(ann_ids)} | dotprops fetched: {len(by)}")
@@ -36,7 +37,7 @@ def main():
     print("\ninterpretation: if LATEST roots also have ~1 pt -> genuine stubs (not proofread);")
     print("if STALE dominate -> need robust root update then refetch.")
     pickle.dump({"latest_ids": latest_ids, "stale_ids": stale_ids, "npts": npts},
-                open(os.path.join(OUT, "metu_lc_diag.pkl"), "wb"))
+                open(fig("metu_lc_diag.pkl"), "wb"))
     print("DONE")
 
 

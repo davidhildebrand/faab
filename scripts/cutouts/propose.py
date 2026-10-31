@@ -32,6 +32,7 @@ import caveclient
 from scipy.spatial import cKDTree
 from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import VOX
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
@@ -103,7 +104,7 @@ def main():
         n_pr = int(all_in.pre_pt_root_id.isin(roots).sum())
         print(f"all predicted synapses inside the cube: {len(all_in)} ({n_pr} with a group PR presynaptic, "
               f"{all_in.pre_pt_root_id.nunique()} distinct presynaptic roots)", flush=True)
-        all_in.to_csv(os.path.join(OUT, f"cutout_{name}_synapses.tsv"), sep="\t", index=False)
+        all_in.to_csv(fig(f"cutout_{name}_synapses.tsv"), sep="\t", index=False)
     except Exception as e:
         print("spatial synapse query failed:", str(e)[:120], flush=True)
 
@@ -126,9 +127,9 @@ def main():
                         seg_layer, ann_layer],
              "showSlices": False, "layout": "xy-3d",
              "selectedLayer": {"layer": "cutout + PR presynaptic sites", "visible": True, "size": 400}}
-    json.dump(state, open(os.path.join(OUT, f"cutout_{name}_state.json"), "w"), indent=1)
+    json.dump(state, open(fig(f"cutout_{name}_state.json"), "w"), indent=1)
     url = "https://spelunker.cave-explorer.org/#!" + urllib.parse.quote(json.dumps(state, separators=(",", ":")))
-    open(os.path.join(OUT, f"cutout_{name}_ng.txt"), "w").write(url + "\n")
+    open(fig(f"cutout_{name}_ng.txt"), "w").write(url + "\n")
     print(f"link length {len(url)} chars; state json in figures/cutout_{name}_state.json")
     print(url)
     print("DONE")

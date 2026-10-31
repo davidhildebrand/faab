@@ -23,12 +23,13 @@ import caveclient
 from fafbseg import flywire
 from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import backbone_midpoint_nm, VOX
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
 SRC = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "..", "tmp", "pr_groups.tsv")
-DST = os.path.join(OUT, "faab_pr_groups_xyz.tsv")
-SCACHE = os.path.join(OUT, "pr_partner_skels.pkl")
+DST = fig("faab_pr_groups_xyz.tsv")
+SCACHE = fig("pr_partner_skels.pkl")
 HEADERS = ["root_id_orig", "class", "root_id_curr", "xyz", "status", "pr_date",
            "proofreader", "chk_date", "checker", "notes"]
 ALIGNS = ["<"] * len(HEADERS)

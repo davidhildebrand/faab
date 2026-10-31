@@ -22,11 +22,12 @@ import caveclient
 from faab.clients.cave import DATASTACK
 from faab.partners.top10_xyz import VOX
 import faab.nglink as nglink
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
-TSV = os.path.join(OUT, "faab_pr_top20_update.tsv")
-META = os.path.join(OUT, "faab_pr_top20_update_meta.json")
+TSV = fig("faab_pr_top20_update.tsv")
+META = fig("faab_pr_top20_update_meta.json")
 R_UM, SOMA_UM3 = 4.0, 50.0
 
 
@@ -68,8 +69,8 @@ def main():
     groups = sel.groupby("root_id_curr")
     print(f"{len(sel)} rows with 'no soma?' -> {groups.ngroups} distinct cells", flush=True)
 
-    leaves = pickle.load(open(os.path.join(OUT, "l2_leaves.pkl"), "rb"))
-    chunks = pickle.load(open(os.path.join(OUT, "l2_chunkdata.pkl"), "rb"))
+    leaves = pickle.load(open(fig("l2_leaves.pkl"), "rb"))
+    chunks = pickle.load(open(fig("l2_chunkdata.pkl"), "rb"))
     roots = [int(r) for r in groups.groups]
     client = caveclient.CAVEclient(DATASTACK)
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -130,7 +131,7 @@ def main():
     order = {"soma candidate (chunk volume)": 0, "nucleus in table, no volume cluster": 1, "no soma found": 2}
     out["o"] = [order.get(v, 3) for v in out.verdict]
     out = out.sort_values(["o", "local_um3"], ascending=[True, False]).drop(columns="o")
-    out.to_csv(os.path.join(OUT, "no_soma_check.tsv"), sep="\t", index=False)
+    out.to_csv(fig("no_soma_check.tsv"), sep="\t", index=False)
 
     show = ["root_id_curr", "blocks", "status", "n_chunks", "total_um3", "local_um3", "soma_candidate_xyz", "nucleus_live", "verdict"]
     pd.set_option("display.width", 250)
@@ -143,7 +144,7 @@ def main():
     for r in out.itertuples():
         md.append(f"| {r.root_id_curr} | {r.blocks} | {r.status} | {r.n_chunks} | {r.total_um3} | {r.local_um3} | "
                   f"{r.soma_candidate_xyz} | {r.nucleus_live} | {r.verdict} | [open]({r.url}) |")
-    open(os.path.join(OUT, "no_soma_check.md"), "w").write("\n".join(md) + "\n")
+    open(fig("no_soma_check.md"), "w").write("\n".join(md) + "\n")
     html = ["<!doctype html><meta charset='utf-8'><title>no soma? re-check</title>",
             "<style>body{font:14px sans-serif;margin:20px}table{border-collapse:collapse}td,th{border:1px solid #ccc;"
             "padding:4px 8px;font-size:13px}th{background:#eee}</style>",
@@ -155,7 +156,7 @@ def main():
                     f"<td>{r.total_um3}</td><td>{r.local_um3}</td><td>{r.soma_candidate_xyz}</td><td>{r.nucleus_live}</td>"
                     f"<td>{r.verdict}</td><td><a href='{r.url}' target='_blank'>open</a></td></tr>")
     html.append("</table>")
-    open(os.path.join(OUT, "no_soma_check.html"), "w").write("\n".join(html))
+    open(fig("no_soma_check.html"), "w").write("\n".join(html))
     print("DONE")
 
 

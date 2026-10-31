@@ -12,6 +12,7 @@ from faab.config import REPO
 import os
 import numpy as np
 import pandas as pd
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 COLS = ["out_syn", "out_partners", "in_syn", "in_partners",
@@ -38,9 +39,9 @@ def mr(s):
 
 
 def aedes_frame():
-    df = pd.read_csv(os.path.join(OUT, "photoreceptor_io.csv"))
+    df = pd.read_csv(fig("photoreceptor_io.csv"))
     df["root"] = df["root"].astype("int64").astype(str)
-    p = pd.read_csv(os.path.join(OUT, "photoreceptor_partners.csv"))
+    p = pd.read_csv(fig("photoreceptor_partners.csv"))
     p = p[p.direction == "output"]
     top3 = {}
     for cell, d in p.groupby("cell"):
@@ -59,8 +60,8 @@ def summary_rows(df, label_fmt):
 
 def main():
     aed = aedes_frame()
-    mcns = pd.read_csv(os.path.join(OUT, "mcns_photoreceptor_percell.csv"))
-    fafb = pd.read_csv(os.path.join(OUT, "fafb_photoreceptor_percell.csv"))
+    mcns = pd.read_csv(fig("mcns_photoreceptor_percell.csv"))
+    fafb = pd.read_csv(fig("fafb_photoreceptor_percell.csv"))
 
     print("TABLE 1 - FAAB (aedes) photoreceptor connectivity, per cell")
     print("          dataset: wclee_aedes_brain; root_ids current as of this query")
@@ -125,7 +126,7 @@ def main():
 
     print("\n\nTABLE 4 - top output partners per FAAB photoreceptor")
     print()
-    p = pd.read_csv(os.path.join(OUT, "photoreceptor_partners.csv"))
+    p = pd.read_csv(fig("photoreceptor_partners.csv"))
     p = p[p.direction == "output"]
     rows4 = []
     for cell in aed.root:

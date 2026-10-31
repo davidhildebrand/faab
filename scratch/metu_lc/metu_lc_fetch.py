@@ -9,13 +9,14 @@ if not hasattr(np, "row_stack"):
     np.row_stack = np.vstack
 from fafbseg import flywire
 from faab.clients.cave import DATASTACK, latest_roots, throttle
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 
 
 def main():
-    metu4 = pickle.load(open(os.path.join(OUT, "ids_MeTu4.pkl"), "rb"))
-    lc = pickle.load(open(os.path.join(OUT, "ids_LC.pkl"), "rb"))
+    metu4 = pickle.load(open(fig("ids_MeTu4.pkl"), "rb"))
+    lc = pickle.load(open(fig("ids_LC.pkl"), "rb"))
     ids = [(r, "MeTu4") for r in metu4] + [(r, "LC") for r in lc]
     print(f"MeTu4 {len(metu4)}  LC {len(lc)}  total {len(ids)}", flush=True)
 
@@ -40,7 +41,7 @@ def main():
     print(f"dotprops point counts: min {min(npts)}, median {int(np.median(npts))}, max {max(npts)}", flush=True)
 
     pickle.dump({"dotprops": by, "label_by_root": label_by_root},
-                open(os.path.join(OUT, "metu_lc_dotprops.pkl"), "wb"))
+                open(fig("metu_lc_dotprops.pkl"), "wb"))
     print("saved metu_lc_dotprops.pkl\nDONE", flush=True)
 
 

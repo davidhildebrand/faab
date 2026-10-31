@@ -10,6 +10,7 @@ if not hasattr(np, "row_stack"):
 import caveclient
 from faab.clients.cave import DATASTACK, latest_roots, throttle
 import faab.nglink as nglink
+from faab.config import fig
 
 SEED = 648518347777360890
 OUT = os.path.join(REPO, "figures")
@@ -57,8 +58,8 @@ def main():
 
     out_ids = [str(int(r)) for r in outp.index]
     in_ids = [str(int(r)) for r in inpp.index]
-    open(os.path.join(OUT, "seed_out_ids.txt"), "w").write("\n".join(out_ids) + "\n")
-    open(os.path.join(OUT, "seed_in_ids.txt"), "w").write("\n".join(in_ids) + "\n")
+    open(fig("seed_out_ids.txt"), "w").write("\n".join(out_ids) + "\n")
+    open(fig("seed_in_ids.txt"), "w").write("\n".join(in_ids) + "\n")
 
     spec = {"meshes": [{"kind": "brain", "alpha": 1.0}, {"kind": "AL", "alpha": 0.45}],
             "neurons": [
@@ -67,7 +68,7 @@ def main():
                 {"name": f"seed {str(cur)[-6:]}", "color": "#00d65d", "ids": [str(cur)]}],
             "view": "anterior", "layout": "3d", "select": f"seed {str(cur)[-6:]}"}
     url = nglink.to_url(nglink.build(spec))
-    open(os.path.join(OUT, "seed_partners_ng.txt"), "w").write(url + "\n")
+    open(fig("seed_partners_ng.txt"), "w").write(url + "\n")
     print("\n" + url)
     print("\nDONE")
 

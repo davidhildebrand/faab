@@ -35,12 +35,13 @@ from fafbseg import flywire
 from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import VOX
 from faab.pr.groups_mirror import prep, reflect, THETAS
+from faab.config import fig
 
 warnings.filterwarnings("ignore")
 navis.set_pbars(hide=True)
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
-SCACHE = os.path.join(OUT, "pr_partner_skels.pkl")
+SCACHE = fig("pr_partner_skels.pkl")
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 LINK_ORDER = [34, 108, 15, 31, 41, 85, 109, 134, 158, 165, 172, 39, 66, 75, 7, 100]  # ranks 1-16 in the census link
 EXTRA_C3 = "648518347642151200"  # SeaTable R7-8 cell without a cartridge label that travels in the c3 bundle
@@ -235,7 +236,7 @@ def conf(cell):
 
 def track_centroids(roots_wanted):
     """per root (int) and depth: voxel-weighted centroid (um) of its supervoxels in the census boxes, >= MIN_HIT voxels"""
-    cache = pickle.load(open(os.path.join(OUT, "pr_bundle_boxes.pkl"), "rb"))
+    cache = pickle.load(open(fig("pr_bundle_boxes.pkl"), "rb"))
     sv2root = cache["sv2root"]
     acc = {}
     for (site, depth), bx in cache["boxes"].items():
@@ -378,14 +379,14 @@ def main():
     extra = "--extra" in sys.argv
     suffix = "_extra" if extra else ""
     now = datetime.datetime.now(datetime.timezone.utc)
-    rv = pd.read_csv(os.path.join(OUT, "pr_bundles_roots_verified.tsv"), sep="\t", dtype={"root": str, "known": str, "seatable": str})
+    rv = pd.read_csv(fig("pr_bundles_roots_verified.tsv"), sep="\t", dtype={"root": str, "known": str, "seatable": str})
     census_date = str(rv.queried.iloc[0])[:10] if "queried" in rv.columns else f"{now:%Y-%m-%d}"  # date of the synapse counts
     client = caveclient.CAVEclient(DATASTACK)
     t = throttle(time.time() - 10)
     groups = []  # numbering continues David's sheet: groups 1-8 exist; SeaTable cartridges come next, then the census bundles
     bundle_groups = []
     if extra:
-        cl = pd.read_csv(os.path.join(OUT, "pr_bundles_clusters.tsv"), sep="\t", index_col=0)
+        cl = pd.read_csv(fig("pr_bundles_clusters.tsv"), sep="\t", index_col=0)
         groups = extra_groups(rv, cl, census_date)
     for rank, cid in enumerate([] if extra else LINK_ORDER, 1):
         sub = rv[rv.cluster == cid].sort_values(["verdict", "n_pre"], ascending=[True, False])
@@ -432,7 +433,7 @@ def main():
     for w in want:
         if w in xyz_census and xyz_census[w] not in cands[w]:
             cands[w].append(xyz_census[w])
-    cache = pickle.load(open(os.path.join(OUT, "pr_bundle_boxes.pkl"), "rb"))
+    cache = pickle.load(open(fig("pr_bundle_boxes.pkl"), "rb"))
     sv2root = cache["sv2root"]
     want_int = {int(w) for w in want}
     per_root = {}
@@ -453,7 +454,7 @@ def main():
             nodes = sk[int(w)].nodes[["x", "y", "z"]].values.astype(float)
             cands[w].append(vox_str(nodes[len(nodes) // 2] / 1000.0))
     # anchors already resolved by an earlier run of this mode are reused (phases must each fit the 10-min limit)
-    anchors_path = os.path.join(OUT, f"pr_bundles_anchors{suffix}.json")
+    anchors_path = fig(f"pr_bundles_anchors{suffix}.json")
     saved = json.load(open(anchors_path)) if os.path.exists(anchors_path) else {}
     resolved = {w: saved["resolved"][w] for w in want if w in saved.get("resolved", {})}
     first_hit = {w: saved["first_hit"][w] for w in want if w in saved.get("first_hit", {})}
@@ -503,7 +504,7 @@ def main():
     # ---- presynaptic positions (um) per current root
     presyn = {}
     for path in ("pr_bundles_synapses_raw_pre.tsv", "pr_metu_down_synapses.tsv"):
-        p = os.path.join(OUT, path)
+        p = fig(path)
         if os.path.exists(p):
             d = pd.read_csv(p, sep="\t", dtype={"pre_pt_root_id": str})
             for rid, sub in d.groupby("pre_pt_root_id"):
@@ -511,7 +512,7 @@ def main():
 
     # ---- analyses
     lines_tsv, lines_pipe = [], []
-    acache_path = os.path.join(OUT, f"pr_bundles_pairs_cache{suffix}.pkl")  # per-group analysis results, saved as they finish
+    acache_path = fig(f"pr_bundles_pairs_cache{suffix}.pkl")  # per-group analysis results, saved as they finish
     acache = pickle.load(open(acache_path, "rb")) if os.path.exists(acache_path) else {}
     for g in groups:
         seen = set()
@@ -563,8 +564,8 @@ def main():
         w = [max(len(row[i]) for row in data) for i in range(len(COLS))]
         lines_pipe += [g["name"], " | ".join(f"{COLS[i]:<{w[i]}}" for i in range(len(COLS)))]  # no dash row (David, 2026-10-02)
         lines_pipe += [" | ".join(f"{row[i]:<{w[i]}}" for i in range(len(COLS))) for row in out_rows] + [""]
-    open(os.path.join(OUT, f"pr_bundles_pairs_paste{suffix}.tsv"), "w").write("\n".join(lines_tsv) + "\n")
-    open(os.path.join(OUT, f"pr_bundles_pairs_pipes{suffix}.txt"), "w").write("\n".join(lines_pipe) + "\n")
+    open(fig(f"pr_bundles_pairs_paste{suffix}.tsv"), "w").write("\n".join(lines_tsv) + "\n")
+    open(fig(f"pr_bundles_pairs_pipes{suffix}.txt"), "w").write("\n".join(lines_pipe) + "\n")
     print("\n".join(lines_pipe))
     print(f"DONE in {time.time() - t0:.0f} s")
 

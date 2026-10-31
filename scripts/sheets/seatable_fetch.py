@@ -11,6 +11,7 @@ import pandas as pd
 from faab.clients.cave import client as cave_client, throttle
 from faab.config import FIGURES
 from faab.partners.sheet import utc_stamp
+from faab.config import fig
 
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 
@@ -36,7 +37,7 @@ def main():
             print(f"\n{col} ({len(v)} filled): " + "; ".join(f"{k} {n}" for k, n in v.value_counts().head(25).items()))
         elif v.nunique() > 60:
             print(f"\n{col} ({len(v)} filled, {v.nunique()} distinct), e.g. {v.iloc[:3].tolist()}")
-    out = os.path.join(FIGURES, f"{stamp}_seatable_aedes_main.tsv")
+    out = fig(f"{stamp}_seatable_aedes_main.tsv")
     t.to_csv(out, sep="\t", index=False)
     print(f"\nwritten {out}")
 

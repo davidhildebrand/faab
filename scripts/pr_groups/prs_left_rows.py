@@ -26,6 +26,7 @@ from faab.clients.cave import client as cave_client, parse_xyz, roots_at_xyz, th
 from faab.config import FIGURES, VOX
 from faab.partners.sheet import seatable_label, utc_stamp
 from faab.pr.verdict import mesh_shares, verdict
+from faab.config import fig
 
 FIRST_GROUP = 103
 CLASS = {"R1-R6-like": "R1-R6", "R1-R6-like (few sites)": "R1-R6?", "R7-like": "R7", "R8-like": "R8", "fragment": "fragment"}
@@ -43,9 +44,9 @@ def pct(x):
 
 def main():
     stamp = utc_stamp()
-    roots = pd.read_csv(os.path.join(FIGURES, "pr_left_bundles_roots_verified.tsv"), sep="\t", dtype={"root": str})
-    cl = pd.read_csv(os.path.join(FIGURES, "pr_left_bundles_clusters_verified.tsv"), sep="\t", index_col=0)
-    st = pd.read_csv(sorted(glob.glob(os.path.join(FIGURES, "*_seatable_aedes_main.tsv")))[-1], sep="\t", dtype=str).fillna("")
+    roots = pd.read_csv(fig("pr_left_bundles_roots_verified.tsv"), sep="\t", dtype={"root": str})
+    cl = pd.read_csv(fig("pr_left_bundles_clusters_verified.tsv"), sep="\t", index_col=0)
+    st = pd.read_csv(sorted(glob.glob(fig("*_seatable_aedes_main.tsv")))[-1], sep="\t", dtype=str).fillna("")
     st = st[(st.side == "L") & st["type"].isin(["R1-6", "R7-8"])].copy()
     st["cart"] = st.notes.str.extract(r"cartridge (\d+)")[0]
     st["label"] = [seatable_label(r) for r in st.to_dict("records")]
@@ -176,7 +177,7 @@ def main():
     df = pd.DataFrame(out)
     df["o"] = df["class"].map({c: i for i, c in enumerate(ORDER)})
     df = df.sort_values(["group", "o", "n_pre"], ascending=[True, True, False]).drop(columns=["o"])
-    path = os.path.join(FIGURES, f"{stamp}_pr_left_groups.tsv")
+    path = fig(f"{stamp}_pr_left_groups.tsv")
     df.to_csv(path, sep="\t", index=False)
     print(f"{len(df)} rows in {df.group.nunique()} groups ({df.group.min()}-{df.group.max()}); classes "
           f"{df['class'].value_counts().to_dict()}; written {path}")

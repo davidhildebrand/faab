@@ -17,6 +17,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from faab.clients.cave import DATASTACK, throttle
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 CANDS = [("648518347700868494", "G1"), ("648518347660289039", "G1"),
@@ -24,7 +25,7 @@ CANDS = [("648518347700868494", "G1"), ("648518347660289039", "G1"),
 
 
 def main():
-    sc = pd.read_csv(os.path.join(OUT, "metu_lc2_scores.csv"))
+    sc = pd.read_csv(fig("metu_lc2_scores.csv"))
     sc["root"] = sc["root"].astype(str)
     simM = dict(zip(sc.root, sc.sim_MeTu4)); simL = dict(zip(sc.root, sc.sim_LC))
     # exemplars: most-central MeTu4 (max sim_MeTu4) and most-central LC (max sim_LC), well-traced
@@ -86,7 +87,7 @@ def main():
     fig.suptitle("LC->MeTu4 re-check #2: candidate skeletons vs MeTu4 and LC exemplars "
                  "(rigid+scale aligned to MeTu4)", fontsize=14, y=0.99)
     fig.tight_layout(rect=[0, 0, 1, 0.96])
-    out = os.path.join(OUT, "metu_lc2_gallery.png")
+    out = fig("metu_lc2_gallery.png")
     fig.savefig(out, dpi=170)
     print(f"saved {out}\nDONE", flush=True)
 

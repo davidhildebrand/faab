@@ -12,8 +12,9 @@ from faab.config import DATASTACK, FIGURES, VOX
 from faab.partners.sheet import fmt_vox
 from faab.partners.top10_xyz import backbone_midpoint_nm, primary_neurite_point_nm
 from faab.clients.cave import throttle
+from faab.config import fig
 
-SCACHE = os.path.join(FIGURES, "pr_partner_skels.pkl")
+SCACHE = fig("pr_partner_skels.pkl")
 
 
 def cell_points(roots, client, t, batch=40):

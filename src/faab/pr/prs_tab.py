@@ -23,13 +23,14 @@ import openpyxl
 
 from faab.config import FIGURES
 from faab.partners.sheet import utc_stamp
+from faab.config import fig
 
 TAB = "PRs"
 LEADS = "NOT PROOFREADING"  # the line that starts the leads section
 PAIR_RANK = {"R1/R6": 0, "R2/R5": 1, "R3/R4": 2, "R1/R6 or R3/R4": 3}
 ASIDE = ("OFF-BUNDLE", "SECOND BUNDLE")  # rows with these notes are not members of the bundle
 ID_COLS = ("root_id_orig", "root_id_curr", "partner_root_id_orig", "partner_root_id_curr")
-DEFAULT_OUT = os.path.join(FIGURES, "{stamp}_FAABopticlobetargets-PRs.xlsx")
+DEFAULT_OUT = fig("{stamp}_FAABopticlobetargets-PRs.xlsx")
 DATE_FMT = 'yy"-"mm"-"dd'  # how the sheet shows dates
 def _slash(m):
     """a/b/y: day-first when a > 12, month-first when b > 12; both <= 12 is ambiguous -> None (flagged, not guessed)"""

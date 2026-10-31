@@ -16,6 +16,7 @@ import pandas as pd
 
 from faab.pr.pairing_demo import analyse_group, PAIR_COL, R7_COL, R8_COL, OUT, TMP
 from faab.nglink import build, to_url
+from faab.config import fig
 
 VOX = np.array([16.0, 16.0, 45.0])
 HERE = REPO
@@ -23,7 +24,7 @@ HERE = REPO
 
 def current_roots(g):
     pasted = pd.read_csv(os.path.join(TMP, "pr_groups_pasted.tsv"), sep="\t", dtype=str)
-    now = json.load(open(os.path.join(OUT, "pr_footprint_roots.json")))["root_used"]
+    now = json.load(open(fig("pr_footprint_roots.json")))["root_used"]
     rows = [(r.root_id_curr, str(n), r._3) for r, n in zip(pasted.itertuples(), now) if int(r.group) == g]
     return rows  # (skeleton-era root, current root, class) in sheet order
 
@@ -69,7 +70,7 @@ def main():
                                  "points": [vox(ct)]}],
                 "select": "mirror plane (+ normal)"}
         url = to_url(build(spec))
-        out = os.path.join(OUT, f"pr_plane_ng_group{g}.txt")
+        out = fig(f"pr_plane_ng_group{g}.txt")
         open(out, "w").write(url + "\n")
         print(f"group {g}: plane theta {R['th']} deg, pairs {[(names.get(i, ''), names.get(j, '')) for i, j in pairs]}; "
               f"link {len(url)} chars -> {out}")

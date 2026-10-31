@@ -22,9 +22,10 @@ import caveclient
 from faab.clients.cave import DATASTACK, throttle
 from faab.glia.shape import (OUT, SCACHE, MIN_CABLE, PRE_CUT, SHAPE, extent_metrics, derived, evaluate,
                              best_cut, logistic2, load_sets, skeleton_metrics)
+from faab.config import fig
 
-LEAVES = os.path.join(OUT, "l2_leaves.pkl")
-CHUNKS = os.path.join(OUT, "l2_chunkdata.pkl")
+LEAVES = fig("l2_leaves.pkl")
+CHUNKS = fig("l2_chunkdata.pkl")
 ATTRS = ["size_nm3", "area_nm2", "rep_coord_nm", "max_dt_nm", "mean_dt_nm"]
 
 
@@ -103,7 +104,7 @@ def main():
         d["cable_um"] = skeleton_metrics(s)["cable_um"] if s is not None else np.nan
     df = derived(pd.DataFrame(rows))
     df["area_per_vol"] = df.area_um2 / df.vol_um3
-    df.to_csv(os.path.join(OUT, "glia_shape_l2.tsv"), sep="\t", index=False)
+    df.to_csv(fig("glia_shape_l2.tsv"), sep="\t", index=False)
 
     comp = df[(df.set == "comparison") & df.vol_um3.notna()]
     judge = comp[comp.cable_um >= MIN_CABLE]

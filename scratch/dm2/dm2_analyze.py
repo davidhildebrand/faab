@@ -15,15 +15,16 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import linkage, dendrogram, fcluster
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
-CALIB = os.path.join(OUT, "dm2_calib_neurons.pkl")
+CALIB = fig("dm2_calib_neurons.pkl")
 MIN_PTS = 10        # NBLAST needs enough points (technical floor, not completeness)
 SIZE_CAP = 150.0    # um upper bound only (drop brain-spanning; keep small + partial)
 
 
 def load(name):
-    return pickle.load(open(os.path.join(OUT, name), "rb"))
+    return pickle.load(open(fig(name), "rb"))
 
 
 def span(d):
@@ -53,9 +54,9 @@ def metu_subtypes():
     fig, ax = plt.subplots(figsize=(20, 6))
     dendrogram(Z, labels=labs, leaf_rotation=90, leaf_font_size=4, color_threshold=0.7 * D.max(), ax=ax)
     ax.set_title("Aedes MeTu morphological clustering (NBLAST, Ward)")
-    fig.tight_layout(); fig.savefig(os.path.join(OUT, "metu_dendrogram.png"), dpi=150)
+    fig.tight_layout(); fig.savefig(fig("metu_dendrogram.png"), dpi=150)
     pd.DataFrame({"root6": labs, "k8": fcluster(Z, 8, criterion="maxclust")}).to_csv(
-        os.path.join(OUT, "metu_clusters.csv"), index=False)
+        fig("metu_clusters.csv"), index=False)
     print("  saved metu_dendrogram.png + metu_clusters.csv")
 
 
@@ -92,7 +93,7 @@ def dm2_rank():
     })
     df["dm2_minus_neg"] = (df["dm2_score"] - df["neg_score"]).round(3)
     df = df.sort_values("dm2_score", ascending=False).reset_index(drop=True)
-    df.to_csv(os.path.join(OUT, "dm2_ranked_candidates.csv"), index=False)
+    df.to_csv(fig("dm2_ranked_candidates.csv"), index=False)
 
     # reference: Dm2-Dm2 cross-dataset ~0.55, Mi1/Tm1 baseline ~0.42 (from calibration)
     print(df.head(20).round(3).to_string(index=False))

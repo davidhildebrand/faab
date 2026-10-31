@@ -18,10 +18,11 @@ import caveclient
 from fafbseg import flywire
 from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import primary_neurite_point_nm, backbone_midpoint_nm, VOX
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
-TSV = os.path.join(OUT, "faab_pr_top10_xyz.tsv")
-SCACHE = os.path.join(OUT, "pr_partner_skels.pkl")
+TSV = fig("faab_pr_top10_xyz.tsv")
+SCACHE = fig("pr_partner_skels.pkl")
 PAT = re.compile(r"root changed; xyz from current root (\d+) \(\+(\d+) more\); (.*)")
 
 

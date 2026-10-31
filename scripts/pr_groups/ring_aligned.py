@@ -14,6 +14,7 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 COL = {"R2/R5": "#7F77DD", "R1/R6": "#D85A30", "R3/R4": "#1D9E75", "R7": "#A32D2D", "R8": "#0F6E56"}
@@ -21,7 +22,7 @@ RING_MAX = 2.5
 
 
 def aligned(g):
-    df = pd.read_csv(os.path.join(OUT, f"pr_bundle_track_group{g}.tsv"), sep="\t")
+    df = pd.read_csv(fig(f"pr_bundle_track_group{g}.tsv"), sep="\t")
     df = df[df.complete]
     rows = []
     for s, sub in df.groupby("s_box"):
@@ -58,7 +59,7 @@ def main():
         ax.legend(fontsize=8, loc="lower left")
     fig.suptitle("Bundle cross-sections aligned on R7: small dots = every slice, large = mean; colors = terminal-plane names")
     fig.tight_layout()
-    png = os.path.join(OUT, "pr_ring_aligned.png")
+    png = fig("pr_ring_aligned.png")
     fig.savefig(png, dpi=130)
     print("saved", png)
 

@@ -16,11 +16,12 @@ from scipy.spatial import cKDTree
 
 from faab import ol_meshes, synsnap
 from faab.config import FIGURES
+from faab.config import fig
 
 VOX_UM = np.array([0.016, 0.016, 0.045])
 LA_MIN, ME_MAX_LAMINA, R8_IN_PER_OUT = 0.6, 0.1, 0.2
 
-path = sorted(glob.glob(os.path.join(FIGURES, "*_pr_classes_mesh_shares.tsv")))[-1]
+path = sorted(glob.glob(fig("*_pr_classes_mesh_shares.tsv")))[-1]
 g = pd.read_csv(path, sep="\t")
 g = g[g.n_pre >= 10].copy()
 g["in_per_out"] = (g.n_post / g.n_pre).round(3)

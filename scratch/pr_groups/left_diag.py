@@ -11,10 +11,11 @@ import pandas as pd
 
 from faab import ol_meshes
 from faab.config import FIGURES
+from faab.config import fig
 
-known = pd.concat([pd.read_csv(os.path.join(FIGURES, f), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
+known = pd.concat([pd.read_csv(fig(f), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
                    for f in ("pr_left_lattice_known.tsv", "pr_left_lattice_noaxis.tsv")]).sort_values("cartridge").reset_index(drop=True)
-sk = pickle.load(open(os.path.join(FIGURES, "pr_left_skels.pkl"), "rb"))
+sk = pickle.load(open(fig("pr_left_skels.pkl"), "rb"))
 k8 = known.set_index("cartridge").loc["L8"]
 a8 = np.array([k8.ax_x, k8.ax_y, k8.ax_z])
 print("per R1-6 skeleton: nodes, cable (um), extent along the L8 axis (um), max pairwise-extent proxy (bbox diagonal, um)")

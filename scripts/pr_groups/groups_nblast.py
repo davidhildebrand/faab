@@ -21,14 +21,15 @@ if not hasattr(np, "row_stack"):
     np.row_stack = np.vstack
 import pandas as pd
 import navis
+from faab.config import fig
 
 warnings.filterwarnings("ignore")
 navis.set_pbars(hide=True)
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
-SCACHE = os.path.join(OUT, "pr_partner_skels.pkl")
-G1 = os.path.join(OUT, "faab_pr_current_roots.tsv")       # user's group 1 (original 8)
-G28 = os.path.join(OUT, "faab_pr_groups_xyz.tsv")          # user's groups 2-8
+SCACHE = fig("pr_partner_skels.pkl")
+G1 = fig("faab_pr_current_roots.tsv")       # user's group 1 (original 8)
+G28 = fig("faab_pr_groups_xyz.tsv")          # user's groups 2-8
 RESAMPLE_NM = 1000
 
 
@@ -134,8 +135,8 @@ def main():
 
     df = pd.DataFrame(rows, columns=["group", "cell_a", "class_a", "cell_b", "class_b",
                                      "nblast_direct", "nblast_mirror"])
-    df.to_csv(os.path.join(OUT, "faab_pr_groups_nblast.tsv"), sep="\t", index=False)
-    with open(os.path.join(OUT, "faab_pr_groups_nblast_pairs.txt"), "w") as f:
+    df.to_csv(fig("faab_pr_groups_nblast.tsv"), sep="\t", index=False)
+    with open(fig("faab_pr_groups_nblast_pairs.txt"), "w") as f:
         f.write("\n".join(pair_lines) + "\n")
 
     # summary across groups
@@ -166,7 +167,7 @@ def main():
                         ax.text(j, i, f"{sub[i, j]:.2f}", ha="center", va="center", fontsize=7,
                                 color="w" if sub[i, j] < 0.35 else "k")
         fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.6, label="NBLAST after reflection + rigid alignment")
-        fig.savefig(os.path.join(OUT, "faab_pr_groups_nblast.png"), dpi=130, bbox_inches="tight")
+        fig.savefig(fig("faab_pr_groups_nblast.png"), dpi=130, bbox_inches="tight")
         print("\nsaved heatmaps")
     except Exception as e:
         print("heatmap failed:", str(e)[:80])

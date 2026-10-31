@@ -20,6 +20,7 @@ from neuprint import NeuronCriteria as NC, fetch_neurons
 from navis.interfaces import neuprint as nvneu
 from faab.clients.neuprint import client as npclient, MALE_CNS
 from faab.clients.cave import throttle, DATASTACK
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 STATE_ID = 6364293577572352
@@ -50,7 +51,7 @@ def main():
     t = throttle(t)
     dp = flywire.get_l2_dotprops(FAAB, dataset=DATASTACK, max_threads=1, omit_failures=True, progress=False)
     by = {int(d.id): d.points / 1000.0 for d in dp}     # microns
-    mi1 = pickle.load(open(os.path.join(OUT, "mi1_dotprops.pkl"), "rb"))
+    mi1 = pickle.load(open(fig("mi1_dotprops.pkl"), "rb"))
     mi1_all = np.vstack([d.points for d in mi1])         # already microns
     mi1_c = mi1_all.mean(0)
     print("\n=== positions (microns) ===")
@@ -71,7 +72,7 @@ def main():
                    "segments": [str(A), str(B)], "name": "CT1-like"})
     url = "https://spelunker.cave-explorer.org/#!" + urllib.parse.quote(
         json.dumps({"layers": layers, "layout": "3d"}, separators=(",", ":")))
-    open(os.path.join(OUT, "ct1_mesh_link.txt"), "w").write(url + "\n")
+    open(fig("ct1_mesh_link.txt"), "w").write(url + "\n")
     print("\nsaved aligned brain-mesh link -> figures/ct1_mesh_link.txt")
 
     # ---- (re1) larger side-by-side ----
@@ -96,7 +97,7 @@ def main():
             if col == 0: ax.set_ylabel(vn, fontsize=12)
     fig.suptitle("CT1: Drosophila male-CNS (navy) vs FAAB putative (red)", fontsize=15, y=0.99)
     fig.tight_layout(rect=[0, 0, 1, 0.97])
-    fig.savefig(os.path.join(OUT, "ct1_sidebyside_large.png"), dpi=130)
+    fig.savefig(fig("ct1_sidebyside_large.png"), dpi=130)
     print("saved ct1_sidebyside_large.png")
 
 

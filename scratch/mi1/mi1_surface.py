@@ -11,12 +11,13 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.spatial import cKDTree
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 
 
 def main():
-    dp = pickle.load(open(os.path.join(OUT, "mi1_dotprops.pkl"), "rb"))
+    dp = pickle.load(open(fig("mi1_dotprops.pkl"), "rb"))
     C = np.array([d.points.mean(0) for d in dp])            # centroids (um)
     # principal axis (PC1) of each cell's points = columnar/depth axis
     A = []
@@ -66,7 +67,7 @@ def main():
         seg = np.vstack([C[i], C[i] + A[i] * 12])
         ax2.plot(seg[:, 0], seg[:, 1], seg[:, 2], c="firebrick", lw=0.8)
     ax2.set_title("Mi1 principal axes (red) ~ local sheet normal")
-    fig.tight_layout(); fig.savefig(os.path.join(OUT, "mi1_surface.png"), dpi=120)
+    fig.tight_layout(); fig.savefig(fig("mi1_surface.png"), dpi=120)
     print("\nsaved mi1_surface.png")
 
 

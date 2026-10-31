@@ -10,12 +10,13 @@ from navis.transforms.align import align_rigid
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
-cal = pickle.load(open(os.path.join(OUT, "dm2_calib_neurons.pkl"), "rb"))
-cand_dp, cand_ids = pickle.load(open(os.path.join(OUT, "candidate_dotprops.pkl"), "rb"))
+cal = pickle.load(open(fig("dm2_calib_neurons.pkl"), "rb"))
+cand_dp, cand_ids = pickle.load(open(fig("candidate_dotprops.pkl"), "rb"))
 cand = {int(i): d for i, d in zip(cand_ids, cand_dp)}
-rank = pd.read_csv(os.path.join(OUT, "dm2_ranked_candidates.csv"))
+rank = pd.read_csv(fig("dm2_ranked_candidates.csv"))
 
 ref = cal["Dm2.FW.720575940641270736"]            # fly FAFB Dm2 medoid (alignment reference)
 jan = cal[sorted(l for l in cal if l.startswith("Dm2.OL."))[0]]
@@ -39,7 +40,7 @@ def exact(rid):
 # write a corrected worklist CSV with exact root_ids
 rank_fixed = rank.copy()
 rank_fixed["root_id"] = rank_fixed["root_id"].map(lambda v: exact(v) or v)
-rank_fixed.to_csv(os.path.join(OUT, "dm2_ranked_candidates_fixed.csv"), index=False)
+rank_fixed.to_csv(fig("dm2_ranked_candidates_fixed.csv"), index=False)
 
 # top FAAB candidates: high dm2_score, Dm2-sized (<=100 um), present in cache
 picks = []
@@ -67,6 +68,6 @@ for c, (title, n, color) in enumerate(cols):
             ax.set_ylabel(vn)
 fig.suptitle("Dm2: Drosophila (navy) vs top FAAB candidates (red) — rigid-aligned to fly Dm2", y=0.99)
 fig.tight_layout(rect=[0, 0, 1, 0.96])
-fig.savefig(os.path.join(OUT, "dm2_sidebyside.png"), dpi=150)
+fig.savefig(fig("dm2_sidebyside.png"), dpi=150)
 print("picks:", [(str(p[0])[-6:], round(p[1]), round(p[2], 2)) for p in picks])
 print("saved dm2_sidebyside.png")

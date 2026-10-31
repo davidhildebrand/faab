@@ -24,6 +24,7 @@ from matplotlib.colors import to_rgb
 from faab.clients.cave import DATASTACK, throttle
 from faab.pr.pairing_demo import analyse_group, PAIR_COL, R7_COL, R8_COL, OUT, TMP
 from faab.nglink import IMG
+from faab.config import fig
 
 VOX = np.array([16.0, 16.0, 45.0])
 WIN_UM = 7.0
@@ -35,7 +36,7 @@ def main():
     R = analyse_group(g, verbose=False)
     axis, c, outer, inner, names = (R[k] for k in ("axis", "c", "outer", "inner", "names"))
     pasted = pd.read_csv(os.path.join(TMP, "pr_groups_pasted.tsv"), sep="\t", dtype=str)
-    now = json.load(open(os.path.join(OUT, "pr_footprint_roots.json")))["root_used"]
+    now = json.load(open(fig("pr_footprint_roots.json")))["root_used"]
     old2new = {r.root_id_curr: int(n) for r, n in zip(pasted.itertuples(), now) if int(r.group) == g}
     label, color = {}, {}
     for i, r in enumerate(outer):
@@ -109,7 +110,7 @@ def main():
     fig.tight_layout()
     for s, *_ in panels:
         pass
-    png = os.path.join(OUT, f"pr_bundle_em_group{g}.png")
+    png = fig(f"pr_bundle_em_group{g}.png")
     fig.savefig(png, dpi=150)
     print("saved", png)
 

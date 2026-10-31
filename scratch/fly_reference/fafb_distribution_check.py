@@ -4,12 +4,13 @@ from faab.config import REPO
 import os
 import numpy as np
 import pandas as pd
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 
 
 def main():
-    df = pd.read_csv(os.path.join(OUT, "fafb_photoreceptor_percell.csv"))
+    df = pd.read_csv(fig("fafb_photoreceptor_percell.csv"))
     pd.set_option("display.width", 170)
     for cls, d in df.groupby("class"):
         v = d.out_syn.sort_values().values

@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import faab.nglink as nglink
 from faab.partners.top10_xyz import VOX
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
@@ -71,10 +72,10 @@ def axis_legend(centre_vox, orientation, scale, offset_frac=(0.55, 0.36), half_f
 
 
 def main():
-    bridge = pd.read_csv(os.path.join(OUT, "pr_metu_bridge.tsv"), sep="\t", dtype={"root": str})
-    down = pd.read_csv(os.path.join(OUT, "pr_metu_down_synapses.tsv"), sep="\t", dtype={"pre_pt_root_id": str, "post_pt_root_id": str})
-    up = pd.read_csv(os.path.join(OUT, "pr_metu_up_synapses.tsv"), sep="\t", dtype={"pre_pt_root_id": str, "post_pt_root_id": str})
-    cells = pd.read_csv(os.path.join(OUT, "pr_metu_link_cells.tsv"), sep="\t", dtype={"root": str})
+    bridge = pd.read_csv(fig("pr_metu_bridge.tsv"), sep="\t", dtype={"root": str})
+    down = pd.read_csv(fig("pr_metu_down_synapses.tsv"), sep="\t", dtype={"pre_pt_root_id": str, "post_pt_root_id": str})
+    up = pd.read_csv(fig("pr_metu_up_synapses.tsv"), sep="\t", dtype={"pre_pt_root_id": str, "post_pt_root_id": str})
+    cells = pd.read_csv(fig("pr_metu_link_cells.tsv"), sep="\t", dtype={"root": str})
     pr_class = {r.root: r.cls for r in cells[cells.kind == "PR"].itertuples()}
     # name grouped photoreceptors by group and class; FlyTable ones by their cartridge label
     gtab = pd.read_csv(os.path.join(HERE, "..", "tmp", "pr_groups_pasted.tsv"), sep="\t", dtype=str)
@@ -133,8 +134,8 @@ def main():
     if "--legend" in sys.argv:  # axis legend only on request (user, 2026-10-01); recipe kept in axis_legend()
         state["layers"] += axis_legend(np.array(state["position"], float), state["projectionOrientation"], state["projectionScale"])
     url = nglink.to_url(state)
-    open(os.path.join(OUT, "pr_metu_bridge_ng.txt"), "w").write(url + "\n")
-    json.dump(state, open(os.path.join(OUT, "pr_metu_bridge_state.json"), "w"), indent=1)  # paste into the JSON editor if the URL fails
+    open(fig("pr_metu_bridge_ng.txt"), "w").write(url + "\n")
+    json.dump(state, open(fig("pr_metu_bridge_state.json"), "w"), indent=1)  # paste into the JSON editor if the URL fails
     print(f"\n{len(strong)} bridge cells, {len(prs)} PRs, {len(metus)} MeTus; {len(url)} chars")
     print(url)
 

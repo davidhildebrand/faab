@@ -41,6 +41,7 @@ import caveclient
 from fafbseg import flywire
 from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import VOX
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
@@ -48,9 +49,9 @@ TMP = os.path.join(HERE, "..", "tmp")
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 SPACING_UM = 5.9      # hexagonal spacing of the lamina points (faab_pr_lattice.py, 2026-10-01)
 MIN_TOTAL = 3         # a target must receive >= this many synapses from the groups in total (selection only)
-ROOTS_CACHE = os.path.join(OUT, "pr_footprint_roots.json")
-RAW_OUT = os.path.join(OUT, "pr_groups_out_raw.tsv")
-RAW_IN = os.path.join(OUT, "pr_targets_in_raw.tsv")
+ROOTS_CACHE = fig("pr_footprint_roots.json")
+RAW_OUT = fig("pr_groups_out_raw.tsv")
+RAW_IN = fig("pr_targets_in_raw.tsv")
 PRCLASS = ["R1-R6", "R7", "R8"]
 
 
@@ -141,7 +142,7 @@ def main():
     pr_group = dict(zip(df.root_used, df.group))
     pr_class = dict(zip(df.root_used, df["class"]))
     pr_roots = sorted(set(pr_group))
-    lat = pd.read_csv(os.path.join(OUT, "pr_lattice_known.tsv"), sep="\t")
+    lat = pd.read_csv(fig("pr_lattice_known.tsv"), sep="\t")
     lam = {int(c[1:]): np.array([r.lam_x, r.lam_y, r.lam_z]) for c, r in zip(lat.cartridge, lat.itertuples()) if c.startswith("g")}
     ref_um = np.mean(list(lam.values()), axis=0)  # lamina region, for the position-unit check
 
@@ -203,7 +204,7 @@ def main():
             ft_label[int(rt)] = lab + (f" ({side})" if side else "")
     print(f"FlyTable: {len(ft_label)} labelled roots, {len(ft_pr)} photoreceptors", flush=True)
     census = {}
-    vpath = os.path.join(OUT, "pr_bundles_roots_verified.tsv")
+    vpath = fig("pr_bundles_roots_verified.tsv")
     if os.path.exists(vpath):
         v = pd.read_csv(vpath, sep="\t", dtype=str)
         vcol = [c for c in v.columns if "verdict" in c.lower()]
@@ -247,7 +248,7 @@ def main():
     inp["r16"] = inp.kind.map(is_r16)
 
     # ---- 5. per-target footprint -------------------------------------------------------------------------------
-    lat = pd.read_csv(os.path.join(OUT, "pr_lattice_known.tsv"), sep="\t")
+    lat = pd.read_csv(fig("pr_lattice_known.tsv"), sep="\t")
     lam = {int(c[1:]): np.array([r.lam_x, r.lam_y, r.lam_z]) for c, r in zip(lat.cartridge, lat.itertuples()) if c.startswith("g")}
     piv = ext[ext.post.isin(targets)].groupby(["post", "pre_group"]).size().unstack(fill_value=0)
     rows = []
@@ -272,7 +273,7 @@ def main():
                          lattice_span_cart=round(span, 2), footprint_p90_um=round(p90, 1),
                          footprint_p90_cart=round(p90 / SPACING_UM, 2), footprint_max_um=round(dmax, 1)))
     foot = pd.DataFrame(rows).sort_values(["group_syn", "total_in"], ascending=False)
-    foot.to_csv(os.path.join(OUT, "pr_lamina_footprint.tsv"), sep="\t", index=False)
+    foot.to_csv(fig("pr_lamina_footprint.tsv"), sep="\t", index=False)
 
     # ---- 6. group pairs: shared targets vs lattice distance --------------------------------------------------------
     groups = sorted(lam)
@@ -287,7 +288,7 @@ def main():
                              jaccard=round(len(sh) / max(len(A | B), 1), 2),
                              shared_labels="; ".join(sorted({ft_label.get(x, "unlabelled") for x in sh}))[:120]))
     pairs = pd.DataFrame(prow).sort_values("lattice_dist_cart")
-    pairs.to_csv(os.path.join(OUT, "pr_lamina_footprint_pairs.tsv"), sep="\t", index=False)
+    pairs.to_csv(fig("pr_lamina_footprint_pairs.tsv"), sep="\t", index=False)
 
     # ---- 7. R7 / R8 --------------------------------------------------------------------------------------------
     def n_pp(g, c1, c2, same=True):
@@ -319,8 +320,8 @@ def main():
                              z_vox=int(round(r.pre_z * 1000 / VOX[2]))))
     r78tab = pd.DataFrame(grow)
     syn78 = pd.DataFrame(srow)
-    r78tab.to_csv(os.path.join(OUT, "pr_r7r8_synapses.tsv"), sep="\t", index=False)
-    syn78.to_csv(os.path.join(OUT, "pr_r7r8_synapse_sites.tsv"), sep="\t", index=False)
+    r78tab.to_csv(fig("pr_r7r8_synapses.tsv"), sep="\t", index=False)
+    syn78.to_csv(fig("pr_r7r8_synapse_sites.tsv"), sep="\t", index=False)
     cross = pp[pp.pre_group != pp.post_group].groupby(["pre_class", "post_class"]).size()
 
     irow = []
@@ -337,7 +338,7 @@ def main():
                          other_labelled=int((s.kind == "other labelled").sum()), unlabelled=int((s.kind == "unlabelled").sum()),
                          top_labelled_inputs="; ".join(f"{k} {n}" for k, n in oth.head(3).items())))
     r78in = pd.DataFrame(irow)
-    r78in.to_csv(os.path.join(OUT, "pr_r7r8_inputs.tsv"), sep="\t", index=False)
+    r78in.to_csv(fig("pr_r7r8_inputs.tsv"), sep="\t", index=False)
 
     # ---- summary --------------------------------------------------------------------------------------------------
     lmc = foot[foot.label.str.contains("L1-L5|lamina|monopolar|LMC", case=False, regex=True)]
@@ -372,7 +373,7 @@ def main():
     S.append("\n## Complete input of the R7 and R8 cells\n")
     S.append(md_table(r78in))
     txt = "\n".join(S)
-    open(os.path.join(OUT, "pr_lamina_footprint_summary.md"), "w").write(txt + "\n")
+    open(fig("pr_lamina_footprint_summary.md"), "w").write(txt + "\n")
     print(txt)
     print(f"\nDONE in {(time.time() - t0) / 60:.1f} min")
 

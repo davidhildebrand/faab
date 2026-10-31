@@ -21,6 +21,7 @@ from faab import ol_meshes, synsnap
 from faab.clients.cave import DATASTACK, throttle
 from faab.config import FIGURES
 from faab.partners.sheet import utc_stamp
+from faab.config import fig
 
 SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 CLS = ("superclass", "class", "subclass", "subsubclass", "type")
@@ -73,7 +74,7 @@ def main():
                          pre_median_vox=", ".join(str(int(round(v))) if np.isfinite(v) else "" for v in med),
                          notes=r.notes_))
     out = pd.DataFrame(rows).sort_values(["label", "cart", "n_pre"], ascending=[True, True, False])
-    path = os.path.join(FIGURES, f"{utc_stamp()}_pr_left_survey.tsv")
+    path = fig(f"{utc_stamp()}_pr_left_survey.tsv")
     out.to_csv(path, sep="\t", index=False)
     pd.set_option("display.width", 250)
     pd.set_option("display.max_colwidth", 60)

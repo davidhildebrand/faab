@@ -20,14 +20,15 @@ import caveclient
 from fafbseg import flywire
 from faab.clients.cave import DATASTACK
 from faab.partners.top10_xyz import VOX
+from faab.config import fig
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
 TMP = os.path.join(HERE, "..", "tmp")
-TSV = os.path.join(OUT, "faab_pr_top20_update.tsv")
-META = os.path.join(OUT, "faab_pr_top20_update_meta.json")
+TSV = fig("faab_pr_top20_update.tsv")
+META = fig("faab_pr_top20_update_meta.json")
 PRS = os.path.join(TMP, "sheet_prs.tsv")
-CHK = os.path.join(OUT, "faab_pr_top20_anchor_check.tsv")
+CHK = fig("faab_pr_top20_anchor_check.tsv")
 
 
 def valid(s):

@@ -8,13 +8,14 @@ if not hasattr(np, "row_stack"):
     np.row_stack = np.vstack
 import pandas as pd
 import navis
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
 MIN_PTS = 20
 
 
 def main():
-    D = pickle.load(open(os.path.join(OUT, "metu_lc2.pkl"), "rb"))
+    D = pickle.load(open(fig("metu_lc2.pkl"), "rb"))
     by = D["dotprops"]; lab = D["label"]
     roots = [r for r in by if len(by[r].points) >= MIN_PTS]
     nl = []
@@ -60,11 +61,11 @@ def main():
         print(f"\n=== stays LC ({len(stay)}) ===")
         print(stay[cols].to_string(index=False, float_format=fmt))
 
-    open(os.path.join(OUT, "metu_lc2_group1.txt"), "w").write("\n".join(str(r) for r in g1.root) + "\n")
-    open(os.path.join(OUT, "metu_lc2_group2.txt"), "w").write("\n".join(str(r) for r in g2.root) + "\n")
-    open(os.path.join(OUT, "metu_lc2_stay.txt"), "w").write("\n".join(str(r) for r in stay.root) + "\n")
-    open(os.path.join(OUT, "metu_lc2_metu4ref.txt"), "w").write("\n".join(str(r) for r in mm.root) + "\n")
-    df.to_csv(os.path.join(OUT, "metu_lc2_scores.csv"), index=False)
+    open(fig("metu_lc2_group1.txt"), "w").write("\n".join(str(r) for r in g1.root) + "\n")
+    open(fig("metu_lc2_group2.txt"), "w").write("\n".join(str(r) for r in g2.root) + "\n")
+    open(fig("metu_lc2_stay.txt"), "w").write("\n".join(str(r) for r in stay.root) + "\n")
+    open(fig("metu_lc2_metu4ref.txt"), "w").write("\n".join(str(r) for r in mm.root) + "\n")
+    df.to_csv(fig("metu_lc2_scores.csv"), index=False)
     print("\nsaved metu_lc2_group1.txt / group2.txt / stay.txt / metu4ref.txt / scores.csv\nDONE", flush=True)
 
 

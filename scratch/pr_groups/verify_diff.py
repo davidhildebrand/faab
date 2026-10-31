@@ -11,15 +11,16 @@ import pandas as pd
 from faab.config import FIGURES
 from faab.partners.sheet import utc_stamp
 from faab.pr.side import PREFIX, parse as parse_side
+from faab.config import fig
 
 side, args = parse_side()
-cur = os.path.join(FIGURES, f"{PREFIX[side]}bundles_roots_verified.tsv")
+cur = fig(f"{PREFIX[side]}bundles_roots_verified.tsv")
 if "--save" in args:
-    dst = os.path.join(FIGURES, f"{utc_stamp()}_{PREFIX[side]}bundles_roots_verified_before.tsv")
+    dst = fig(f"{utc_stamp()}_{PREFIX[side]}bundles_roots_verified_before.tsv")
     shutil.copy(cur, dst)
     print(f"saved {dst}")
     raise SystemExit
-old_path = sorted(glob.glob(os.path.join(FIGURES, f"*_{PREFIX[side]}bundles_roots_verified_before.tsv")))[-1]
+old_path = sorted(glob.glob(fig(f"*_{PREFIX[side]}bundles_roots_verified_before.tsv")))[-1]
 old = pd.read_csv(old_path, sep="\t", dtype={"root": str})
 new = pd.read_csv(cur, sep="\t", dtype={"root": str})
 m = old[["root", "cluster", "verdict", "me_frac"]].merge(new[["root", "verdict", "la_frac", "me_frac", "n_pre", "n_post"]],

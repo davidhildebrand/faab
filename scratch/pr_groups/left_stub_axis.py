@@ -14,10 +14,11 @@ import numpy as np
 import pandas as pd
 
 from faab.config import FIGURES
+from faab.config import fig
 
-known = pd.concat([pd.read_csv(os.path.join(FIGURES, f), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
+known = pd.concat([pd.read_csv(fig(f), sep="\t", dtype={"r16_ids": str, "r78_ids": str})
                    for f in ("pr_left_lattice_known.tsv", "pr_left_lattice_noaxis.tsv")]).sort_values("cartridge").reset_index(drop=True)
-sk = pickle.load(open(os.path.join(FIGURES, "pr_left_skels.pkl"), "rb"))
+sk = pickle.load(open(fig("pr_left_skels.pkl"), "rb"))
 ax_k = {r.cartridge: np.array([r.ax_x, r.ax_y, r.ax_z]) for r in known.itertuples()}
 
 

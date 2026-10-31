@@ -32,6 +32,7 @@ from faab.clients.cave import client as cave_client, live_outputs, roots_at_xyz,
 from faab.config import DATA, FIGURES
 from faab.partners.points import cell_points
 from faab.partners.sheet import TRACK, as_int, norm_xyz, parse_sheet, utc_stamp, write_blocks
+from faab.config import fig
 
 G_HEADER = ["upstream_PR", "PRtype", "root_id_orig", "root_id_curr", "xyz", "nsyn", "syn_pct", "PR_conv"] + TRACK
 H_HEADER = ["PR_root_id", "PRtype", "hop1_root_id", "h1_nsyn", "root_id_orig", "root_id_curr", "xyz", "nsyn", "syn_pct",
@@ -277,7 +278,7 @@ def main():
             return
         pre, blocks, log, name = res
     width = max(len(b[1]) for b in blocks)
-    out = os.path.join(FIGURES, f"{a.stamp or utc_stamp(now)}_FAABopticlobetargets-{name}.tsv")
+    out = fig(f"{a.stamp or utc_stamp(now)}_FAABopticlobetargets-{name}.tsv")
     write_blocks(out, [p for p in pre if not p.startswith("note:")], blocks, width,
                  notes=[p for p in pre if p.startswith("note:")])
     pd.DataFrame(log).to_csv(out.replace(".tsv", "_log.tsv"), sep="\t", index=False)

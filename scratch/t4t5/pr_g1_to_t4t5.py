@@ -18,6 +18,7 @@ import pandas as pd
 from faab import nglink
 from faab.config import DATA, FIGURES, TMP
 from faab.partners.sheet import utc_stamp
+from faab.config import fig
 
 spec = importlib.util.spec_from_file_location("cp", "/Users/davidh/Data/Vibe/FAAB/faab/scripts/paths/class_paths.py")
 cp = importlib.util.module_from_spec(spec)
@@ -91,7 +92,7 @@ def main():
             rows.append(dict(thr=thr, k=3, pr=str(r.pre_1), x=str(r.post_1), y=str(r.post_2), t=str(r.post),
                              weakest=min(r.n_1, r.n_2, r.n), total=r.n_1 + r.n_2 + r.n))
     P = pd.DataFrame(rows)
-    base = os.path.join(FIGURES, f"{stamp}_pr_g1_to_t4t5")
+    base = fig(f"{stamp}_pr_g1_to_t4t5")
     if P.empty:
         print("no paths at >= 3 synapses per edge")
         return

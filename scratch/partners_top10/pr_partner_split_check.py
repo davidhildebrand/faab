@@ -17,10 +17,11 @@ import numpy as np
 import pandas as pd
 import caveclient
 from faab.clients.cave import DATASTACK, throttle
+from faab.config import fig
 
 OUT = os.path.join(REPO, "figures")
-TSV = os.path.join(OUT, "faab_pr_top10_xyz.tsv")
-DST = os.path.join(OUT, "pr_partner_split_check.json")
+TSV = fig("faab_pr_top10_xyz.tsv")
+DST = fig("pr_partner_split_check.json")
 PAT = re.compile(r"root changed; xyz from current root (\d+); largest of (\d+) current roots")
 
 

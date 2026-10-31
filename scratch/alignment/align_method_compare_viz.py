@@ -18,6 +18,7 @@ from navis.transforms.align import align_rigid
 from sklearn.decomposition import PCA
 
 from faab.morph import fetch_dotprops_um
+from faab.config import fig
 
 # Proper rotations (det=+1) of the PCA frame: resolve principal-axis sign ambiguity
 # without mirroring (chirality-preserving).
@@ -72,7 +73,7 @@ def main():
     # ---- fetch (only CAVE access; read-only, throttled). Cache so plot iteration
     #      does not keep hitting CAVE. ----
     import pickle
-    cache = os.path.join(OUT, "dp_cache.pkl")
+    cache = fig("dp_cache.pkl")
     if os.path.exists(cache):
         dp, roots = pickle.load(open(cache, "rb"))
         print("loaded cached dotprops:", [str(r)[-6:] for r in roots])
@@ -135,7 +136,7 @@ def main():
     fig.legend(handles=handles, loc="lower center", ncol=len(dp), frameon=False,
                bbox_to_anchor=(0.5, 0.0))
 
-    out = os.path.join(OUT, "align_compare.png")
+    out = fig("align_compare.png")
     fig.savefig(out, dpi=150, bbox_inches="tight")
     print("\nsaved figure ->", out)
 
