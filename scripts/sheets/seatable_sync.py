@@ -13,7 +13,8 @@ Rules (David, 2026-10-30):
     2026-10-30: notes were too verbose and repeated the sheet; the label lives in the SeaTable column only). Replaced
     values are in the change log;
 Always: root_id_curr -> the root at the xyz when root_id_curr is no longer current; rows whose root_id_curr is current
-but elsewhere (MISMATCH) are highlighted and noted, nothing moved; statuses lowercase ('stoppped' -> 'stopped');
+but elsewhere (MISMATCH) are highlighted and get the short note 'xyz off the cell (on <root at xyz>)', nothing moved
+(notes are for the proofreaders: generated notes stay short, David 2026-10-30); statuses lowercase ('stoppped' -> 'stopped');
 'added' typed into checker moves to SeaTable; dates typed day-month-year (2020-10-26 for 20-10-2026, text 27-10-26)
 are corrected; text dates become dates and other text in date columns moves to notes. Hand edits (--edits JSON:
 tab, row, column, value; column 'fill' with value clear / highlight) are applied last. --left-rows adds the
@@ -198,7 +199,7 @@ def main():
                 new, why = fix_date(wb[tab].cell(r, cc).value)
                 if why:
                     if new == "" and why.startswith("text in"):
-                        notes_add.append(f"{name}: {s(wb[tab].cell(r, cc).value)}")
+                        notes_add.append(s(wb[tab].cell(r, cc).value))  # the proofreader's text, moved as is
                     B.put(tab, r, cc, new, why)
         # --- roots
         curr, at = v.get("root_id_curr", ""), mm.get("root_at_xyz", "")
@@ -207,7 +208,7 @@ def main():
                 B.put(tab, r, cols["root_id_curr"], at, "root update (root at xyz)")
             else:
                 B.fill(tab, r, cols.values(), "highlight", "MISMATCH")
-                notes_add.append(f"MISMATCH: the xyz lies on {at}, not on root_id_curr {curr} (point off the cell?)")
+                notes_add.append(f"xyz off the cell (on {at})")
         # --- SeaTable
         if mm.get("via"):
             sts = [t for t in dict.fromkeys(x.strip() for x in mm["st_status"].split(";")) if t]

@@ -6,7 +6,8 @@ Members: every census axon of the bundle except 'other' (medulla neurons), with 
 (faab.pr.verdict: R1-R6-like -> R1-R6, few sites -> R1-R6?, R7-like -> R7, R8-like -> R8, fragment), ordered R1-R6,
 R7, R8, R7/R8, R1-R6?, fragment. SeaTable cells (side L, type R1-6 / R7-8) keep SeaTable's type (R1-6 -> R1-R6; R7-8 ->
 R7 or R8 by the synapse verdict, else R7/R8), status and proofreader, SeaTable column 'present: <SeaTable label>',
-notes 'LRS: cartridge N' (no other SeaTable text in notes, David 2026-10-30). Census axons: status
+notes 'LRS: cartridge N' (no other SeaTable text in notes, David 2026-10-30). Notes stay short ('census bundle N';
+the synapse verdict, counts and mesh shares are in the TSV's 'detail' column, not in the sheet). Census axons: status
 'candidate'. xyz: the census point 75 um above the lamina (SeaTable cells: SeaTable's point), accepted only if the live
 root there is the axon's current root, else the nearest L2-chunk point verified on it. root_id_curr = the root at the
 xyz. CAVE read-only, >= 5 s between calls.
@@ -145,7 +146,9 @@ def main():
             v = x["syn"]
         syn = (f"synapses: {v['verdict']}, {v['n_pre']} pre / {v['n_post']} post, {pct(v['la'])} of outputs in LA_L, "
                f"{pct(v['me'])} in or near ME_L")
-        notes = []
+        # notes stay short (they are for the proofreaders, David 2026-10-30); the details go to the 'detail' column of
+        # the TSV, which is not written to the sheet
+        notes, detail = [], []
         if s is not None:
             cls = "R1-R6" if s.type == "R1-6" else {"R7-like": "R7", "R8-like": "R8"}.get(v["verdict"], "R7/R8")
             notes.append(s.notes)  # 'LRS: cartridge N'; the SeaTable label goes into the SeaTable column
@@ -153,21 +156,23 @@ def main():
             cls = CLASS[v["verdict"]]
         if cen is not None:
             b = cl.loc[cen.cluster]
-            notes.append(f"L side; census bundle {cen.cluster} ({int(b.n_roots)} axons, tier {int(b.tier)}, spread "
-                         f"{b.spread_um} um), 2026-10-29")
+            notes.append(f"census bundle {cen.cluster}")
+            detail.append(f"census bundle {cen.cluster} ({int(b.n_roots)} axons, tier {int(b.tier)}, spread {b.spread_um} um), 2026-10-29")
         elif k in ("cart1", "cart2"):
-            notes.append("L side; lamina-terminal piece: the axon is not traced toward the retina, so it was not in the census")
+            notes.append("axon not traced toward the retina")
+            detail.append("lamina-terminal piece: the axon is not traced toward the retina, so it was not in the census")
         else:
-            notes.append("L side; not in the census bundle (its axon stops before the bundle zone)")
-        notes.append(syn)
+            detail.append("not in the census bundle (its axon stops before the bundle zone)")
+        detail.append(syn)
         if cen is not None and isinstance(cen.note, str) and cen.note:
-            notes.append(cen.note)
+            detail.append(cen.note)
         if x.get("xyz_note"):
-            notes.append(x["xyz_note"])
+            (notes if x["xyz_note"].startswith("CHECK") else detail).append(x["xyz_note"])
         out.append(dict(group=group[k], root_id_orig=x["root"], **{"class": cls}, root_id_curr=x["now"], xyz=x["xyz"],
                         status=(s.status if s is not None and s.status else "candidate"),
                         proofreader=(s.proofreader if s is not None else ""), notes="; ".join(notes),
-                        SeaTable=(f"present: {s.label}" if s is not None else ""), n_pre=v["n_pre"]))
+                        SeaTable=(f"present: {s.label}" if s is not None else ""), n_pre=v["n_pre"],
+                        detail="; ".join(detail)))
     df = pd.DataFrame(out)
     df["o"] = df["class"].map({c: i for i, c in enumerate(ORDER)})
     df = df.sort_values(["group", "o", "n_pre"], ascending=[True, True, False]).drop(columns=["o"])
