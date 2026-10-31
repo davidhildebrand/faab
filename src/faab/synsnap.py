@@ -352,13 +352,13 @@ class Snapshot:
             return False
         return _utc(when) > self.tags().set_index("tag").loc[tag].timestamp + pd.Timedelta(seconds=1)
 
-    def catch_up(self, tag, when="now", client=None, max_interval_s=86400, overlap_s=600, batch=20000, pause_s=10.0):
+    def catch_up(self, tag, when="now", client=None, max_interval_s=86400, overlap_s=600, batch=20000, pause_s=0.0):
         """synapses whose roots changed between checkpoint `tag` and `when`, with their roots at `when`:
         1. get_delta_roots over <= 1-day steps from (checkpoint - 10 min) to `when` -> expired (old) roots
         2. rows of the root table with an expired root on either side -> their supervoxels (static.parquet)
         3. get_roots(supervoxels, timestamp=when) in batches of `batch`
-        Every CAVE call is at least the throttle gap (5 s) + pause_s apart. Returns a DataFrame id, pre_root,
-        post_root of the changed synapses (the full new state of each changed row)."""
+        Every CAVE call is at least the throttle gap (2 s, David 2026-10-31; was 5 s + 10 s) + pause_s apart. Returns a
+        DataFrame id, pre_root, post_root of the changed synapses (the full new state of each changed row)."""
         from faab.clients.cave import client as cave_client, throttle
         client = client or cave_client()
         t_tag = self.tags().set_index("tag").loc[tag].timestamp
@@ -366,7 +366,7 @@ class Snapshot:
         last = [0.0]
 
         def wait():
-            last[0] = throttle(last[0], gap=5.0 + pause_s)
+            last[0] = throttle(last[0], gap=2.0 + pause_s)
 
         old = set()
         a = t_tag - pd.Timedelta(seconds=overlap_s)

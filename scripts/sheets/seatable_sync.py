@@ -35,6 +35,7 @@ import glob
 import json
 import os
 import re
+import time
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -279,19 +280,29 @@ def main():
             return any(wb[x["tab"]].cell(x["row"], cc).fill is not None and wb[x["tab"]].cell(x["row"], cc).fill.fill_type == "solid"
                        and wb[x["tab"]].cell(x["row"], cc).fill.fgColor.rgb == HL for cc in x["cols"].values())
 
+        cur, last = {}, [time.time()]
+
+        def wait():
+            last[0] = throttle(last[0])
+
+        def latest_of(ids):
+            """current roots of upstream ids as written (an old root that split -> all its current pieces)"""
+            need = sorted({u for u in ids if u not in cur})
+            if need:
+                wait()
+                ok = np.asarray(c.chunkedgraph.is_latest_roots([int(u) for u in need])).astype(bool)
+                for u, good in zip(need, ok):
+                    if not good:
+                        wait()
+                    cur[u] = [int(u)] if good else [int(v) for v in np.atleast_1d(c.chunkedgraph.get_latest_roots(int(u)))]
+            return {u: cur[u] for u in ids}
+
         def recount(pairs):
-            ups = sorted({u for u, _ in pairs})
-            t = throttle(0)
-            ok = np.asarray(c.chunkedgraph.is_latest_roots([int(u) for u in ups])).astype(bool)
-            cur = {}
-            for u, good in zip(ups, ok):
-                if not good:
-                    t = throttle(t)
-                cur[u] = [int(u)] if good else [int(v) for v in np.atleast_1d(c.chunkedgraph.get_latest_roots(int(u)))]
-            t = throttle(t)
+            latest_of({u for u, _ in pairs})
+            wait()
             try:
                 syn = c.materialize.live_query("synapses_v2", timestamp=datetime.datetime.now(datetime.timezone.utc),
-                                               filter_in_dict={"pre_pt_root_id": sorted({v for vs in cur.values() for v in vs}),
+                                               filter_in_dict={"pre_pt_root_id": sorted({v for u, _ in pairs for v in cur[u]}),
                                                                "post_pt_root_id": sorted({int(cc) for _, cc in pairs})})
             except Exception as ex:
                 print(f"  recount failed ({str(ex)[:80]}); collapsed rows get their nsyn summed")
@@ -299,7 +310,7 @@ def main():
             n = syn[syn.pre_pt_root_id != syn.post_pt_root_id].groupby(["pre_pt_root_id", "post_pt_root_id"]).size()
             return {(u, cc): int(sum(n.get((v, int(cc)), 0) for v in cur[u])) for u, cc in pairs}
 
-        reconcile(wb, B, rows, cell_of, sizes, yellow, recount=recount)
+        reconcile(wb, B, rows, cell_of, sizes, yellow, recount=recount, latest_of=latest_of)
 
     # --- left-eye PRs section
     if a.left_rows:

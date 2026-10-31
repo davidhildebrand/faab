@@ -16,6 +16,9 @@
     L2 chunks; 'fragment of a L5 neuron' -> 'L5') and 'please review' on checked cells; row-specific notes ('xyz off the
     cell ...', merge history of the row's own root 'merged to/into/with ...', PRs bundle / pairing notes) stay on their
     own row only.
+  - A row whose cell is now the block's own upstream cell (a fragment of that cell, merged into it: e.g. R8 pieces in
+    the R8's partner block, David 2026-10-31) is not a partner any more and is removed; references to it are dropped
+    from tracked_in. Its synapses would be the cell's synapses onto itself, so nsyn could not be recounted either.
   - Row deletions shift the rows below: 'rN' / '<tab> rN' references in notes and tracked_in are renumbered (a deleted
     row -> its record row) and hyperlinks / row heights follow their rows.
 Every change goes through seatable_sync.Book (logged with the reason)."""
@@ -117,19 +120,32 @@ def first_n(v):
     return int(m.group()) if m else 0
 
 
-def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, log=print):
+def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, latest_of=None, log=print):
     """rows: scan_book rows of the tracking tabs (row numbers before any deletion); cell_of(x) -> live cell id or '';
     sizes: cell -> L2 chunks (cells not listed are never called whole); yellow(x) -> True for MISMATCH rows;
     recount(pairs) -> {(upstream id, cell): live synapses} for [(upstream id as written, cell)], or None (then the
-    collapsed rows' nsyn are summed)."""
+    collapsed rows' nsyn are summed); latest_of(ids) -> {id: [current roots]} for upstream ids as written, or None
+    (then rows whose cell became the block's own upstream cell are not looked for)."""
     val = lambda x, n: wb[x["tab"]].cell(x["row"], x["cols"][n]).value if n in x["cols"] else None
+    up_of = {}
+    for x in rows:
+        up = next((n for n in UPSTREAM if n in x["cols"]), None)
+        u = s(val(x, up)) if up and x["tab"] not in NO_COLLAPSE else ""
+        if re.fullmatch(r"\d{15,}", u):
+            up_of[(x["tab"], x["row"])] = u
+
+    # ---- rows whose cell is the block's own upstream cell now (its fragment was merged into it): not a partner
+    cur = latest_of(sorted(set(up_of.values()))) if latest_of and up_of else {}
+    selfs = [x for x in rows if (x["tab"], x["row"]) in up_of and not yellow(x)
+             and re.fullmatch(r"\d+", cell_of(x) or "") and int(cell_of(x)) in cur.get(up_of[(x["tab"], x["row"])], [])]
+    self_keys = {(x["tab"], x["row"]) for x in selfs}
     groups = {}
     for x in rows:
         c = cell_of(x)
-        if c and c != "0" and "status" in x["cols"] and not yellow(x):
+        if c and c != "0" and "status" in x["cols"] and not yellow(x) and (x["tab"], x["row"]) not in self_keys:
             groups.setdefault(c, []).append(x)
     groups = {c: g for c, g in groups.items() if len(g) > 1}
-    stats = dict(cells=len(groups), carried=0, collapsed_rows=0)
+    stats = dict(cells=len(groups), carried=0, collapsed_rows=0, self_rows=len(selfs))
 
     # ---- one tracking per cell
     for c, g in groups.items():
@@ -196,9 +212,7 @@ def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, log=print):
             continue
         g.sort(key=lambda x: (rank(val(x, "status")), s(val(x, "status")).upper() == "NEW-DUP", -first_n(val(x, "nsyn")), x["row"]))
         rec = g[0]
-        up = next((n for n in UPSTREAM if n in rec["cols"]), None)
-        u = s(val(rec, up)) if up else ""
-        todo.append((rec, g[1:], c, u if re.fullmatch(r"\d{15,}", u) else ""))
+        todo.append((rec, g[1:], c, up_of.get((rec["tab"], rec["row"]), "")))
         for x in g[1:]:
             drop.setdefault(tab, set()).add(x["row"])
             rec_of[(tab, x["row"])] = rec["row"]
@@ -218,6 +232,13 @@ def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, log=print):
                               why=f"collapsed into r{rec['row']} (same cell {c}, same block)"))
             B.touched.add(tab)
     stats["collapsed_rows"] = sum(len(v) for v in drop.values())
+    for x in selfs:
+        drop.setdefault(x["tab"], set()).add(x["row"])
+        rec_of[(x["tab"], x["row"])] = None  # nothing replaces it: references to it are dropped
+        B.log.append(dict(tab=x["tab"], row=x["row"], column="row", old=s(val(x, "root_id_orig")), new="",
+                          why=f"removed: its cell {cell_of(x)} is now the block's own upstream cell (a fragment merged "
+                              f"into it), not a partner"))
+        B.touched.add(x["tab"])
 
     # ---- delete, then renumber references
     new_of = {}
@@ -230,7 +251,7 @@ def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, log=print):
         shift = lambda r: r - sum(1 for d in dead if d < r)
         m = {}
         for r in range(1, ws.max_row + len(rs) + 1):
-            m[r] = shift(rec_of[(tab, r)]) if r in rs else shift(r)
+            m[r] = (shift(rec_of[(tab, r)]) if rec_of[(tab, r)] else 0) if r in rs else shift(r)  # 0: removed outright
         new_of[tab] = m
         for row in ws.iter_rows():
             for cell in row:
@@ -254,14 +275,18 @@ def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, log=print):
 
                 def sub(q):
                     m = new_of.get(q[1] or x["tab"], {})
-                    return f"{q[1] + ' ' if q[1] else ''}{q[2]}{m.get(int(q[3]), int(q[3]))}"
+                    k = m.get(int(q[3]), int(q[3]))
+                    return f"{q[1] + ' ' if q[1] else ''}{q[2]}{k}" if k else "\0"  # \0: a removed row
                 u = ref.sub(sub, t)
-                if n == "tracked_in":  # two rows collapsed into one
-                    u = "; ".join(dict.fromkeys(p for p in u.split("; ") if p))
+                if n == "tracked_in":  # two rows collapsed into one; removed rows dropped
+                    u = "; ".join(dict.fromkeys(p for p in u.split("; ") if p and "\0" not in p))
+                elif "\0" in u:
+                    u = t  # a note naming a removed row stays as written
                 if u != t:
                     cell.value = u
                     B.log.append(dict(tab=x["tab"], row=x["row"], column=n, old=t, new=u, why="row references renumbered"))
                     B.touched.add(x["tab"])
     log(f"reconcile: {stats['cells']} cells on several rows; tracking carried over on {stats['carried']}; "
-        f"{stats['collapsed_rows']} same-block rows collapsed ({', '.join(f'{t} {len(v)}' for t, v in drop.items()) or 'none'})")
+        f"{stats['collapsed_rows']} same-block rows collapsed and {stats['self_rows']} rows removed whose cell is the "
+        f"block's own upstream cell ({', '.join(f'{t} {len(v)}' for t, v in drop.items()) or 'none'})")
     return new_of
