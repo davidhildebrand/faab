@@ -32,7 +32,7 @@ re-query); the mesh shares and the classification are network-free and written t
 figures/pr_bundles_roots_verified.tsv and pr_bundles_clusters_verified.tsv; the paste-ready summary
 figures/pr_bundles_summary.md is regenerated with the verified counts. The raw synapse tables keep the live_query
 columns (root ids, '[x y z]' positions in nm), which src/faab/pr/bundles_pairs.py reads.
---side left reads/writes the pr_left_* files instead; default right.
+--side left reads/writes the pr_left_* files instead; default right. The rule and its constants live in faab.pr.verdict.
 Usage: python bundles_verify.py [--refresh] [--side right|left]
 """
 from faab.config import REPO
@@ -42,10 +42,11 @@ import os
 import numpy as np
 import pandas as pd
 import caveclient
-from scipy.spatial import cKDTree
-from faab import ol_meshes, synsnap
+from faab import synsnap
 from faab.clients.cave import DATASTACK
 from faab.pr.side import NEUROPILS, PREFIX, parse as parse_side
+from faab.pr.verdict import (LA_MIN, ME_MARGIN_UM, ME_R7, POST_MAX, POST_MAX_R7, PRE_MIN, R8_IN_PER_OUT,
+                             mesh_shares as _mesh_shares, verdict)
 
 HERE = REPO
 OUT = os.path.join(HERE, "figures")
@@ -55,9 +56,6 @@ PFX = PREFIX[SIDE]
 LA, ME = NEUROPILS[SIDE]
 SYN = os.path.join(OUT, f"{PFX}bundles_synapses.tsv")
 RAW = os.path.join(OUT, f"{PFX}bundles_synapses_raw_{{}}.tsv")
-PRE_MIN, POST_MAX, POST_MAX_R7 = 40, 100, 150
-# right-side lamina share p10: R1-R6 0.86, R8 0.62; R7 p75 0.56. Medulla share (5 um margin) p90: R1-R6 and R8 0.0
-LA_MIN, ME_R7, R8_IN_PER_OUT, ME_MARGIN_UM = 0.6, 0.1, 0.2, 5.0
 
 
 def mesh_shares(pre):
@@ -65,11 +63,7 @@ def mesh_shares(pre):
     if not len(pre):
         return pd.DataFrame(columns=["la_frac", "me_frac"])
     P = pre.pre_pt_position.str.strip("[]").str.split(expand=True).to_numpy(float) / 1000.0
-    region = ol_meshes.assign(P, [LA, ME])
-    near_me = cKDTree(ol_meshes.mesh(ME)[0] / 1000.0).query(P)[0] <= ME_MARGIN_UM
-    region = np.where((region == "none") & near_me, ME, region)
-    t = pd.crosstab(pre.pre_pt_root_id.to_numpy(), region, normalize="index")
-    return pd.DataFrame({"la_frac": t[LA] if LA in t else 0.0, "me_frac": t[ME] if ME in t else 0.0}, index=t.index).round(2)
+    return _mesh_shares(pre.pre_pt_root_id.to_numpy(), P, LA, ME)
 
 
 def raw(df):
@@ -144,17 +138,7 @@ def main():
     df["presyn_xyz"] = ["" if np.isnan(r.pre_x) else f"{int(round(r.pre_x * 1000 / VOX[0]))}, {int(round(r.pre_y * 1000 / VOX[1]))}, {int(round(r.pre_z * 1000 / VOX[2]))}"
                         for r in df.itertuples()]
 
-    def rule(r):
-        if r.n_pre < 10:
-            return "fragment"
-        if r.la_frac >= LA_MIN and r.me_frac < ME_R7 and r.n_post <= POST_MAX:
-            if r.n_post / r.n_pre >= R8_IN_PER_OUT:
-                return "R8-like"
-            return "R1-R6-like" if r.n_pre >= PRE_MIN else "R1-R6-like (few sites)"
-        if (r.la_frac < LA_MIN or r.me_frac >= ME_R7) and r.n_post <= POST_MAX_R7:
-            return "R7-like"
-        return "other"
-    df["verdict"] = [rule(r) for r in df.itertuples()]
+    df["verdict"] = [verdict(r.n_pre, r.n_post, r.la_frac, r.me_frac) for r in df.itertuples()]
 
     def note(r):
         out = ["high n_post"] if r.n_post > 30 else []
