@@ -12,12 +12,22 @@ ID = r"\d{15,}"
 REFINE = re.compile(r"refine \d{4}-\d\d-\d\d:\s*")
 DROP = [  # generated analysis details (kept in the census / refine / pairing output tables)
     r"", r"SeaTable R(1-6|7-8)", r"in the bundle core \(.*\)", r"reclassified from .*", r"six outer axons kept .*",
-    r"ring angle .*", r"pairing: .*", r"R\d margin .*", r"no mutual mirror partner", r"terminal-zone partner differs .*",
+    r"ring angle .*", r"R\d margin .*", r"no mutual mirror partner",
+    r"pairing: (pair )?confirmed( \(terminal pair fits the ring order.*\))?",  # the confidence column says it
     r"output synapses (within|beyond) the R1-R6 terminal zone .*",
     r"R\d \((central axon of the bundle|output synapses beyond the lamina .*|listed R\d.*|most central listed .*)\)?",
     r"xyz moved onto the axon .*", r"admitted to complete the ring", r"synapses off the lamina line",
 ]
 SHORT = [  # (pattern, replacement): generated flags worth keeping, in a short form
+    # pairing remarks that the pair columns do not hold (David, 2026-10-30: they were missed when dropped)
+    (rf"pairing: conflict, ring wins: terminal pair \(({ID})\) breaks the ring order", r"pair conflict: terminal pair \1"),
+    (rf"pairing: conflict, ring wins \(.*terminal said ({ID})\)", r"pair conflict: terminal said \1"),
+    (rf"pairing: conflict, terminal wins \(.*ring said ({ID})\)", r"pair conflict: ring said \1"),
+    (rf"pairing: conflict: terminal pair breaks the ring order \(ring-consistent partner ({ID})\)", r"pair conflict: ring partner \1"),
+    (rf"terminal-zone partner differs \(({ID})\)", r"terminal partner \1"),
+    (r"pairing: terminal only", "pair from terminals only"),
+    (r"pairing: ring only", "pair from the ring only"),
+    (r"pairing: pair confirmed, names differ", "pair names differ"),
     (r"LRS: cartridge (\d+)(: .*)?", r"LRS: cartridge \1"),
     (r"census (?:cluster|bundle) (\d+) \(.*?\), \d{4}-\d\d-\d\d: .*", r"census bundle \1"),
     (r"OFF-BUNDLE .*", "OFF-BUNDLE"),
