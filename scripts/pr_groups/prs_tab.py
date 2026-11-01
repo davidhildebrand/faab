@@ -179,7 +179,7 @@ def cmd_group_links(a):
     holding other text there (not starting with --prefix) is left alone and reported"""
     wb, ws = T.load(a.book)
     t = pd.read_csv(a.tsv, sep="\t").fillna("")
-    want = {int(x.group): (x.text, x.url) for x in t.itertuples(index=False) if x.url}
+    want = {int(x.group): (x.text, x.url) for x in t.itertuples(index=False) if x.url and int(x.group) >= a.from_group}
     done, skipped = [], []
     for b in T.blocks(ws):
         if b.group not in want:
@@ -243,26 +243,49 @@ def row_values(ws, b, r):
 
 def cmd_move_rows(a):
     """move member rows (root_id_orig or root_id_curr ROOT) below the last member of group G, with their values and
-    styles by column name and NOTE appended; 'not refined ...' notes (about the old group's census bundle) are dropped.
-    A block left without members loses its title line, header and the blank line below."""
+    styles by column name and NOTE appended; note parts about the old group ('not refined ...', an earlier 'from group
+    N ...') are dropped. A group G that does not exist is created (2026-11-01: group 94 recreated): title line, header
+    and blank line copied from the leads block numbered just below it, placed before the next block. A block left
+    without members loses its title line, header and the blank line below."""
     wb, ws = T.load(a.book)
     bl = T.blocks(ws)
     by_group = {b.group: b for b in bl}
     where = {T.get(ws, b, r, k): (b, r) for b in bl for r in b.rows for k in ("root_id_orig", "root_id_curr")}
-    edits, inserts, gone = {}, {}, set()
+    edits, inserts, gone, new = {}, {}, set(), {}
     for spec in a.moves:
         head, _, note = spec.partition("=")
         root, g = head.rsplit(":", 1)
-        if root not in where or int(g) not in by_group:
-            sys.exit(f"{spec}: no row of {root} or no group {g}")
-        (b, r), d = where[root], by_group[int(g)]
+        g = int(g)
+        if root not in where:
+            sys.exit(f"{spec}: no row of {root}")
+        b, r = where[root]
         vals, styles = row_values(ws, b, r)
-        parts = [p for p in short_notes.split_parts(str(vals.get("notes") or "")) if not p.startswith("not refined")]
+        parts = [p for p in short_notes.split_parts(str(vals.get("notes") or ""))
+                 if not p.startswith(("not refined", "from group "))]
         vals["notes"] = "; ".join(parts + ([note.strip()] if note.strip() else [])) or None
-        inserts.setdefault(d.rows[-1], []).append(make_row(T.snapshot(ws, d.rows[-1]), d.cols, vals, styles))
+        if g in by_group:
+            d = by_group[g]
+            inserts.setdefault(d.rows[-1], []).append(make_row(T.snapshot(ws, d.rows[-1]), d.cols, vals, styles))
+        else:
+            new.setdefault(g, []).append((vals, styles))
         edits[r] = []
         gone.add(r)
-        print(f"row {r} (group {b.group}) -> group {d.group}: {root}")
+        print(f"row {r} (group {b.group}) -> group {g}{'' if g in by_group else ' (new)'}: {root}")
+    for g, rows in new.items():
+        below = [b for b in bl if b.section == "leads" and b.group < g]
+        if not below:
+            sys.exit(f"group {g}: no leads block numbered below it to copy the layout from")
+        t = max(below, key=lambda b: b.group)
+        nxt = min((b for b in bl if b.title_row > t.title_row), key=lambda b: b.title_row, default=None)
+        if nxt is None:
+            sys.exit(f"group {g}: would go after the last block; not supported")
+        cells, height = T.snapshot(ws, t.title_row)
+        title = ([(f"group {g}", cells[0][1], None)] + [(None, st, None) for _, st, _ in cells[1:]], height)
+        lines = [title, T.snapshot(ws, t.header_row)]
+        lines += [make_row(T.snapshot(ws, t.rows[-1]), t.cols, v, s) for v, s in rows]
+        lines.append(T.snapshot(ws, nxt.title_row - 1))  # the blank line between blocks
+        inserts.setdefault(nxt.title_row - 1, []).extend(lines)
+        print(f"group {g}: new block of {len(rows)} rows before group {nxt.group}")
     for b in bl:
         if set(b.rows) <= gone:
             below = b.rows[-1] + 1
@@ -787,6 +810,8 @@ def main():
     p = cmd("group-links", cmd_group_links)
     p.add_argument("tsv", help="TSV with columns group, text, url")
     p.add_argument("--column", default="link", help="header of the column the link goes under (default link)")
+    p.add_argument("--from-group", type=int, default=9,
+                   help="first group to get a link (default 9: groups 1-8 are vetted and stay as they are, David 2026-11-01)")
     p.add_argument("--prefix", default="Automatic grouping check", help="text there that may be replaced (earlier links)")
     p = cmd("replace-group", cmd_replace_group)
     p.add_argument("paste", help="groups_refine.py paste TSV (PRs-tab columns)")
