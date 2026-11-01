@@ -9,7 +9,7 @@ network-free
   dates IN                  text dates in pr_date / chk_date -> real dates shown as yy-mm-dd
   order IN                  members in David's order (R1-R6 by pairing, R7, R8, rest); rows move with their formatting
   bold IN                   'group N' lines and header rows bold
-  strip-notes IN            remove '<tag> YYYY-MM-DD: ...' note segments (--tag, default regroup)
+  strip-notes IN            remove '<tag> YYYY-MM-DD: ...' note segments (--tag, default regroup; --groups to limit)
   add-note IN G:ROOT=TEXT   append TEXT to the notes of the row with root_id_orig ROOT in group G (repeatable)
   add-notes IN TSV          the same from a TSV (group, root_id_orig, note), e.g. groups_refine.py medulla_notes.tsv
   drop-rows IN ROOT ...     remove the member rows of these cells (root_id_orig or root_id_curr) from every group
@@ -117,7 +117,8 @@ def cmd_bold(a):
 
 def cmd_strip_notes(a):
     wb, ws = T.load(a.book)
-    print(f"{a.tag} note segments removed from {T.strip_tagged_notes(ws, a.tag)} cells")
+    n = T.strip_tagged_notes(ws, a.tag, set(a.groups) if a.groups else None)
+    print(f"{a.tag} note segments removed from {n} cells" + (f" (groups {', '.join(map(str, a.groups))})" if a.groups else ""))
     finish(wb, ws, a)
 
 
@@ -820,8 +821,9 @@ def main():
     cmd("dates", cmd_dates)
     cmd("order", cmd_order)
     cmd("bold", cmd_bold)
-    cmd("strip-notes", cmd_strip_notes).add_argument("--tag", action="append", default=None,
-                                                     help="note tag to remove (repeatable; default regroup)")
+    p = cmd("strip-notes", cmd_strip_notes)
+    p.add_argument("--tag", action="append", default=None, help="note tag to remove (repeatable; default regroup)")
+    p.add_argument("--groups", type=int, nargs="+", help="only in these groups (default: all)")
     allow = dict(action="store_true", help="also add to vetted groups (only after asking David)")
     p = cmd("add-note", cmd_add_note)
     p.add_argument("notes", nargs="+", metavar="G:ROOT=TEXT")

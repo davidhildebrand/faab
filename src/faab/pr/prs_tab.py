@@ -184,10 +184,13 @@ def tag_pattern(tag):
     return re.compile(rf"(^|;\s*){re.escape(tag)} \d{{4}}-\d{{2}}-\d{{2}}: [^;]*")
 
 
-def strip_tagged_notes(ws, tags=("regroup",)):
-    """remove '<tag> YYYY-MM-DD: ...' segments from the notes cells; returns the number of cells changed"""
+def strip_tagged_notes(ws, tags=("regroup",), groups=None):
+    """remove '<tag> YYYY-MM-DD: ...' segments from the notes cells (of `groups` only, when given); returns the
+    number of cells changed"""
     pats, n = [tag_pattern(t) for t in tags], 0
     for b in blocks(ws):
+        if groups is not None and b.group not in groups:
+            continue
         c = b.cols.get("notes")
         for r in b.rows if c else ():
             v = ws.cell(r, c).value
