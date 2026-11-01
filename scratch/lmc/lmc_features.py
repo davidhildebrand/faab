@@ -5,7 +5,10 @@ Depth in a neuropil: 0 at its outer face (ME: the face toward the lamina; LA: th
 retina), 1 at its inner face: d_outer / (d_outer + d_inner), with distances to the two face sets of the mesh (faces
 sorted by whether their outward normal points toward the other neuropil). Points outside a neuropil get how far they
 reach past its faces. Cable = L2 skeleton resampled to 1 um; synapses = local snapshot positions (lmc_data.py).
-Writes figures/lmc/lmc_features.tsv. Usage: lmc_features.py"""
+Writes figures/lmc/lmc_features.tsv. --set NAME reads/writes figures/lmc/lmc_NAME_cells.tsv, lmc_NAME_synapses.parquet
+and lmc_NAME_features.tsv instead (2026-11-01: the LMC search candidates, set 'cand'; the skeleton cache is shared).
+Usage: lmc_features.py [--set NAME]"""
+import sys
 import pickle
 
 import numpy as np
@@ -53,9 +56,12 @@ def hist(x):
 def main():
     import navis
     navis.set_pbars(hide=True)
-    cells = pd.read_csv(fig("lmc_cells.tsv"), sep="\t", dtype=str).fillna("")
+    pfx = f"lmc_{sys.argv[sys.argv.index('--set') + 1]}_" if "--set" in sys.argv else "lmc_"
+    cells = pd.read_csv(fig(f"{pfx}cells.tsv"), sep="\t", dtype=str).fillna("")
     sk = pickle.load(open(fig("lmc_skeletons.pkl"), "rb"))
-    syn = pd.read_parquet(fig("lmc_synapses.parquet"))
+    syn = pd.read_parquet(fig(f"{pfx}synapses.parquet"))
+    syn = syn[syn.lmc.isin(set(cells.root))]
+    by = dict(tuple(syn.groupby(["lmc", "role"])))
     mesh = {}
     for side in ("R", "L"):
         mesh[("LA", side)] = faces_split(f"LA_{side}", f"ME_{side}")
@@ -86,7 +92,7 @@ def main():
                 rad = np.linalg.norm(Q - np.outer(Q @ ax, ax), axis=1)
                 f["LA_spread_p90_um"], f["LA_spread_max_um"] = float(np.percentile(rad, 90)), float(rad.max())
             for role in ("in", "out"):
-                q = syn[(syn.lmc == c.root) & (syn.role == role)][["x", "y", "z"]].to_numpy(float)
+                q = by[(c.root, role)][["x", "y", "z"]].to_numpy(float) if (c.root, role) in by else np.zeros((0, 3))
                 zq, _, _, iq = depth(q, mesh[(npl, side)]) if len(q) else (np.zeros(0),) * 3 + (np.zeros(0, bool),)
                 zz = zq[iq] if len(q) else np.zeros(0)
                 f[f"n_{role}_{npl}"] = int(len(zz))
@@ -96,17 +102,16 @@ def main():
                         f[f"ME_out_bin{k}"] = v
                     f["ME_out_depth_p10"] = float(np.percentile(zz, 10)) if len(zz) else np.nan
                     f["ME_out_depth_p90"] = float(np.percentile(zz, 90)) if len(zz) else np.nan
-        f["n_in"], f["n_out"] = int((syn.lmc == c.root).sum() - (syn[(syn.lmc == c.root)].role == "out").sum()), \
-            int(((syn.lmc == c.root) & (syn.role == "out")).sum())
+        f["n_in"], f["n_out"] = (len(by[(c.root, k)]) if (c.root, k) in by else 0 for k in ("in", "out"))
         rows.append(f)
         if len(rows) % 20 == 0:
             print(f"  {len(rows)} cells", flush=True)
     F = pd.DataFrame(rows)
-    F.to_csv(fig("lmc_features.tsv"), sep="\t", index=False)
+    F.to_csv(fig(f"{pfx}features.tsv"), sep="\t", index=False)
     show = ["cable_LA", "cable_ME", "ME_depth_min", "ME_depth_max", "ME_max_um_from_outer", "LA_beyond_outer_um", "LA_spread_p90_um",
             "n_in_LA", "n_out_LA", "n_out_ME", "ME_out_depth_med", "ME_out_depth_p90", "LA_depth_min", "LA_depth_max"]
     print(F.groupby("label")[show].median().round(2).T.to_string())
-    print("written", fig("lmc_features.tsv"))
+    print("written", fig(f"{pfx}features.tsv"))
 
 
 if __name__ == "__main__":
