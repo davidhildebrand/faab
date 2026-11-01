@@ -16,8 +16,9 @@ Steps (run in this order; every step is resumable and saves into figures/refine/
             members outside it are flagged off-bundle, unlisted roots inside it are classified (member of another
             group / medulla output / census PR-like / PR-like by fresh presynaptic sites / non-PR). Medulla check
             (2026-10-31): an unlisted axon with >= 60% of its output sites in the medulla is added only as the bundle's
-            R7 (else: LMC, or a PR merged with glia and other cells; not added, and kept out of the lamina depth); an
-            R1-R6/R8 with >= 10% is flagged in its notes (an R7, an LMC, or a merge error).
+            R7 (else: possible LMC, or a PR merged with glia and other cells; not added, and kept out of the lamina
+            depth); an R1-R6/R8 with >= 10% is flagged in its notes (possible R7, LMC, or merge error) and listed in
+            medulla_notes.tsv (the input of prs_tab.py add-notes).
             R8 = the central axon (median radius
             <= 0.7 um); R7 = the long visual fiber (presynaptic sites beyond the lamina zone), else the inner R7/R8-class
             cell on the ring. Ring test: with R7, pairs/names from the angle relative to R7; without R7, pairs from the
@@ -26,8 +27,13 @@ Steps (run in this order; every step is resumable and saves into figures/refine/
             (larger normalized margin wins) / terminal only / ring only. Writes the sheet-format tables
             figures/pr_groups9plus_refined_paste.tsv and _pipes.txt (unpadded ' | ', no dash rows) and
             figures/refine/summary.tsv (printed as markdown).
-Read-only; CAVE <= 1 call / 5 s, no fan-out.
-Usage: python faab_pr_groups_refine.py <prep|terminal|track|refine> [--groups 9-29]"""
+  all       prep, terminal, track and refine in turn.
+Input groups: the 2026-10-01/02 tables (PASTES), or with --tab BOOK the right-side leads (groups 9+ above '>>> additional
+L side') of a PRs tab .xlsx, i.e. the groups as they stand now. --run NAME keeps every file of the run in
+figures/refine_<NAME>/ (default figures/refine/, the 2026-10-15 run). Presynaptic sites come from the local synapse
+snapshot caught up to now (faab.synsnap; 2026-11-01, was live_query).
+Read-only; CAVE <= 1 call / 2 s, no fan-out.
+Usage: groups_refine.py <prep|terminal|track|refine|all|split> [--groups 9-29] [--tab BOOK --run NAME]"""
 import argparse
 import datetime
 import itertools
@@ -46,12 +52,14 @@ import navis
 import caveclient
 from fafbseg import flywire
 
+from faab import synsnap
 from faab.clients.cave import DATASTACK, throttle
 from faab.partners.top10_xyz import VOX
+from faab.pr import prs_tab as T
 from faab.pr.bundles_pairs import analyse, NAMES, COLS, SCACHE, OUT
 from faab.pr.groups_mirror import prep as skprep
 from faab.pr.bundles import read_box
-from faab.pr.lamina_footprint import flat, retry
+from faab.pr.lamina_footprint import flat
 from faab.pr.prs_tab import member_order
 from faab.pr.side import NEUROPILS
 from faab.pr.verdict import ME_R7, mesh_shares
@@ -67,6 +75,8 @@ SECOND = os.path.join(OUT, "refine", "second_bundles.json")
 STATE = os.path.join(RDIR, "state.json")
 PRESYN = os.path.join(RDIR, "presyn.tsv")
 FRAMES = os.path.join(RDIR, "frames.pkl")
+PIPES, PASTE = fig("pr_groups9plus_refined_pipes.txt"), fig("pr_groups9plus_refined_paste.tsv")
+SNAP = synsnap.Snapshot(log=lambda *_: None)
 RES1 = np.array([32.0, 32.0, 45.0])
 HALF_UM, STEP_UM, ZONE = 3.0, 3.0, 35.0
 CORE_R, CORE_FRAC, MIN_VOX = 1.7, 0.8, 300  # pilot 2026-10-15: neighbor-bundle axons reach 1-2.2 um at 50-80% presence
@@ -75,7 +85,7 @@ CORE_R, CORE_FRAC, MIN_VOX = 1.7, 0.8, 300  # pilot 2026-10-15: neighbor-bundle 
 # 648518347582104647, 648518347570497932). Proofread R1-R6 and R8: 0% of output sites in the medulla; proofread R7:
 # <= 52%, with >= 21% in the lamina (2026-10-29 mesh shares). R1-R6/R8 are flagged from ME_R7 (10%).
 ME_NOT_PR = 0.6
-TODAY = datetime.date.today().isoformat()
+TODAY = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
 
 
 # ----------------------------------------------------------------------------------------------------------- inputs
@@ -108,6 +118,41 @@ def load_groups():
             groups[g].append(dict(group=g, root_orig=d["root_id_orig"], cls=d["class"], root_curr=d["root_id_curr"],
                                   xyz=d["xyz"], status=d.get("status", ""), notes=note, kind=kind))
     return groups
+
+
+def load_groups_tab(book):
+    """the right-side leads of a PRs tab (groups 9+ above '>>> additional L side') in load_groups() form; the tab's
+    classes R7 / R8 become R7/R8 of that kind, 'R1-R6?' becomes R1-R6"""
+    ws = T.load(book)[1]
+    left = next((r for r in range(1, ws.max_row + 1) if T.text(ws, r, 1).startswith(">>> additional L side")),
+                ws.max_row + 1)
+    groups = {}
+    for b in T.blocks(ws):
+        if b.section != "leads" or b.title_row > left:
+            continue
+        rows = groups.setdefault(b.group, [])
+        for r in b.rows:
+            get = lambda k: T.get(ws, b, r, k)
+            cls, kind, note = get("class"), "", get("notes")
+            if cls in ("R7", "R8"):
+                cls, kind = "R7/R8", cls
+            elif cls == "R7/R8":
+                kind = "R7" if "R7-like" in note else ("R8" if "R8-like" in note else "R?")
+            elif cls == "R1-R6?":
+                cls = "R1-R6"
+            rows.append(dict(group=b.group, root_orig=get("root_id_orig"), cls=cls, root_curr=get("root_id_curr"),
+                             xyz=get("xyz"), status=get("status"), notes=note, kind=kind))
+    return groups
+
+
+def set_run(name):
+    """every intermediate and output of this run in figures/refine_<name>/"""
+    global RDIR, SECOND, STATE, PRESYN, FRAMES, PIPES, PASTE
+    RDIR = os.path.join(os.path.dirname(RDIR), f"refine_{name}")
+    os.makedirs(RDIR, exist_ok=True)
+    SECOND, STATE, PRESYN, FRAMES = (os.path.join(RDIR, f) for f in ("second_bundles.json", "state.json", "presyn.tsv",
+                                                                      "frames.pkl"))
+    PIPES, PASTE = (os.path.join(RDIR, f) for f in ("pr_groups9plus_refined_pipes.txt", "pr_groups9plus_refined_paste.tsv"))
 
 
 def select(groups, spec):
@@ -145,26 +190,24 @@ def ref_um():
 
 
 def query_presyn(client, roots, state, t, label="members"):
+    """presynaptic sites from the local synapse snapshot, caught up to now (its CAVE catch-up keeps the 2 s gap)"""
     done = set(state.get("presyn_done", []))
     todo = sorted({str(r) for r in roots} - done)
     print(f"presynaptic sites: {len(todo)} {label} to query", flush=True)
+    if not todo:
+        return t
     now = datetime.datetime.now(datetime.timezone.utc)
-    for i in range(0, len(todo), 100):
-        chunk = [int(x) for x in todo[i:i + 100]]
-        t = throttle(t)
-        raw = retry(lambda: client.materialize.live_query("synapses_v2", timestamp=now,
-                                                          filter_in_dict={"pre_pt_root_id": chunk}))
-        if len(raw):
-            f = flat(raw, list(VOX), f"{now:%Y-%m-%d %H:%M} UTC", ref_um())
-            f = f[f.pre != f.post][["pre", "pre_x", "pre_y", "pre_z", "queried"]]
-            f.to_csv(PRESYN, sep="\t", index=False, mode="a", header=not os.path.exists(PRESYN))
-        else:
-            f = []
-        done.update(str(x) for x in chunk)
-        state["presyn_done"] = sorted(done)
-        save_state(state)
-        print(f"  {min(i + 100, len(todo))}/{len(todo)} roots queried, {len(f)} synapses", flush=True)
-    return t
+    s = SNAP.synapses(pre=[int(x) for x in todo], when="now", positions=True, client=client)
+    s = s.rename(columns={"pre_root": "pre_pt_root_id", "post_root": "post_pt_root_id",
+                          **{f"{p}_{a}": f"{p}_pt_position_{a}" for p in ("pre", "post") for a in "xyz"}})
+    if len(s):
+        f = flat(s, list(VOX), f"{now:%Y-%m-%d %H:%M} UTC (synapse snapshot)", ref_um())
+        f = f[f.pre != f.post][["pre", "pre_x", "pre_y", "pre_z", "queried"]]
+        f.to_csv(PRESYN, sep="\t", index=False, mode="a", header=not os.path.exists(PRESYN))
+    state["presyn_done"] = sorted(done | set(todo))
+    save_state(state)
+    print(f"  {len(todo)} roots, {len(s)} synapses", flush=True)
+    return time.time()
 
 
 def fetch_skeletons(roots, t, label=""):
@@ -470,8 +513,8 @@ def medulla_flag(me, cls):
     in the medulla, and tracked R7 candidates reach 80-100%)"""
     if me is None or cls == "R7" or me < ME_R7:
         return ""
-    return (f"MEDULLA OUTPUT: {100 * me:.0f}% of its output sites in the medulla (proofread R1-R6 and R8: 0%): an R7, "
-            f"an LMC, or a merge error? check")
+    return (f"medulla output: {100 * me:.0f}% of its output sites in the medulla (proofread R1-R6 and R8: 0%); possible "
+            f"R7, LMC, or merge error")
 
 
 def cmd_refine(groups, sel):
@@ -591,7 +634,7 @@ def cmd_refine(groups, sel):
             r7_how = f"output synapses beyond the lamina (median {sp[r7] - (lam_s or 0):.0f} um past the R1-R6 sites)"
         for r in high - {r7}:
             role[r] = (f"{100 * me_share[r]:.0f}% of its {npre[r]} output sites in the medulla and not this bundle's R7 "
-                       f"(LMC, or a PR merged with glia and other cells; check); not added")
+                       f"(possible LMC, or a PR merged with glia and other cells); not added")
         prset = [r for r in prset if r not in high or r == r7]
         add = [r for r in prset if r not in rowcls]
         acc_all.update(prset)
@@ -829,7 +872,7 @@ def order_members(rows):
 
 
 def write_outputs(groups, sel, results, state):
-    lines, summ = [], []
+    lines, summ, notes = [], [], []
     for g in sel:
         R = results.get(g, {})
         rows = groups[g]
@@ -903,6 +946,10 @@ def write_outputs(groups, sel, results, state):
                 if flag:
                     bits.append(flag)
                     nflag += 1
+                    if x:
+                        notes.append(dict(group=g, root_id_orig=x["root_orig"], root=r, cls=cls, me_share=round(R["me"][r], 3),
+                                          note=f"medulla check {TODAY}: possible R7, LMC, or merge error "
+                                               f"({100 * R['me'][r]:.0f}% of output sites in the medulla)"))
                 partner, name, verdict, tm, rm = fin.get(r, ("", "", "", np.nan, np.nan))
                 if verdict:
                     ang = R["ring"].get("angles", {}).get(r)
@@ -937,9 +984,10 @@ def write_outputs(groups, sel, results, state):
                              single=sum(1 for x in v if x in ("terminal only", "ring only")),
                              names=("full" if R["r7"] else "ends unresolved")))
         lines += [f"group {g}", " | ".join(COLS)] + [" | ".join(str(c) for c in row) for row in out] + [""]
-    open(fig("pr_groups9plus_refined_pipes.txt"), "w").write("\n".join(lines) + "\n")
-    open(fig("pr_groups9plus_refined_paste.tsv"), "w").write(
-        "\n".join(l.replace(" | ", "\t") for l in lines) + "\n")
+    open(PIPES, "w").write("\n".join(lines) + "\n")
+    open(PASTE, "w").write("\n".join(l.replace(" | ", "\t") for l in lines) + "\n")
+    pd.DataFrame(notes, columns=["group", "root_id_orig", "root", "cls", "me_share", "note"]).to_csv(
+        os.path.join(RDIR, "medulla_notes.tsv"), sep="\t", index=False)
     S = pd.DataFrame(summ)
     for col in S.columns:
         if col != "group" and pd.api.types.is_numeric_dtype(S[col]):
@@ -952,13 +1000,23 @@ def write_outputs(groups, sel, results, state):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["prep", "terminal", "track", "refine", "split"])
+    ap.add_argument("step", choices=["prep", "terminal", "track", "refine", "all", "split"])
     ap.add_argument("--groups", default="")
+    ap.add_argument("--tab", default="", help="PRs tab .xlsx: track its right-side leads instead of the 10-01/02 tables")
+    ap.add_argument("--run", default="", help="keep this run's files in figures/refine_<RUN>/")
     a = ap.parse_args()
-    groups = load_groups()
+    if a.tab and not a.run:
+        sys.exit("--tab needs --run (the 2026-10-15 run in figures/refine/ is kept as it is)")
+    if a.run:
+        set_run(a.run)
+    groups = load_groups_tab(a.tab) if a.tab else load_groups()
     sel = select(groups, a.groups)
-    print(f"{len(groups)} groups loaded ({min(groups)}-{max(groups)}); this run: {len(sel)}", flush=True)
-    {"prep": cmd_prep, "terminal": cmd_terminal, "track": cmd_track, "refine": cmd_refine, "split": cmd_split}[a.step](groups, sel)
+    print(f"{len(groups)} groups loaded ({min(groups)}-{max(groups)}) from {a.tab or 'the 10-01/02 tables'}; "
+          f"this run: {len(sel)}; files in {RDIR}", flush=True)
+    steps = {"prep": cmd_prep, "terminal": cmd_terminal, "track": cmd_track, "refine": cmd_refine, "split": cmd_split}
+    for step in (["prep", "terminal", "track", "refine"] if a.step == "all" else [a.step]):
+        print(f"==== {step} ({datetime.datetime.now(datetime.timezone.utc):%H:%M} UTC)", flush=True)
+        steps[step](groups, sel)
 
 
 if __name__ == "__main__":

@@ -11,6 +11,8 @@ network-free
   bold IN                   'group N' lines and header rows bold
   strip-notes IN            remove '<tag> YYYY-MM-DD: ...' note segments (--tag, default regroup)
   add-note IN G:ROOT=TEXT   append TEXT to the notes of the row with root_id_orig ROOT in group G (repeatable)
+  add-notes IN TSV          the same from a TSV (group, root_id_orig, note), e.g. groups_refine.py medulla_notes.tsv
+  drop-rows IN ROOT ...     remove the member rows of these cells (root_id_orig or root_id_curr) from every group
   apply-refine IN PASTE     rewrite the leads section (groups 9+) from a groups_refine.py paste
                             (figures/pr_groups9plus_refined_paste.tsv); a row keeps its own formatting and tracking
                             values; then tidy (regroup notes kept with --keep-regroup-notes)
@@ -120,6 +122,47 @@ def cmd_add_note(a):
         c = ws.cell(r, b.cols["notes"])
         c.value = f"{c.value.strip()}; {note}" if isinstance(c.value, str) and c.value.strip() else note
         print(f"group {b.group} row {r}: note added")
+    finish(wb, ws, a)
+
+
+def cmd_add_notes(a):
+    """notes from a TSV with columns group, root_id_orig, note (the id may also be the row's root_id_curr); a note
+    already in the cell is not added again"""
+    wb, ws = T.load(a.book)
+    t = pd.read_csv(a.tsv, sep="\t", dtype=str).fillna("")
+    at = {(b.group, T.get(ws, b, r, k)): (b, r) for b in T.blocks(ws) for r in b.rows for k in ("root_id_curr", "root_id_orig")}
+    n = 0
+    for x in t.itertuples(index=False):
+        if (int(x.group), x.root_id_orig) not in at:
+            sys.exit(f"no row of {x.root_id_orig} in group {x.group}")
+        b, r = at[(int(x.group), x.root_id_orig)]
+        c = ws.cell(r, b.cols["notes"])
+        old = c.value.strip() if isinstance(c.value, str) else ""
+        if x.note in old:
+            continue
+        c.value = f"{old}; {x.note}" if old else x.note
+        n += 1
+    print(f"{n} of {len(t)} notes added ({len(t) - n} already there)")
+    finish(wb, ws, a)
+
+
+def cmd_drop_rows(a):
+    """remove the member rows of these cells (root_id_orig or root_id_curr) in every group; the rows below move up
+    with their styles, links and heights"""
+    wb, ws = T.load(a.book)
+    want = set(a.roots)
+    gone = sorted((r for b in T.blocks(ws) for r in b.rows
+                   if {T.get(ws, b, r, "root_id_orig"), T.get(ws, b, r, "root_id_curr")} & want), reverse=True)
+    last = ws.max_row
+    for d in gone:
+        print(f"row {d}: dropped ({T.text(ws, d, 1)})")
+        for r in range(d, last):
+            T.restore(ws, r, T.snapshot(ws, r + 1))
+        for c in range(1, ws.max_column + 1):
+            x = ws.cell(last, c)
+            x.hyperlink, x.value = None, None
+        last -= 1
+    print(f"{len(gone)} rows dropped for {len(want)} cells")
     finish(wb, ws, a)
 
 
@@ -563,6 +606,8 @@ def main():
     cmd("strip-notes", cmd_strip_notes).add_argument("--tag", action="append", default=None,
                                                      help="note tag to remove (repeatable; default regroup)")
     cmd("add-note", cmd_add_note).add_argument("notes", nargs="+", metavar="G:ROOT=TEXT")
+    cmd("add-notes", cmd_add_notes).add_argument("tsv", help="TSV with columns group, root_id_orig, note")
+    cmd("drop-rows", cmd_drop_rows).add_argument("roots", nargs="+", metavar="ROOT")
     p = cmd("apply-refine", cmd_apply_refine)
     p.add_argument("paste", help="groups_refine.py paste TSV (PRs-tab columns)")
     p.add_argument("--keep-regroup-notes", action="store_true")
