@@ -16,7 +16,7 @@ network-free
   move-rows IN ROOT:G[=NOTE] ...  move member rows to the end of group G (NOTE appended); a block left without members
                             is removed
   replace-group IN PASTE G ...  rewrite only these groups' member rows from a groups_refine.py paste (rest untouched)
-  group-links IN TSV        a link on each listed group's title line, column B (TSV: group, text, url; e.g.
+  group-links IN TSV        a link on each listed group's title line, under the 'link' column (TSV: group, text, url; e.g.
                             figures/ommatidia/<run>/review_links.tsv from scratch/pr_groups/ommatidia_link.py)
   apply-refine IN PASTE     rewrite the leads section (groups 9+) from a groups_refine.py paste
                             (figures/pr_groups9plus_refined_paste.tsv); a row keeps its own formatting and tracking
@@ -174,8 +174,9 @@ def cmd_drop_rows(a):
 
 
 def cmd_group_links(a):
-    """text with a hyperlink on each listed group's title line, column B, bold and link-colored (TSV columns group,
-    text, url); a title line holding other text there (not starting with --prefix) is left alone and reported"""
+    """text with a hyperlink on each listed group's title line, under the block's --column header (default 'link';
+    David 2026-11-01: further right than column B), bold and link-colored (TSV columns group, text, url); a title line
+    holding other text there (not starting with --prefix) is left alone and reported"""
     wb, ws = T.load(a.book)
     t = pd.read_csv(a.tsv, sep="\t").fillna("")
     want = {int(x.group): (x.text, x.url) for x in t.itertuples(index=False) if x.url}
@@ -183,19 +184,23 @@ def cmd_group_links(a):
     for b in T.blocks(ws):
         if b.group not in want:
             continue
-        old = T.text(ws, b.title_row, 2)
+        col = b.cols.get(a.column)
+        if col is None:
+            skipped.append(f"{b.group} (no '{a.column}' column)")
+            continue
+        old = T.text(ws, b.title_row, col)
         if old and not old.startswith(a.prefix):
             skipped.append(f"{b.group} ({old[:40]})")
             continue
         text, url = want[b.group]
-        c = ws.cell(b.title_row, 2)
+        c = ws.cell(b.title_row, col)
         f = ws.cell(b.title_row, 1).font
         c.font = Font(name=f.name, size=f.size, bold=True, underline="single", color="FF1155CC")
         c.hyperlink = url  # before the value (see faab.pr.prs_tab.restore)
         c.value = text
         done.append(b.group)
-    print(f"links on {len(done)} of {len(want)} group lines" + (f"; left alone (other text in column B): "
-                                                               f"{', '.join(skipped)}" if skipped else ""))
+    print(f"links on {len(done)} of {len(want)} group lines, under '{a.column}'" +
+          (f"; left alone: {', '.join(skipped)}" if skipped else ""))
     finish(wb, ws, a)
 
 
@@ -781,7 +786,8 @@ def main():
     cmd("move-rows", cmd_move_rows).add_argument("moves", nargs="+", metavar="ROOT:G[=NOTE]")
     p = cmd("group-links", cmd_group_links)
     p.add_argument("tsv", help="TSV with columns group, text, url")
-    p.add_argument("--prefix", default="v1 vs v2", help="column B text that may be replaced (earlier links)")
+    p.add_argument("--column", default="link", help="header of the column the link goes under (default link)")
+    p.add_argument("--prefix", default="Automatic grouping check", help="text there that may be replaced (earlier links)")
     p = cmd("replace-group", cmd_replace_group)
     p.add_argument("paste", help="groups_refine.py paste TSV (PRs-tab columns)")
     p.add_argument("groups", type=int, nargs="+", metavar="G")
