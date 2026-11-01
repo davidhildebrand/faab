@@ -95,6 +95,15 @@ def get(ws, b, r, name):
     return text(ws, r, b.cols.get(name))
 
 
+VETTED_STATUS = ("proofread", "checked", "adequate")
+
+
+def vetted(ws, b):
+    """a vetted group: a proofreading target (above the LEADS line, groups 1-8 on the R side) or one whose every member
+    is proofread, checked or adequate. David 2026-11-01: ask before adding anything (rows, notes, links) to it."""
+    return b.section == "targets" or bool(b.rows) and all(get(ws, b, r, "status").lower() in VETTED_STATUS for r in b.rows)
+
+
 def member_order(items, fields):
     """items in David's member order (module docstring); fields(item) -> (class, root, notes, fly name, partner root),
     the partner root in the same id space as root."""

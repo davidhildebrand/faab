@@ -121,11 +121,20 @@ def cmd_strip_notes(a):
     finish(wb, ws, a)
 
 
+def guard_vetted(ws, blocks, a, what):
+    """stop before adding to a vetted group (faab.pr.prs_tab.vetted: groups 1-8, or every member proofread / checked /
+    adequate) unless --allow-vetted - David 2026-11-01: ask before adding anything to a vetted group"""
+    hit = sorted({b.group for b in blocks if T.vetted(ws, b)})
+    if hit and not a.allow_vetted:
+        sys.exit(f"{what} would add to vetted group{'s' * (len(hit) > 1)} {', '.join(map(str, hit))}: ask David first, "
+                 f"then rerun with --allow-vetted (or leave those out)")
+
+
 def cmd_add_note(a):
     wb, ws = T.load(a.book)
-    for spec in a.notes:
-        where, note = spec.split("=", 1)
-        b, r = row_of(ws, where)
+    specs = [(spec.split("=", 1)[1], *row_of(ws, spec.split("=", 1)[0])) for spec in a.notes]
+    guard_vetted(ws, [b for _, b, _ in specs], a, "add-note")
+    for note, b, r in specs:
         c = ws.cell(r, b.cols["notes"])
         c.value = f"{c.value.strip()}; {note}" if isinstance(c.value, str) and c.value.strip() else note
         print(f"group {b.group} row {r}: note added")
@@ -139,9 +148,12 @@ def cmd_add_notes(a):
     t = pd.read_csv(a.tsv, sep="\t", dtype=str).fillna("")
     at = {(b.group, T.get(ws, b, r, k)): (b, r) for b in T.blocks(ws) for r in b.rows for k in ("root_id_curr", "root_id_orig")}
     n = 0
+    missing = [f"{x.root_id_orig} in group {x.group}" for x in t.itertuples(index=False) if (int(x.group), x.root_id_orig) not in at]
+    if missing:
+        sys.exit(f"no row of {', '.join(missing)}")
+    guard_vetted(ws, [at[(int(x.group), x.root_id_orig)][0] for x in t.itertuples(index=False)
+                      if x.note not in T.get(ws, *at[(int(x.group), x.root_id_orig)], "notes")], a, "add-notes")
     for x in t.itertuples(index=False):
-        if (int(x.group), x.root_id_orig) not in at:
-            sys.exit(f"no row of {x.root_id_orig} in group {x.group}")
         b, r = at[(int(x.group), x.root_id_orig)]
         c = ws.cell(r, b.cols["notes"])
         old = c.value.strip() if isinstance(c.value, str) else ""
@@ -176,13 +188,17 @@ def cmd_drop_rows(a):
 def cmd_group_links(a):
     """text with a hyperlink on each listed group's title line, under the block's --column header (default 'link';
     David 2026-11-01: further right than column B), bold and link-colored (TSV columns group, text, url); a title line
-    holding other text there (not starting with --prefix) is left alone and reported"""
+    holding other text there (not starting with --prefix), and a vetted group without --allow-vetted, are left alone
+    and reported"""
     wb, ws = T.load(a.book)
     t = pd.read_csv(a.tsv, sep="\t").fillna("")
-    want = {int(x.group): (x.text, x.url) for x in t.itertuples(index=False) if x.url and int(x.group) >= a.from_group}
+    want = {int(x.group): (x.text, x.url) for x in t.itertuples(index=False) if x.url}
     done, skipped = [], []
     for b in T.blocks(ws):
         if b.group not in want:
+            continue
+        if T.vetted(ws, b) and not a.allow_vetted:  # David 2026-11-01: ask before adding to a vetted group
+            skipped.append(f"{b.group} (vetted)")
             continue
         col = b.cols.get(a.column)
         if col is None:
@@ -252,6 +268,8 @@ def cmd_move_rows(a):
     by_group = {b.group: b for b in bl}
     where = {T.get(ws, b, r, k): (b, r) for b in bl for r in b.rows for k in ("root_id_orig", "root_id_curr")}
     edits, inserts, gone, new = {}, {}, set(), {}
+    dest = [int(s.partition("=")[0].rsplit(":", 1)[1]) for s in a.moves]
+    guard_vetted(ws, [by_group[g] for g in dest if g in by_group], a, "move-rows")
     for spec in a.moves:
         head, _, note = spec.partition("=")
         root, g = head.rsplit(":", 1)
@@ -322,6 +340,7 @@ def cmd_replace_group(a):
     notes. A new row takes the style of the group's first member and the run's note in short form."""
     wb, ws = T.load(a.book)
     paste = paste_groups(a.paste)
+    guard_vetted(ws, [b for b in T.blocks(ws) if b.group in a.groups], a, "replace-group")
     edits = {}
     for b in T.blocks(ws):
         if b.group not in a.groups:
@@ -803,19 +822,26 @@ def main():
     cmd("bold", cmd_bold)
     cmd("strip-notes", cmd_strip_notes).add_argument("--tag", action="append", default=None,
                                                      help="note tag to remove (repeatable; default regroup)")
-    cmd("add-note", cmd_add_note).add_argument("notes", nargs="+", metavar="G:ROOT=TEXT")
-    cmd("add-notes", cmd_add_notes).add_argument("tsv", help="TSV with columns group, root_id_orig, note")
+    allow = dict(action="store_true", help="also add to vetted groups (only after asking David)")
+    p = cmd("add-note", cmd_add_note)
+    p.add_argument("notes", nargs="+", metavar="G:ROOT=TEXT")
+    p.add_argument("--allow-vetted", **allow)
+    p = cmd("add-notes", cmd_add_notes)
+    p.add_argument("tsv", help="TSV with columns group, root_id_orig, note")
+    p.add_argument("--allow-vetted", **allow)
     cmd("drop-rows", cmd_drop_rows).add_argument("roots", nargs="+", metavar="ROOT")
-    cmd("move-rows", cmd_move_rows).add_argument("moves", nargs="+", metavar="ROOT:G[=NOTE]")
+    p = cmd("move-rows", cmd_move_rows)
+    p.add_argument("moves", nargs="+", metavar="ROOT:G[=NOTE]")
+    p.add_argument("--allow-vetted", **allow)
     p = cmd("group-links", cmd_group_links)
     p.add_argument("tsv", help="TSV with columns group, text, url")
     p.add_argument("--column", default="link", help="header of the column the link goes under (default link)")
-    p.add_argument("--from-group", type=int, default=9,
-                   help="first group to get a link (default 9: groups 1-8 are vetted and stay as they are, David 2026-11-01)")
+    p.add_argument("--allow-vetted", action="store_true", help="also link vetted groups (only after asking David)")
     p.add_argument("--prefix", default="Automatic grouping check", help="text there that may be replaced (earlier links)")
     p = cmd("replace-group", cmd_replace_group)
     p.add_argument("paste", help="groups_refine.py paste TSV (PRs-tab columns)")
     p.add_argument("groups", type=int, nargs="+", metavar="G")
+    p.add_argument("--allow-vetted", **allow)
     p = cmd("apply-refine", cmd_apply_refine)
     p.add_argument("paste", help="groups_refine.py paste TSV (PRs-tab columns)")
     p.add_argument("--keep-regroup-notes", action="store_true")
