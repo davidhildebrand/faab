@@ -35,6 +35,8 @@ SHORT = [  # (pattern, replacement): generated flags worth keeping, in a short f
     (r"extra lamina-ending axon in the core beyond six: runs closer to the center of group ([\d, ]+)",
      r"extra axon, closer to group \1"),
     (r"extra lamina-ending axon in the core beyond six: .*", "extra axon beyond six"),
+    (r"seventh lamina-ending axon in the core \(proofreading lead\)", "proofreading lead"),
+    (r"medulla output: (\d+)% of its output sites in the medulla \(.*\)", r"medulla check: \1% of output sites in the medulla"),
     (r"not refined .*", "not refined (bundle not compact)"),
     (r"listed, loosely packed .*", "loosely packed"),
     (r"listed as \S+ but runs at the center of the bundle", "runs at the bundle center"),

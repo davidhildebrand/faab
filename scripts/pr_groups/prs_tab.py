@@ -13,6 +13,9 @@ network-free
   add-note IN G:ROOT=TEXT   append TEXT to the notes of the row with root_id_orig ROOT in group G (repeatable)
   add-notes IN TSV          the same from a TSV (group, root_id_orig, note), e.g. groups_refine.py medulla_notes.tsv
   drop-rows IN ROOT ...     remove the member rows of these cells (root_id_orig or root_id_curr) from every group
+  move-rows IN ROOT:G[=NOTE] ...  move member rows to the end of group G (NOTE appended); a block left without members
+                            is removed
+  replace-group IN PASTE G ...  rewrite only these groups' member rows from a groups_refine.py paste (rest untouched)
   apply-refine IN PASTE     rewrite the leads section (groups 9+) from a groups_refine.py paste
                             (figures/pr_groups9plus_refined_paste.tsv); a row keeps its own formatting and tracking
                             values; then tidy (regroup notes kept with --keep-regroup-notes)
@@ -45,6 +48,7 @@ import numpy as np
 import pandas as pd
 
 from faab.config import DATA, FIGURES, TMP, VOX
+from faab.partners import short_notes
 from faab.partners.sheet import fmt_vox, norm_xyz
 from faab.pr import prs_tab as T
 from faab.config import fig
@@ -166,6 +170,144 @@ def cmd_drop_rows(a):
     finish(wb, ws, a)
 
 
+DEC = re.compile(r"^-?\d+\.\d+$")  # scores are numbers in the tab; ids and xyz stay text
+
+
+def rewrite(ws, edits, inserts=None):
+    """rebuild the tab from row 1: edits {row: [snapshots]} replaces a row by zero or more lines, inserts {row:
+    [snapshots]} adds lines below a row; every other row moves with its style, links and height"""
+    W = ws.max_column
+    empty = lambda r: all(ws.cell(r, c).value in (None, "") for c in range(1, W + 1))
+    end = max(r for r in range(1, ws.max_row + 1) if not empty(r))
+    blank = T.snapshot(ws, next(r for r in range(1, end + 1) if empty(r)))
+    lines = []
+    for r in range(1, end + 1):
+        lines += edits[r] if r in edits else [T.snapshot(ws, r)]
+        lines += (inserts or {}).get(r, [])
+    for r, s in enumerate(lines, 1):
+        T.restore(ws, r, s)
+    for r in range(len(lines) + 1, end + 1):
+        T.restore(ws, r, blank)
+    print(f"rows 1-{end} -> 1-{len(lines)}")
+
+
+def make_row(template, cols, values, styles=None):
+    """a row snapshot: values by header name (cols: name -> column) in template's styles, or the style of the same
+    column name in `styles`; a link only where the value is a URL"""
+    cells, height = template
+    new = [(None, st, None) for _, st, _ in cells]
+    for name, c in cols.items():
+        v = values.get(name)
+        st = (styles or {}).get(name, cells[c - 1][1])
+        new[c - 1] = (v, st, v if isinstance(v, str) and v.startswith("http") else None)
+    return new, height
+
+
+def row_values(ws, b, r):
+    return {n: ws.cell(r, c).value for n, c in b.cols.items()}, {n: ws.cell(r, c)._style for n, c in b.cols.items()}
+
+
+def cmd_move_rows(a):
+    """move member rows (root_id_orig or root_id_curr ROOT) below the last member of group G, with their values and
+    styles by column name and NOTE appended; 'not refined ...' notes (about the old group's census bundle) are dropped.
+    A block left without members loses its title line, header and the blank line below."""
+    wb, ws = T.load(a.book)
+    bl = T.blocks(ws)
+    by_group = {b.group: b for b in bl}
+    where = {T.get(ws, b, r, k): (b, r) for b in bl for r in b.rows for k in ("root_id_orig", "root_id_curr")}
+    edits, inserts, gone = {}, {}, set()
+    for spec in a.moves:
+        head, _, note = spec.partition("=")
+        root, g = head.rsplit(":", 1)
+        if root not in where or int(g) not in by_group:
+            sys.exit(f"{spec}: no row of {root} or no group {g}")
+        (b, r), d = where[root], by_group[int(g)]
+        vals, styles = row_values(ws, b, r)
+        parts = [p for p in short_notes.split_parts(str(vals.get("notes") or "")) if not p.startswith("not refined")]
+        vals["notes"] = "; ".join(parts + ([note.strip()] if note.strip() else [])) or None
+        inserts.setdefault(d.rows[-1], []).append(make_row(T.snapshot(ws, d.rows[-1]), d.cols, vals, styles))
+        edits[r] = []
+        gone.add(r)
+        print(f"row {r} (group {b.group}) -> group {d.group}: {root}")
+    for b in bl:
+        if set(b.rows) <= gone:
+            below = b.rows[-1] + 1
+            edits.update({b.title_row: [], b.header_row: []})
+            if not any(T.text(ws, below, c) for c in range(1, ws.max_column + 1)):
+                edits[below] = []
+            print(f"group {b.group}: no members left, block removed")
+    rewrite(ws, edits, inserts)
+    report_tidy(T.tidy(ws))
+    finish(wb, ws, a)
+
+
+def paste_groups(path):
+    """groups_refine.py paste -> {group: [row dicts by header name]}"""
+    out, hdr, g = {}, None, None
+    for line in open(path, encoding="utf-8").read().rstrip("\n").split("\n"):
+        c = line.split("\t")
+        x = c[0].strip()
+        m = re.match(r"^group (\d+)", x)
+        if m:
+            g = int(m.group(1))
+            out[g] = []
+        elif x == "root_id_orig":
+            hdr = c
+        elif x.isdigit():
+            out[g].append(dict(zip(hdr, c)))
+    return out
+
+
+def cmd_replace_group(a):
+    """rewrite these groups' member rows from a groups_refine.py paste; nothing else in the tab changes. A row already
+    in the group keeps its tracking values, SeaTable column, notes and style; its class and pairing columns come from
+    the paste, its class change and the run's new note parts (short form, faab.partners.short_notes) are added to its
+    notes. A new row takes the style of the group's first member and the run's note in short form."""
+    wb, ws = T.load(a.book)
+    paste = paste_groups(a.paste)
+    edits = {}
+    for b in T.blocks(ws):
+        if b.group not in a.groups:
+            continue
+        own = {}
+        for r in b.rows:
+            for k in ("root_id_orig", "root_id_curr"):
+                own.setdefault(T.get(ws, b, r, k), r)
+        new, n_new = [], 0
+        for p in paste[b.group]:
+            r = own.get(p["root_id_orig"]) or own.get(p.get("root_id_curr", ""))
+            old = row_values(ws, b, r)[0] if r else {}
+            pn = p.get("notes", "")
+            date = (re.findall(r"(?:refine|added) (\d{4}-\d\d-\d\d)", pn) or [today()])[0]
+            vals = {}
+            for n in b.cols:
+                v = p.get(n)
+                if r and (n not in p or (n in TRACK and old.get(n) not in (None, ""))):
+                    v = old.get(n)
+                if isinstance(v, str) and DEC.match(v.strip()):
+                    v = float(v)
+                vals[n] = None if v == "" else v
+            mk = re.search(r";?\s*(?:refine|regroup) \d{4}-\d{2}-\d{2}:", pn)
+            if r:
+                parts = short_notes.split_parts(str(old.get("notes") or ""))
+                if old.get("class") != vals.get("class"):
+                    parts.append(f"class {old.get('class')} -> {vals.get('class')} (bundle tracking {date})")
+                added = short_notes.shorten(pn[mk.start():].lstrip("; ") if mk else "")[0]
+            else:
+                parts, added = [], short_notes.shorten(pn)[0].replace("added by bundle tracking",
+                                                                       f"added {date} by bundle tracking")
+                n_new += 1
+            parts += [s for s in short_notes.split_parts(added) if s not in parts]
+            vals["notes"] = "; ".join(parts) or None
+            new.append(make_row(T.snapshot(ws, r or b.rows[0]), b.cols, vals))
+        edits[b.rows[0]] = new
+        edits.update({r: [] for r in b.rows[1:]})
+        print(f"group {b.group}: {len(b.rows)} rows -> {len(new)} ({n_new} new)")
+    rewrite(ws, edits)
+    report_tidy(T.tidy(ws))
+    finish(wb, ws, a)
+
+
 def cmd_apply_refine(a):
     wb, ws = T.load(a.book)
     W = ws.max_column
@@ -192,7 +334,6 @@ def cmd_apply_refine(a):
 
     lines = [ln.split("\t") for ln in open(a.paste, encoding="utf-8").read().rstrip("\n").split("\n")]
     new, phdr, group, prev, kept = [], None, None, t_data, 0
-    DEC = re.compile(r"^-?\d+\.\d+$")  # scores are numbers in the tab; ids and xyz stay text
     for c in lines:
         x = c[0].strip()
         m = re.match(r"^group (\d+)", x)
@@ -608,6 +749,10 @@ def main():
     cmd("add-note", cmd_add_note).add_argument("notes", nargs="+", metavar="G:ROOT=TEXT")
     cmd("add-notes", cmd_add_notes).add_argument("tsv", help="TSV with columns group, root_id_orig, note")
     cmd("drop-rows", cmd_drop_rows).add_argument("roots", nargs="+", metavar="ROOT")
+    cmd("move-rows", cmd_move_rows).add_argument("moves", nargs="+", metavar="ROOT:G[=NOTE]")
+    p = cmd("replace-group", cmd_replace_group)
+    p.add_argument("paste", help="groups_refine.py paste TSV (PRs-tab columns)")
+    p.add_argument("groups", type=int, nargs="+", metavar="G")
     p = cmd("apply-refine", cmd_apply_refine)
     p.add_argument("paste", help="groups_refine.py paste TSV (PRs-tab columns)")
     p.add_argument("--keep-regroup-notes", action="store_true")
