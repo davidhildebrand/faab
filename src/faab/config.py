@@ -22,6 +22,7 @@ FIG_TOPICS = [
     ("paths", r".*(paths_|pr_to_DN|dnp01|lplc2|vpn_|ct1_|seed_|class_paths|state_4684|objects_only|pr777).*"),
     ("metu", r".*(metu|MeTu|ids_LC|bridge_|fly_metu|dm2_|mcns_|fafb_|mirror_|faab_convergence|photoreceptor_).*"),
     ("mi1", r"mi1_.*"),
+    ("lmc", r".*lmc_.*"),
     ("glia", r".*(glia|nuclei|skel_cache|l2_chunkdata|l2_leaves|dp_cache|fragment_skeletons|candidate_dotprops).*"),
     ("pr_groups", r".*(pr_|faab_pr_groups|lamina|r7_outputs|explain_slab|template_pairwise|align|flip_|cell_\d+).*"),
 ]

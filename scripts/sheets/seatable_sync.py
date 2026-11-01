@@ -19,7 +19,7 @@ shortened by faab.partners.short_notes (proofreaders' text kept verbatim; 'dupli
 r<row>' pointing at the record row); statuses lowercase ('stoppped' -> 'stopped');
 'added' typed into checker moves to SeaTable; dates typed day-month-year (2020-10-26 for 20-10-2026, text 27-10-26)
 are corrected; text dates become dates and other text in date columns moves to notes. Hand edits (--edits JSON:
-tab, row, column, value; column 'fill' with value clear / highlight) are applied next. --reconcile then brings the
+tab, row or root, column, value, optional append; column 'fill' with value clear / highlight) are applied next. --reconcile then brings the
 rows of one live cell in line (faab.partners.reconcile, David 2026-10-31: same-block rows of a correctly merged cell
 collapse into one, every row of a cell takes the best status and carries the same notes; --sizes = a
 cell_consistency.py TSV, whose L2 chunk counts say which fragment-noted cells are whole now). --left-rows adds the
@@ -257,13 +257,25 @@ def main():
             old = s(wb[tab].cell(r, cols["notes"]).value)
             B.put(tab, r, cols["notes"], "; ".join([old] * bool(old) + notes_add), "notes added")
 
-    # --- hand edits (last)
+    # --- hand edits (last); keyed by row, or by "root" (every row of the tab on that cell: root_id_curr or the root at
+    # its xyz), which survives rows added or deleted in the sheet; "append": true adds the value to the notes
     for e in json.load(open(a.edits)) if a.edits else []:
-        x = next(x for x in rows if x["tab"] == e["tab"] and x["row"] == e["row"])
-        if e["column"] == "fill":
-            B.fill(e["tab"], e["row"], x["cols"].values(), e["value"], "hand edit")
-        else:
-            B.put(e["tab"], e["row"], x["cols"][e["column"]], e["value"], "hand edit")
+        hit = [x for x in rows if x["tab"] == e["tab"] and (
+            x["row"] == e["row"] if "row" in e else
+            str(e["root"]) in (curr_of(x), M.get((x["tab"], x["row"]), {}).get("root_at_xyz")))]
+        if not hit:
+            print(f"  hand edit matched no row: {e}")
+        for x in hit:
+            if e["column"] == "fill":
+                B.fill(e["tab"], x["row"], x["cols"].values(), e["value"], "hand edit")
+                continue
+            val = e["value"]
+            if e.get("append"):
+                old = s(wb[e["tab"]].cell(x["row"], x["cols"][e["column"]]).value)
+                if val in old:
+                    continue
+                val = "; ".join([old] * bool(old) + [val])
+            B.put(e["tab"], x["row"], x["cols"][e["column"]], val, "hand edit")
 
     # --- rows of one live cell (after the hand edits; collapsing renumbers rows, so it comes last among row edits)
     if a.reconcile:

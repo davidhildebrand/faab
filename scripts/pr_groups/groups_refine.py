@@ -14,7 +14,11 @@ Steps (run in this order; every step is resumable and saves into figures/refine/
             axons missing from the lists are found too. One TSV per group.
   refine    bundle core = roots present in >= 50% of the compact slices within 2.2 um of the slice center; listed
             members outside it are flagged off-bundle, unlisted roots inside it are classified (member of another
-            group / census PR-like / PR-like by fresh presynaptic sites / non-PR). R8 = the central axon (median radius
+            group / medulla output / census PR-like / PR-like by fresh presynaptic sites / non-PR). Medulla check
+            (2026-10-31): an unlisted axon with >= 60% of its output sites in the medulla is added only as the bundle's
+            R7 (else: LMC, or a PR merged with glia and other cells; not added, and kept out of the lamina depth); an
+            R1-R6/R8 with >= 10% is flagged in its notes (an R7, an LMC, or a merge error).
+            R8 = the central axon (median radius
             <= 0.7 um); R7 = the long visual fiber (presynaptic sites beyond the lamina zone), else the inner R7/R8-class
             cell on the ring. Ring test: with R7, pairs/names from the angle relative to R7; without R7, pairs from the
             best mirror axis of the six outer axons, R2/R5 = the pair farthest from the axis, end pairs unresolved.
@@ -49,6 +53,8 @@ from faab.pr.groups_mirror import prep as skprep
 from faab.pr.bundles import read_box
 from faab.pr.lamina_footprint import flat, retry
 from faab.pr.prs_tab import member_order
+from faab.pr.side import NEUROPILS
+from faab.pr.verdict import ME_R7, mesh_shares
 from faab.config import fig
 
 warnings.filterwarnings("ignore")
@@ -64,6 +70,11 @@ FRAMES = os.path.join(RDIR, "frames.pkl")
 RES1 = np.array([32.0, 32.0, 45.0])
 HALF_UM, STEP_UM, ZONE = 3.0, 3.0, 35.0
 CORE_R, CORE_FRAC, MIN_VOX = 1.7, 0.8, 300  # pilot 2026-10-15: neighbor-bundle axons reach 1-2.2 um at 50-80% presence
+# medulla check (David, 2026-10-31): bundle-core axons with most output sites in the medulla were LMCs
+# (648518347556420586, 648518347544284097) or PRs merged with glia and on to other cells (648518347576277331,
+# 648518347582104647, 648518347570497932). Proofread R1-R6 and R8: 0% of output sites in the medulla; proofread R7:
+# <= 52%, with >= 21% in the lamina (2026-10-29 mesh shares). R1-R6/R8 are flagged from ME_R7 (10%).
+ME_NOT_PR = 0.6
 TODAY = datetime.date.today().isoformat()
 
 
@@ -442,6 +453,27 @@ def ring_test(sl, outer, r7):
                 fit_err=info["mirror_fit_err"], n_slices=len(comp), **info)
 
 
+def medulla_shares(results, presyn):
+    """root -> share of its output sites in the right medulla (faab.pr.verdict.mesh_shares: inside the ME mesh or within
+    5 um of it), for every core and listed root of the tracked groups that has output sites"""
+    pool = sorted({r for R in results.values() if R.get("status") == "ok" for r in R["core"] | R["listed"]
+                   if len(presyn.get(r, []))})
+    if not pool:
+        return {}
+    la, me = NEUROPILS["right"]
+    sh = mesh_shares(np.concatenate([[r] * len(presyn[r]) for r in pool]), np.vstack([presyn[r] for r in pool]), la, me)
+    return {str(r): float(v) for r, v in sh.me_frac.items()}
+
+
+def medulla_flag(me, cls):
+    """notes bit for an R1-R6 or R8 with output sites in the medulla, else '' (R7s are not flagged: their terminals are
+    in the medulla, and tracked R7 candidates reach 80-100%)"""
+    if me is None or cls == "R7" or me < ME_R7:
+        return ""
+    return (f"MEDULLA OUTPUT: {100 * me:.0f}% of its output sites in the medulla (proofread R1-R6 and R8: 0%): an R7, "
+            f"an LMC, or a merge error? check")
+
+
 def cmd_refine(groups, sel):
     state = load_state()
     frames = pickle.load(open(FRAMES, "rb"))
@@ -511,6 +543,7 @@ def cmd_refine(groups, sel):
     if unknown:
         t = query_presyn(client, unknown, state, t, label="core axons")
         presyn = load_presyn()
+    me_share = medulla_shares(results, presyn)
     # ---- pass 2: roles from geometry and synapses (the listed R7/R8 class is not trusted: synapse depth cannot
     # separate R8 from R1-R6, and several leads list 5-8 'R8-like' cells in one bundle)
     acc_all = set()
@@ -541,9 +574,9 @@ def cmd_refine(groups, sel):
             else:
                 role[r] = "non-PR axon (no lamina output; not added)"
         prset = [r for r in R["core"] if role[r].startswith(("listed", "census", "PR-like"))]
-        add = [r for r in prset if r not in rowcls]
-        acc_all.update(prset)
-        lamP = [presyn[r] for r in prset if npre[r] >= 10]
+        # medulla check: an unlisted axon with most output sites in the medulla may join only as the bundle's R7
+        high = {r for r in prset if r not in rowcls and me_share.get(r, 0.0) >= ME_NOT_PR}
+        lamP = [presyn[r] for r in prset if npre[r] >= 10 and r not in high]
         lam_s = float(np.median((np.vstack(lamP) - F["c"]) @ F["axis"])) if lamP else None
         med = {r: float(st.loc[int(r), "med_r"]) for r in prset}
         lim = (lam_s + 15.0) if lam_s is not None else (F["s_end"] - 10.0)
@@ -556,6 +589,12 @@ def cmd_refine(groups, sel):
         r7 = max(r7c, key=lambda r: (r in rowcls and rowcls[r]["cls"] == "R7/R8", sp.get(r, 0))) if r7c else None
         if r7 and r7 in sp and sp[r7] > lim:
             r7_how = f"output synapses beyond the lamina (median {sp[r7] - (lam_s or 0):.0f} um past the R1-R6 sites)"
+        for r in high - {r7}:
+            role[r] = (f"{100 * me_share[r]:.0f}% of its {npre[r]} output sites in the medulla and not this bundle's R7 "
+                       f"(LMC, or a PR merged with glia and other cells; check); not added")
+        prset = [r for r in prset if r not in high or r == r7]
+        add = [r for r in prset if r not in rowcls]
+        acc_all.update(prset)
         rest = [r for r in prset if r != r7]
         r8 = min(rest, key=lambda r: med[r]) if rest else None
         r8_how = "central axon of the bundle"
@@ -631,6 +670,7 @@ def cmd_refine(groups, sel):
         R.update(role=role, add=add, prset=prset, r7=r7, r7_how=r7_how if r7 else "", r8=r8, r8_how=r8_how if r8 else "",
                  outer=outer, extras=extras, shell=shell, shell_added=shell_added,
                  npre=npre, lam_s=lam_s, off=sorted(R["listed"] - R["core"]),
+                 me={r: me_share[r] for r in R["core"] | R["listed"] if r in me_share},
                  select_note=select_note, extra_why=extra_why, piece_leads=piece_leads)
     # ---- skeletons of all core photoreceptors, then the two tests on the refined membership
     sk, t = fetch_skeletons(sorted(acc_all), t, label=" (core photoreceptors)")
@@ -654,6 +694,7 @@ def cmd_refine(groups, sel):
                             med_r=round(float(st.loc[int(r), "med_r"]), 2) if int(r) in st.index else None,
                             frac=round(float(st.loc[int(r), "frac"]), 2) if int(r) in st.index else None,
                             n_pre=R["npre"].get(r, len(presyn.get(r, []))),
+                            me_share=R["me"].get(r),
                             pre_vs_lamina=round(float(np.median((presyn[r] - frames[g]["c"]) @ frames[g]["axis"])) - R["lam_s"], 1)
                             if R["lam_s"] is not None and r in presyn and len(presyn[r]) else None,
                             assigned=("R7" if r == R["r7"] else "R8" if r == R["r8"] else "outer" if r in R["outer"] else
@@ -811,7 +852,7 @@ def write_outputs(groups, sel, results, state):
                 if len(sub):
                     p = sub.iloc[0][["bx", "by", "bz"]].to_numpy(float)
                     xyz_of[r] = ", ".join(str(int(round(v))) for v in p * 1000.0 / VOX)
-            seen = set()
+            seen, nflag = set(), 0
             entries = [(x, root_now(x, state)) for x in rows] + [(None, r) for r in R["add"]]
             for x, r in entries:
                 if r in seen:
@@ -858,6 +899,10 @@ def write_outputs(groups, sel, results, state):
                 if r == R["r7"]:
                     cls = "R7"
                     bits.append(f"R7 ({R['r7_how']})")
+                flag = medulla_flag(R["me"].get(r), cls.rstrip("?"))
+                if flag:
+                    bits.append(flag)
+                    nflag += 1
                 partner, name, verdict, tm, rm = fin.get(r, ("", "", "", np.nan, np.nan))
                 if verdict:
                     ang = R["ring"].get("angles", {}).get(r)
@@ -884,6 +929,8 @@ def write_outputs(groups, sel, results, state):
                              members=len(R["outer"]) + bool(R["r7"]) + bool(R["r8"]),
                              selected_by_ring=bool(R.get("select_note")),
                              piece_leads=", ".join(R.get("piece_leads", [])),
+                             medulla_flags=nflag,
+                             not_added_medulla=sum(1 for r in R["core"] if "not this bundle's R7" in R["role"].get(r, "")),
                              ring=R["ring"]["status"],
                              confirmed=sum(1 for x in v if x.startswith("confirmed") or x.startswith("pair confirmed")),
                              conflict=sum(1 for x in v if x.startswith("conflict")),

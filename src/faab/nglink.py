@@ -23,7 +23,7 @@ spec.json format (all fields optional except at least one of meshes/neurons):
                {"name":"A + B","colors":{"648...":"#1f77d6","648...":"#2ecc71"},
                 "ids":["648...","648..."]} ],
                  # ids: inline list  OR  ids_file: path to newline-separated IDs
-                 # color: single default color  OR  colors: {id: "#hex", ...}
+                 # color: single default color  OR  colors: {id: "#hex", ...}; "visible": false = hidden layer
   "view":   "anterior",         # "anterior" | "posterior" | [x,y,z,w] quaternion
   "layout": "3d",               # "3d" | "4panel" | "xy-3d"
   "select": "A + B",            # layer name to open in the right-side panel
@@ -146,7 +146,7 @@ def seg_source():
 
 def neuron_layer(spec, source=None):
     layer = {"type": "segmentation", "source": copy.deepcopy(source) if source else seg_source(), "segments": _load_ids(spec),
-             "name": spec.get("name", "neurons"), "visible": True}
+             "name": spec.get("name", "neurons"), "visible": spec.get("visible", True)}
     if spec.get("colors"):
         layer["segmentColors"] = {str(k): v for k, v in spec["colors"].items()}
     elif spec.get("color"):
