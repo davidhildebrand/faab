@@ -13,8 +13,8 @@ targets of figures/t4t5/*_pr_g1_to_t4t5.tsv (unproofread; flagged). Per request,
 target synapse) holding the most target synapses, then the next best that overlaps no existing cutout and no chosen
 box and lies >= MIN_SEP_UM from the request's other boxes (R7: each box on a different R7 cell, i.e. columns).
 Per box: every predicted synapse inside (live spatial query on synapses_v2, >= 2 s apart, read-only), and a Spelunker
-link (README scene: EM, target cells, the box in yellow, the target synapses as points); one overview link with the
-new boxes (yellow) and the existing cutouts (light blue).
+link (README scene: EM, target cells, the box in magenta with thick borders, the target synapses as points); one
+overview link with the new boxes (magenta, thick) and the existing cutouts (light blue).
 Writes figures/cutouts/<stamp>_cutouts_targets.tsv: the registry, one row per box (id, category, side, target cells
 by root_id with their synapses in the box, counts, corners, link).
 Usage: propose_targets.py SEATABLE.tsv PRS_TAB.xlsx LMC_TAB.tsv"""
@@ -37,6 +37,7 @@ from faab.partners.top10_xyz import VOX
 from faab.pr import prs_tab as T
 
 SIZE = np.array([125, 125, 50])  # voxels, as the existing cutouts
+NEW_COLOR = "#ff00ff"  # David 2026-11-01: magenta (and thick borders) so the new boxes stand out; existing light blue
 MIN_SEP_UM, MARGIN_UM = 10.0, 5.0
 GOOD = ("proofread", "checked", "adequate")
 REQUESTS = [  # (category, side, target set, synapse role, neuropil, boxes, one box per cell)
@@ -184,7 +185,7 @@ def main():
         r["box_id"] = f"{key}-{ids[key]}"
         spec = {"neurons": [{"name": f"{r['category']} cells in the box ({len(r['cells'])})", "color": "#E69F00",
                              "ids": list(r["cells"])}],
-                "annotations": [{"name": f"cutout {r['box_id']}", "color": "#ffff00",
+                "annotations": [{"name": f"cutout {r['box_id']}", "color": NEW_COLOR, "width": 4,
                                  "boxes": [[r["lo"].tolist(), r["hi"].tolist()]]},
                                 {"name": f"{'output' if r['role'] == 'out' else 'input'} synapses of the target cells in the box",
                                  "color": "#56B4E9", "points": r["points"]}],
@@ -192,7 +193,7 @@ def main():
                 "select": f"cutout {r['box_id']}"}
         links.append((r, nglink.clean_state(nglink.build(spec))))
     over = {"meshes": [{"kind": "OL", "segments": ["11", "14", "21", "24"], "alpha": 0.1}],
-            "annotations": [{"name": "new cutouts (2026-11-01)", "color": "#ffff00",
+            "annotations": [{"name": "new cutouts (2026-11-01)", "color": NEW_COLOR, "width": 4,
                              "boxes": [[r["lo"].tolist(), r["hi"].tolist()] for r in rows]},
                             {"name": "existing cutouts", "color": "#56B4E9",
                              "boxes": [[json.loads(a), json.loads(b)] for a, b in zip(inv.lo, inv.hi)]}],

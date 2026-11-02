@@ -166,9 +166,14 @@ def annotation_layer(spec):
                     "id": f"b{k}"})
     for k, p in enumerate(spec.get("points", [])):
         ann.append({"type": "point", "point": [float(v) for v in p], "id": f"p{k}"})
-    return {"type": "annotation", "source": {"url": "local://annotations", "transform": {"outputDimensions": DIMS}},
-            "annotations": ann, "name": spec.get("name", "annotations"), "annotationColor": spec.get("color", "#ffff00"),
-            "visible": True}
+    layer = {"type": "annotation", "source": {"url": "local://annotations", "transform": {"outputDimensions": DIMS}},
+             "annotations": ann, "name": spec.get("name", "annotations"), "annotationColor": spec.get("color", "#ffff00"),
+             "visible": True}
+    if spec.get("width"):  # thicker box borders / lines (neuroglancer annotation shader)
+        w = float(spec["width"])
+        layer["shader"] = (f"void main() {{\n  setColor(defaultColor());\n  setBoundingBoxBorderWidth({w:.1f});\n"
+                           f"  setLineWidth({w:.1f});\n}}\n")
+    return layer
 
 
 def build(spec):
