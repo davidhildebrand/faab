@@ -157,7 +157,7 @@ def neuron_layer(spec, source=None):
 def annotation_layer(spec):
     """spec: {"name", "color": "#hex", "lines": [[[x,y,z],[x,y,z]], ...], "points": [[x,y,z], ...],
     "boxes": [[[x,y,z],[x,y,z]], ...]} (boxes = axis-aligned bounding boxes, corner to corner, as the synapse cutouts
-    are drawn); coordinates in 16 x 16 x 45 nm voxels (the viewer's dimensions)"""
+    are drawn); coordinates in 16 x 16 x 45 nm voxels (the viewer's dimensions); "visible": false = hidden layer"""
     ann = []
     for k, (a, b) in enumerate(spec.get("lines", [])):
         ann.append({"type": "line", "pointA": [float(v) for v in a], "pointB": [float(v) for v in b], "id": f"l{k}"})
@@ -168,7 +168,7 @@ def annotation_layer(spec):
         ann.append({"type": "point", "point": [float(v) for v in p], "id": f"p{k}"})
     layer = {"type": "annotation", "source": {"url": "local://annotations", "transform": {"outputDimensions": DIMS}},
              "annotations": ann, "name": spec.get("name", "annotations"), "annotationColor": spec.get("color", "#ffff00"),
-             "visible": True}
+             "visible": spec.get("visible", True)}
     if spec.get("width"):  # thicker box borders / lines (neuroglancer annotation shader)
         w = float(spec["width"])
         layer["shader"] = (f"void main() {{\n  setColor(defaultColor());\n  setBoundingBoxBorderWidth({w:.1f});\n"

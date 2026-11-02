@@ -2,7 +2,8 @@
 existing cutouts (light blue), plus one layer per cell type of interest - the R7s, LMCs and T4/T5 cells that have
 target synapses in a box (registry 'target_cells', propose_targets.py), each in its own colorblind-safe color, all
 visible (toggle a layer to see one type). Also one overview per type (only that type's cells and boxes shown).
-2026-11-02: several registries (the lamina R1-R6 / R8 boxes came in a second one) and an R1-R6/R8 layer.
+2026-11-02: several registries (the lamina R1-R6 / R8 boxes came in a second one) and an R1-R6/R8 layer; the new
+boxes in one layer per purpose: prediction checks magenta, R7 missed-synapse boxes vermillion (cold) / white (typical).
 State uploads only (a view; >= 2 s apart). Usage: overview_cells.py REGISTRY.tsv [REGISTRY2.tsv ...]"""
 import json
 import re
@@ -29,12 +30,20 @@ box = lambda x: [[float(v) for v in x.lo_xyz.split(",")], [float(v) for v in x.h
 cells = {t: sorted({c for s in R[R.type == t].target_cells for c in re.findall(r"\b(\d{18})\b", s)}) for t, _, _ in TYPES}
 
 
+PURPOSES = [("check", "prediction checks (placed where the most synapses are predicted)", NEW_COLOR),
+            ("cold", "R7 missed synapses: cold boxes (much R7, few predicted synapses)", "#D55E00"),
+            ("typical", "R7 missed synapses: typical boxes (random R7 points)", "#FFFFFF")]
+R["purpose_kind"] = R.category.map(lambda c: "cold" if "cold" in c else "typical" if "typical" in c else "check")
+
+
 def spec(types, title):
-    neurons = [{"name": f"{name}: cells with target synapses in a box ({len(cells[t])})", "color": col, "ids": cells[t]}
+    neurons = [{"name": f"{name}: cells in the new boxes ({len(cells[t])})", "color": col, "ids": cells[t]}
                for t, name, col in TYPES if t in types and cells[t]]
-    ann = [{"name": f"new cutouts: {title}", "color": NEW_COLOR, "width": 4,
-            "boxes": [box(x) for x in R[R.type.isin(types)].itertuples(index=False)]},
-           {"name": "existing cutouts", "color": "#56B4E9", "boxes": existing}]
+    sel = R[R.type.isin(types)]
+    ann = [{"name": f"new cutouts, {label} - {title}", "color": col, "width": 4,
+            "boxes": [box(x) for x in sel[sel.purpose_kind == k].itertuples(index=False)]}
+           for k, label, col in PURPOSES if (sel.purpose_kind == k).any()]
+    ann.append({"name": "existing cutouts", "color": "#56B4E9", "boxes": existing})
     return {"meshes": [{"kind": "OL", "segments": ["11", "14", "21", "24"], "alpha": 0.08}], "neurons": neurons,
             "annotations": ann, "layout": "3d", "select": neurons[0]["name"]}
 
