@@ -1,0 +1,50 @@
+"""Overview of proposed target cutouts with their cells in 3D (David 2026-11-01): the new boxes (magenta, thick) and the
+existing cutouts (light blue), plus one layer per cell type of interest - the R7s, LMCs and T4/T5 cells that have
+target synapses in a box (registry 'target_cells', propose_targets.py), each in its own colorblind-safe color, all
+visible (toggle a layer to see one type). Also one overview per type (only that type's cells and boxes shown).
+State uploads only (a view; >= 2 s apart). Usage: overview_cells.py REGISTRY.tsv"""
+import json
+import re
+import sys
+import time
+
+import pandas as pd
+
+from faab import nglink
+from faab.clients.cave import client as cave_client, throttle
+from faab.config import fig
+
+NEW_COLOR = "#ff00ff"
+TYPES = [("R7", "R7 terminals", "#0072B2"), ("LMC", "LMC terminals", "#E69F00"), ("T4/T5", "T4/T5 inputs", "#009E73")]
+
+R = pd.read_csv(sys.argv[1], sep="\t")
+inv = pd.read_csv(fig("cutout_inventory.tsv"), sep="\t")
+existing = [[json.loads(a), json.loads(b)] for a, b in zip(inv.lo, inv.hi)]
+kind = lambda c: "R7" if c.startswith("R7") else "T4/T5" if c.startswith(("T4", "T5")) else "LMC"
+R["type"] = R.category.map(kind)
+box = lambda x: [[float(v) for v in x.lo_xyz.split(",")], [float(v) for v in x.hi_xyz.split(",")]]
+cells = {t: sorted({c for s in R[R.type == t].target_cells for c in re.findall(r"\b(\d{18})\b", s)}) for t, _, _ in TYPES}
+
+
+def spec(types, title):
+    neurons = [{"name": f"{name}: cells with target synapses in a box ({len(cells[t])})", "color": col, "ids": cells[t]}
+               for t, name, col in TYPES if t in types and cells[t]]
+    ann = [{"name": f"new cutouts: {title}", "color": NEW_COLOR, "width": 4,
+            "boxes": [box(x) for x in R[R.type.isin(types)].itertuples(index=False)]},
+           {"name": "existing cutouts", "color": "#56B4E9", "boxes": existing}]
+    return {"meshes": [{"kind": "OL", "segments": ["11", "14", "21", "24"], "alpha": 0.08}], "neurons": neurons,
+            "annotations": ann, "layout": "3d", "select": neurons[0]["name"]}
+
+
+client, t, out = cave_client(), 0.0, {}
+for key, types in [("all", [t for t, _, _ in TYPES])] + [(t, [t]) for t, _, _ in TYPES]:
+    t = throttle(t)
+    state = nglink.clean_state(nglink.build(spec(types, "R7, LMC, T4/T5" if key == "all" else key)))
+    out[key] = client.state.build_neuroglancer_url(client.state.upload_state_json(state),
+                                                   ngl_url="https://spelunker.cave-explorer.org")
+    t = time.time()
+    print(f"{key}: {out[key]}", flush=True)
+for t_, _, _ in TYPES:
+    print(f"{t_} cells: {' '.join(cells[t_])}")
+open(sys.argv[1].replace(".tsv", "_overview_cells_links.txt"), "w").write(
+    "\n".join(f"{k}\t{v}" for k, v in out.items()) + "\n")
