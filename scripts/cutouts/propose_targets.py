@@ -17,7 +17,10 @@ link (README scene: EM, target cells, the box in magenta with thick borders, the
 overview link with the new boxes (magenta, thick) and the existing cutouts (light blue).
 Writes figures/cutouts/<stamp>_cutouts_targets.tsv: the registry, one row per box (id, category, side, target cells
 by root_id with their synapses in the box, counts, corners, link).
-Usage: propose_targets.py SEATABLE.tsv PRS_TAB.xlsx LMC_TAB.tsv"""
+2026-11-02: R1-R6 and R8 terminals (output synapses in the lamina of their side; both end there in Aedes): 2 + 1 boxes
+per side from the PRs tab rows of class R1-R6 / R8 with status proofread / checked / adequate.
+Usage: propose_targets.py SEATABLE.tsv PRS_TAB.xlsx LMC_TAB.tsv [--only=R1-R6,R8] [--avoid=EARLIER_REGISTRY.tsv]
+[--live=1] (--only: requests by the first word of their category; --live: one live query, not the snapshot)"""
 import datetime
 import glob
 import json
@@ -51,7 +54,13 @@ REQUESTS = [  # (category, side, target set, synapse role, neuropil, boxes, one 
     ("T5 inputs", "R", "T4T5", "in", "LO", 1, False),
     ("T4 inputs", "L", "T4T5", "in", "ME", 1, False),
     ("T5 inputs", "L", "T4T5", "in", "LO", 1, False),
+    # David 2026-11-02: another 4-6 boxes with R1-R6 or R8, split across sides (both end in the lamina in Aedes)
+    ("R1-R6 terminals", "R", "R1-R6", "out", "LA", 2, False),
+    ("R8 terminals", "R", "R8", "out", "LA", 1, True),
+    ("R1-R6 terminals", "L", "R1-R6", "out", "LA", 2, False),
+    ("R8 terminals", "L", "R8", "out", "LA", 1, True),
 ]
+PR_CLASSES = {"R7": "R7", "R8": "R8", "R1-R6": "R1-R6"}  # PRs tab class -> target set
 
 
 def targets(seatable, prs_book, lmc_tsv):
@@ -64,9 +73,10 @@ def targets(seatable, prs_book, lmc_tsv):
     for b in T.blocks(ws):
         side = "L" if b.title_row > left else "R"
         for r in b.rows:
-            if T.get(ws, b, r, "class") == "R7" and T.get(ws, b, r, "status").lower() in GOOD:
+            cls = PR_CLASSES.get(T.get(ws, b, r, "class").replace("–", "-"))
+            if cls and T.get(ws, b, r, "status").lower() in GOOD:
                 root = now.get((b.group, T.get(ws, b, r, "root_id_orig"))) or T.get(ws, b, r, "root_id_curr")
-                out.setdefault(("R7", side), {})[root] = f"R7 of PR group {b.group}"
+                out.setdefault((cls, side), {})[root] = f"{cls} of PR group {b.group}"
     lines = [l.split("\t") for l in open(lmc_tsv).read().split("\n")]
     hdr = next(l for l in lines if l and l[0] == "root_id_orig")
     L = pd.DataFrame([l for l in lines if l and l[0].isdigit()], columns=hdr)
@@ -90,12 +100,16 @@ def targets(seatable, prs_book, lmc_tsv):
 
 def main():
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dd%H%M%StUTC")
-    tg = targets(*sys.argv[1:4])
+    pos = [a for a in sys.argv[1:] if not a.startswith("--")]
+    opt = dict(a[2:].split("=", 1) for a in sys.argv[1:] if a.startswith("--") and "=" in a)
+    only = set(opt["only"].split(",")) if "only" in opt else None  # e.g. --only=R1-R6,R8 (first word of the category)
+    requests = [q for q in REQUESTS if only is None or q[0].split()[0] in only]
+    tg = targets(*pos[:3])
     for k, v in sorted(tg.items()):
         print(f"targets {k}: {len(v)}", flush=True)
     snap, client = synsnap.Snapshot(log=lambda *_: None), caveclient.CAVEclient(DATASTACK)
     now = datetime.datetime.now(datetime.timezone.utc)
-    meshes = ["ME_R", "ME_L", "LO_R", "LO_L"]
+    meshes = ["LA_R", "LA_L", "ME_R", "ME_L", "LO_R", "LO_L"]
     trees = {m: cKDTree(ol_meshes.mesh(m)[0] / 1000.0) for m in meshes}
 
     def region(P):
@@ -108,16 +122,25 @@ def main():
         return reg
 
     syn = {}
-    for role in ("out", "in"):
-        roots = sorted({int(r) for (s, sd), v in tg.items() for r in v if r and (role == "out") == (s != "T4T5")})
-        kw = {"pre": roots} if role == "out" else {"post": roots}
-        d = snap.synapses(**kw, when="now", positions=True, client=client)
-        d = d[d.pre_root != d.post_root]
+    for role in sorted({q[3] for q in requests}):
+        want = {q[2] for q in requests if q[3] == role}
+        roots = sorted({int(r) for (s, sd), v in tg.items() for r in v if r and s in want})
         who = "pre" if role == "out" else "post"
-        # snapshot positions are voxels; lamina_footprint.flat guesses the unit from the distance to the lamina and
-        # took the medulla/lobula synapses of T4/T5 for nm (2026-11-01), so no guessing here
-        V = d[[f"{who}_x", f"{who}_y", f"{who}_z"]].to_numpy(float)
-        f = pd.DataFrame({"pre": d.pre_root.astype(str).to_numpy(), "post": d.post_root.astype(str).to_numpy(),
+        if "live" in opt:  # --live=1: one live query instead of the snapshot catch-up (which once hung for hours)
+            d = client.materialize.live_query("synapses_v2", timestamp=now,
+                                              filter_in_dict={f"{who}_pt_root_id": roots})
+            d = d[d.pre_pt_root_id != d.post_pt_root_id]
+            V = np.stack(d[f"{who}_pt_position"].to_numpy()).astype(float) / VOX  # live positions are nm
+            pre, post = d.pre_pt_root_id, d.post_pt_root_id
+        else:
+            kw = {"pre": roots} if role == "out" else {"post": roots}
+            d = snap.synapses(**kw, when="now", positions=True, client=client)
+            d = d[d.pre_root != d.post_root]
+            # snapshot positions are voxels; lamina_footprint.flat guesses the unit from the distance to the lamina and
+            # took the medulla/lobula synapses of T4/T5 for nm (2026-11-01), so no guessing here
+            V = d[[f"{who}_x", f"{who}_y", f"{who}_z"]].to_numpy(float)
+            pre, post = d.pre_root, d.post_root
+        f = pd.DataFrame({"pre": pre.astype(str).to_numpy(), "post": post.astype(str).to_numpy(),
                           "vx": V[:, 0], "vy": V[:, 1], "vz": V[:, 2]})
         f["np"] = region(V * VOX / 1000.0)
         f["cell"] = f[who]
@@ -126,10 +149,15 @@ def main():
 
     inv = pd.read_csv(fig("cutout_inventory.tsv"), sep="\t")
     taken = [(np.array(json.loads(a)), np.array(json.loads(b))) for a, b in zip(inv.lo, inv.hi)]
+    for reg in opt.get("avoid", "").split(","):  # --avoid=REGISTRY.tsv[,...]: boxes proposed earlier
+        if reg:
+            P = pd.read_csv(reg, sep="\t")
+            taken += [(np.array([float(v) for v in a.split(",")]), np.array([float(v) for v in b.split(",")]))
+                      for a, b in zip(P.lo_xyz, P.hi_xyz)]
     overlap = lambda lo, hi, boxes: any(np.all(lo < b) and np.all(a < hi) for a, b in boxes)
     half = SIZE / 2.0
     rows = []
-    for cat, side, tset, role, npl, n_box, per_cell in REQUESTS:
+    for cat, side, tset, role, npl, n_box, per_cell in requests:
         cells = tg.get((tset, side), {})
         f = syn[role]
         f = f[f.cell.isin(set(cells)) & (f.np == f"{npl}_{side}")]
@@ -193,11 +221,11 @@ def main():
                 "select": f"cutout {r['box_id']}"}
         links.append((r, nglink.clean_state(nglink.build(spec))))
     over = {"meshes": [{"kind": "OL", "segments": ["11", "14", "21", "24"], "alpha": 0.1}],
-            "annotations": [{"name": "new cutouts (2026-11-01)", "color": NEW_COLOR, "width": 4,
+            "annotations": [{"name": f"new cutouts ({stamp[:8]})", "color": NEW_COLOR, "width": 4,
                              "boxes": [[r["lo"].tolist(), r["hi"].tolist()] for r in rows]},
                             {"name": "existing cutouts", "color": "#56B4E9",
                              "boxes": [[json.loads(a), json.loads(b)] for a, b in zip(inv.lo, inv.hi)]}],
-            "layout": "3d", "select": "new cutouts (2026-11-01)"}
+            "layout": "3d", "select": f"new cutouts ({stamp[:8]})"}
     t = throttle(0.0)
     for r, state in links:
         t = throttle(t)
