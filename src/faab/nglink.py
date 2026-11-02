@@ -155,11 +155,15 @@ def neuron_layer(spec, source=None):
 
 
 def annotation_layer(spec):
-    """spec: {"name", "color": "#hex", "lines": [[[x,y,z],[x,y,z]], ...], "points": [[x,y,z], ...]}
-    coordinates in 16 x 16 x 45 nm voxels (the viewer's dimensions)"""
+    """spec: {"name", "color": "#hex", "lines": [[[x,y,z],[x,y,z]], ...], "points": [[x,y,z], ...],
+    "boxes": [[[x,y,z],[x,y,z]], ...]} (boxes = axis-aligned bounding boxes, corner to corner, as the synapse cutouts
+    are drawn); coordinates in 16 x 16 x 45 nm voxels (the viewer's dimensions)"""
     ann = []
     for k, (a, b) in enumerate(spec.get("lines", [])):
         ann.append({"type": "line", "pointA": [float(v) for v in a], "pointB": [float(v) for v in b], "id": f"l{k}"})
+    for k, (a, b) in enumerate(spec.get("boxes", [])):
+        ann.append({"type": "axis_aligned_bounding_box", "pointA": [float(v) for v in a], "pointB": [float(v) for v in b],
+                    "id": f"b{k}"})
     for k, p in enumerate(spec.get("points", [])):
         ann.append({"type": "point", "point": [float(v) for v in p], "id": f"p{k}"})
     return {"type": "annotation", "source": {"url": "local://annotations", "transform": {"outputDimensions": DIMS}},
@@ -202,6 +206,8 @@ def build(spec):
                   "showDefaultAnnotations": False, "layout": spec.get("layout", "3d")})
     if spec.get("select"):
         state["selectedLayer"] = {"layer": spec["select"], "visible": True, "size": 361}
+    if spec.get("cross_scale"):  # 2D panel zoom (nm per screen pixel / voxel; ~0.5 frames a 2 um cutout)
+        state["crossSectionScale"] = spec["cross_scale"]
     return clean_state(state)
 
 
