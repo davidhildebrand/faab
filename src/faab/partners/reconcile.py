@@ -41,8 +41,9 @@ REPEAT = re.compile(r"^(duplicate|same (id|neuron) appeared in multiple columns?
 OWN = re.compile(r"^(xyz off the cell|census bundle|second bundle|off-bundle|moved to group|split from group|added by "
                  r"bundle tracking|pair|terminal|names differ|probable merge error|extra axon|check that|"
                  r"(branch |fragment )?merged (to|into|with)\b|"
-                 # the LMCs tab's typing remarks (scripts/sheets/lmc_tab.py) belong to that tab's row only (2026-11-07)
-                 r"SeaTable says L[1-5]; the automatic typing|no nucleus on this root|several nuclei on this root|"
+                 # the LMCs tab's typing remarks (scripts/sheets/lmc_tab.py) belong to that tab's row only (2026-11-07);
+                 # notes are split at ';', so 'SeaTable says L3; the automatic typing says L2 ...' arrives in two parts
+                 r"SeaTable says L[1-5]$|the automatic typing says|no nucleus on this root|several nuclei on this root|"
                  r"medulla part short or missing|features unlike the typed LMCs|left side: the automatic typing|"
                  r"no point found on the cell|flagged as an LMC by David)", re.I)  # merge history is about the row's own root_id_orig
 STALE = re.compile(r"small chunk (of|connecte?d? to) a (big|larger) neuron|in between EM slices are broken|"

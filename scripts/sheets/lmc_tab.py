@@ -43,8 +43,9 @@ STATUS_RANK = {"checked": 0, "proofread": 1, "adequate": 2, "review": 3, "in pro
                "missing soma": 6, "stopped": 7}
 CONF_RANK = {"annotated": 0, "high": 1, "medium": 2, "low": 3}
 COLOR = {"annotated": "#0072B2", "high": "#56B4E9", "medium": "#E69F00", "low": "#CC79A7"}  # Okabe-Ito, no red/green
-COLS = ["root_id_orig", "root_id_curr", "xyz", "side", "putative_type", "confidence", "confirmed_type", "reason",
-        "annotation", "status", "pr_date", "proofreader", "chk_date", "checker", "notes", "SeaTable", "link"]
+# David 2026-11-07: the standard columns in the order of the other sheets; the LMC-specific ones right of link
+COLS = ["root_id_orig", "root_id_curr", "xyz", "side", "putative_type", "annotation", "status", "pr_date", "proofreader",
+        "chk_date", "checker", "notes", "SeaTable", "link", "confidence", "confirmed_type", "reason"]
 # typed L5 profile (lmc_type_profiles.py, p10-p90 of the 11 SeaTable L5s): lamina inputs <= 26, lamina outputs >= 76,
 # medulla outputs >= 683
 L5_TIGHT = dict(max_in_LA=26, min_out_LA=76, min_out_ME=683)
@@ -307,8 +308,10 @@ def cmd_build(a):
         if not len(g):
             continue
         n = g.confidence.value_counts()
-        lines.append("\t".join([f"{names[b]}: {len(g)} cells (" + ", ".join(f"{k} {int(n.get(k, 0))}" for k in CONF_RANK)
-                                + ")"] + [""] * (len(COLS) - 2) + [links.get(b, "")]))
+        title = [""] * len(COLS)  # the block's link sits in the link column
+        title[0] = f"{names[b]}: {len(g)} cells (" + ", ".join(f"{k} {int(n.get(k, 0))}" for k in CONF_RANK) + ")"
+        title[COLS.index("link")] = links.get(b, "")
+        lines.append("\t".join(title).rstrip("\t"))
         lines.append("\t".join(COLS))
         for x in g[COLS].itertuples(index=False):
             lines.append("\t".join("" if (v is None or (isinstance(v, float) and np.isnan(v))) else str(v).replace("\t", " ")
