@@ -80,7 +80,12 @@ def region(P):
 
 
 s = positions(snap.synapses(pre=prs, when="now", positions=True, client=client))
-s = s[~s.post.isin(set(map(str, prs)))]
+# no photoreceptor is an LMC candidate: R7s get R8 / R1-R6 synapses and have lamina input and medulla output, so 56 R7s
+# (and R7/R8, R1-R6? rows of the PRs tab) reached the LMCs tab on 2026-11-01 (removed 2026-11-07)
+all_prs = set(map(str, prs)) | set(tab[tab.cls.isin(["R1-R6", "R1-R6?", "R7", "R8", "R7/R8"])].root_now) | \
+    set(F[F.verdict.str.contains("R[1-8]", regex=True, na=False)].root) | \
+    set(Lv[Lv.verdict.str.contains("R[1-8]", regex=True, na=False)].root)
+s = s[~s.post.isin(all_prs)]
 s["side"] = s.pre.map({str(r): sd for r, sd in side.items()})
 T = s.groupby("post").agg(n_pr=("pre", "size"), n_pr_cells=("pre", "nunique"),
                           side=("side", lambda x: x.value_counts().index[0])).reset_index().rename(columns={"post": "root"})
