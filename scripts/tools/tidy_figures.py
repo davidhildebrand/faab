@@ -11,7 +11,8 @@ KEEP at the top level of figures/:
 Everything else moves to figures/archive/<YYYYMMDD>[<suffix>]/{superseded,outputs}/ (superseded = older stamped
 versions, outputs = unstamped files no code reads) with a MANIFEST.tsv. --fix-refs rewrites 'figures/<name>' and
 'faab/figures/<name>' in the given files (a folder = its .md files) to the archived path. Dry run unless --apply.
-Usage: venv/bin/python faab/scripts/tools/tidy_figures.py [--apply] [--keep NAME ...] [--fix-refs FILE ...]"""
+--only TOPIC ... limits the tidy to those topic folders (e.g. --only sheets).
+Usage: venv/bin/python faab/scripts/tools/tidy_figures.py [--apply] [--only TOPIC ...] [--keep NAME ...] [--fix-refs FILE ...]"""
 import argparse
 import datetime
 import glob
@@ -48,6 +49,7 @@ def main():
     ap.add_argument("--keep", nargs="*", default=[])
     ap.add_argument("--fix-refs", nargs="*", default=[])
     ap.add_argument("--suffix", default="")
+    ap.add_argument("--only", nargs="*", default=[], help="tidy only these topic folders (e.g. sheets)")
     a = ap.parse_args()
     pats, words = code_patterns()
     files = []
@@ -63,6 +65,8 @@ def main():
             names += [f"{n}/{m}" for m in sorted(os.listdir(os.path.join(FIG, n))) if not m.startswith(".")]
         else:
             names.append(n)
+    if a.only:  # e.g. --only sheets: the other folders and the top level stay as they are
+        names = [n for n in names if "/" in n and n.split("/")[0] in a.only]
     base = lambda rel: rel.split("/")[-1]
     stamped = {n: STAMP.sub("", base(n)) for n in names if STAMP.search(base(n))}
     newest = {}
