@@ -37,7 +37,9 @@ The xyz is the row's anchor. At each sheet update, root_id_curr is refreshed fro
 4. Click there and check that your neuron gets selected; hovering shows the segment ID, which should be the cell's root_id.
 5. Copy the coordinates from the position readout at the top left (voxels) into xyz.
 
-![A good point: clear cytoplasm in a large backbone profile](images/point-good.png)
+![A good point: clear cytoplasm in a large backbone profile. Hovering shows the neuron's ID in the layer bar, and the top-left readout gives the xyz (both boxed)](images/point-good.png)
+
+![A bad point: on a mitochondrion inside the neuron. Hovering shows segment 0, so the row would attach to no neuron](images/point-mitochondrion.png)
 
 If the cell's ID changed, update the xyz. Don't type a new ID into root_id_curr.
 

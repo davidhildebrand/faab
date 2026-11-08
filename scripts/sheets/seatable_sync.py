@@ -17,9 +17,11 @@ but elsewhere (MISMATCH) are highlighted and get the short note 'xyz off the cel
 (notes are for the proofreaders: generated notes stay short, David 2026-10-30); notes our scripts wrote earlier are
 shortened by faab.partners.short_notes (proofreaders' text kept verbatim; 'duplicate target of <id>' -> 'duplicate of
 r<row>' pointing at the record row); statuses lowercase ('stoppped' -> 'stopped');
-stale notes (faab.partners.stale_notes, 2026-11-07): an earlier 'xyz off the cell' flag and the proofreader's
-'resolved' reply go when the point is on the cell again (highlight cleared), 'missing soma' notes when the cell carries
-one nucleus now (nucleus table mapped to today's roots; --no-stale-notes skips it);
+stale notes (faab.partners.stale_notes, 2026-11-07/08; notes are only ever cleared, never added or copied): an
+earlier 'xyz off the cell' flag and the proofreader's 'resolved' reply go when the point is on the cell again
+(highlight cleared), replies / reports of work done ('xyz coordinates and link updated') once the point is checked on
+the cell, 'X ..., not merged' once X's rows are on the same cell, 'missing soma' notes when the cell carries one
+nucleus now (nucleus table mapped to today's roots; --no-stale-notes skips it);
 'added' typed into checker moves to SeaTable; dates typed day-month-year (2020-10-26 for 20-10-2026, text 27-10-26)
 are corrected; text dates become dates and other text in date columns moves to notes. Hand edits (--edits JSON:
 tab, row or root, column, value, optional append; column 'fill' with value clear / highlight) are applied next. --reconcile then brings the
@@ -201,6 +203,12 @@ def main():
         nsyn = re.match(r"\d+", s(x["values"].get("nsyn")))
         by_orig.setdefault(s(x["values"].get("root_id_orig")), []).append((x["tab"], x["row"], int(nsyn.group()) if nsyn else 0))
 
+    orig_cells = {}  # root_id_orig -> live cells at its rows' points (stale 'not merged' flags)
+    for x in rows:
+        at_x = M.get((x["tab"], x["row"]), {}).get("root_at_xyz", "")
+        if at_x and at_x != "0":
+            orig_cells.setdefault(s(x["values"].get("root_id_orig")), set()).add(at_x)
+
     def row_of(orig, tab, row):
         """the record row of root_id_orig: same tab first, then any tab; largest nsyn; never the row itself"""
         cand = [c for c in by_orig.get(orig, []) if (c[0], c[1]) != (tab, row)]
@@ -270,10 +278,12 @@ def main():
             cur_notes = s(wb[tab].cell(r, cols["notes"]).value)
             # soma rule only where the point is on the row's cell (a MISMATCH point would count the wrong segment)
             n_nuc = nuc.get(cell, 0) if cell and (on_cell or not ok_at) else None
-            new_notes, why = SN.clean(cur_notes, on_cell, n_nuc, ok_at)
+            new_notes, why = SN.clean(cur_notes, on_cell, n_nuc, ok_at, lambda i: orig_cells.get(i, set()))
             if new_notes != cur_notes:
                 B.put(tab, r, cols["notes"], new_notes, "stale note: " + ", ".join(why))
-                if "point is on the cell again" in why:
+                # the yellow goes with the flag, also when the proofreader replaced the flag by a reply
+                # ('xyz is corrected -DR', 2026-11-08) and the point is now checked on the cell
+                if "point is on the cell again" in why or (on_cell and any(w.startswith("reply") for w in why)):
                     B.fill(tab, r, cols.values(), "clear", "stale note: point is on the cell again")
             st_now = s(wb[tab].cell(r, cols["status"]).value) if "status" in cols else ""
             if "soma" in st_now.lower() and n_nuc == 1:

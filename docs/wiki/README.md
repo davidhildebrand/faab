@@ -125,11 +125,13 @@ point_xyz is the cell's anchor: supervoxel_id and root_id are derived from it, s
 5. Before you save, click at that spot and check that your neuron gets selected; hovering shows the segment ID, which should be the cell's root_id.
 6. Copy the coordinates from the position readout at the top left (voxels) and paste them into point_xyz.
 
-![A good point_xyz: clear cytoplasm in a large backbone profile, with the neuron selected](images/point-good.png)
+![A good point_xyz: the crosshair sits in clear cytoplasm of a large backbone profile (blue). Hovering there shows the neuron's ID in the layer bar (boxed: supervoxel → root_id, then its SeaTable label), and the readout at the top left (boxed) gives the position to copy](images/point-good.png)
 
-![A bad point_xyz: on a mitochondrion inside the neuron, where the segmentation has no segment (ID 0)](images/point-mitochondrion.png)
+![A bad point_xyz: the crosshair sits on a mitochondrion, the unshaded patch inside the blue profile. Hovering shows segment 0 (boxed), so SeaTable gets supervoxel_id and root_id 0 for this row](images/point-mitochondrion.png)
 
-![The position readout at the top left gives point_xyz in voxels](images/position-readout.png)
+![Top left: the position in voxels (white; copy this into point_xyz) and the mouse position (orange). Below: the layer bar with the hovered supervoxel → root_id](images/position-readout.png)
+
+![The same neuron in the 3D view; the crosshair marks the point, on the backbone and away from the soma (bottom right)](images/point-3d.png)
 
 The **bad supervoxel** view in SeaTable lists every row whose point maps to no segment; check it now and then.
 

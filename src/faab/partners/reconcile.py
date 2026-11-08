@@ -8,15 +8,16 @@
   - Every other row of the cell (other blocks, other tabs) carries the same tracking: the best status (RANK: checked >
     proofread > complete > adequate > review > to_review > needs_extending > missing soma > in progress > stopped),
     proofreader and checker names merged (each person once; full name over initials), the newest pr_date of the
-    best-status rows, the newest chk_date, blank annotation / link filled, one SeaTable mark, and the same notes. Cells
+    best-status rows, the newest chk_date, blank annotation / link filled, and one SeaTable mark. Cells
     without any status (NEW / NEW-DUP / candidate only) are left as they are apart from collapsing; yellow MISMATCH rows
     keep their own values.
-  - Notes = the union of the rows' notes without pointers to other rows ('duplicate of r12', 'merged into r5', 'merged
-    into PRg1hop1 r5'), remarks that only say the row is a repeat ('duplicate', 'same id appeared in multiple column',
-    'this ID is repeated throughout, ...'), near-duplicates, fragment wording on cells that are whole now (>= WHOLE_L2
-    L2 chunks; 'fragment of a L5 neuron' -> 'L5') and 'please review' on checked cells; row-specific notes ('xyz off the
-    cell ...', merge history of the row's own root 'merged to/into/with ...', PRs bundle / pairing notes) stay on their
-    own row only.
+  - Notes are NOT copied between rows (David 2026-11-08: "only clear notes ... less is more"; until then every row got
+    the union, which spread replies such as 'xyz coordinates and link updated'). Each row's own notes are cleaned:
+    pointers to other rows ('duplicate of r12', 'merged into r5', 'merged into PRg1hop1 r5'), remarks that only say the
+    row is a repeat ('duplicate', 'same id appeared in multiple column', 'this ID is repeated throughout, ...'),
+    near-duplicates, fragment wording on cells that are whole now (>= WHOLE_L2 L2 chunks; 'fragment of a L5 neuron'
+    -> 'L5') and 'please review' on checked cells go; row-specific notes ('xyz off the cell ...', merge history
+    'merged to/into/with ...', PRs bundle / pairing notes) are kept as written.
   - A row whose cell is now the block's own upstream cell (a fragment of that cell, merged into it: e.g. R8 pieces in
     the R8's partner block, David 2026-10-31) is not a partner any more and is removed; references to it are dropped
     from tracked_in. Its synapses would be the cell's synapses onto itself, so nsyn could not be recounted either.
@@ -175,14 +176,6 @@ def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, latest_of=None,
         label = max((m.split(":", 1)[1].strip() for m in marks if ":" in m), key=len, default="")
         sea = mark + (f": {label}" if label and mark else "")
         whole = sizes.get(c, 0) >= WHOLE_L2
-        shared, seen = [], set()
-        for x in g:
-            for p in parts(val(x, "notes")):
-                q = shared_part(p, whole, status == "checked", c)
-                if q and key(q) not in seen:
-                    seen.add(key(q))
-                    shared.append(q)
-        shared = dedupe(shared)
         for x in g:
             tab, r, cols = x["tab"], x["row"], x["cols"]
             B.put(tab, r, cols["status"], status, why)
@@ -201,8 +194,14 @@ def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, latest_of=None,
             if "SeaTable" in cols and sea:
                 B.put(tab, r, cols["SeaTable"], sea, why)
             if "notes" in cols:
-                own = [p for p in parts(val(x, "notes")) if OWN.search(p) and not POINTER.search(p) and key(p) not in seen]
-                B.put(tab, r, cols["notes"], "; ".join(shared + own), why)
+                # each row keeps its own notes, only cleaned (David 2026-11-08: "only clear notes ... less is more"):
+                # pointers, repeat remarks, fragment wording on whole cells and 'please review' on checked cells go
+                mine = []
+                for p in parts(val(x, "notes")):
+                    q = p if OWN.search(p) and not POINTER.search(p) else shared_part(p, whole, status == "checked", c)
+                    if q:
+                        mine.append(q)
+                B.put(tab, r, cols["notes"], "; ".join(dedupe(mine)), why)
 
     # ---- collapse same-block rows of one cell
     hdr = {}

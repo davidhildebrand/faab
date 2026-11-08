@@ -6,7 +6,10 @@ Two kinds, checked on every update (scripts/sheets/seatable_sync.py):
   - 'missing soma' / 'no soma?' / 'can't find soma' ... when the cell now carries exactly one nucleus of the nucleus
     table (nuclei_v1_aedes mapped to today's roots); our own 'no nucleus on this root ...' when it carries one or more,
     and 'several nuclei on this root: merge?' when it carries at most one.
-Notes are split at ';' and the remaining parts kept verbatim. Parts that record finished work ('missing soma
+  - replies and reports of work done ('issue resolved', 'xyz coordinates and link updated', 'xyz is corrected',
+    'New ID: ...') once the row's point is checked on its cell, unless the part still asks or flags something;
+    'X ..., not merged' once X's rows sit on the same cell (David 2026-11-08: only clear notes, less is more).
+Notes are split at ';' and the remaining parts kept verbatim; nothing is ever added. Parts that record finished work ('missing soma
 identified', 'axonal segments and soma were missing') are kept. A SeaTable status 'missing soma' is not changed (the
 sheet takes SeaTable's status); seatable_sync lists those rows instead."""
 import datetime
@@ -20,6 +23,18 @@ import pandas as pd
 OFF = re.compile(r"^xyz off the cell \(on \d+\)( - .*)?$", re.I)
 # the proofreader's answer to an off-cell flag
 REPLY = re.compile(r"^(the |this )?issue (is )?resolved\b", re.I)
+# reports of work done / replies (David 2026-11-08: notes flag issues or curiosities; remove replies once checked):
+# 'issue resolved, coordinates updated - KT', 'xyz coordinates and link updated', 'xyz is corrected -DR',
+# 'updated ID: ... Coordinates: ...', 'New ID: ...', 'the merging is complete' - dropped only when the row's point is on
+# its cell, and never when the part still asks or flags something (FLAG)
+HISTORY = re.compile(r"\b(issue|problem)s?\b[^;]*\b(resolved|fixed)\b|"
+                     r"\b(xyz|coordinates?|root ?ids?|ids?|links?|point)\b[^;]*\b(updated|corrected|fixed)\b|"
+                     r"\bupdated (root )?(id|xyz|coordinates?)\b|\bnew id:|have worked on (that|it)\b|"
+                     r"merging is complete", re.I)
+FLAG = re.compile(r"\?|answer|pending|please|check|unsure|incomplete|missing|"
+                  r"not (yet |completely |fully )?(proofread|complete|done|merged)", re.I)
+# 'extension of 648518347463102525, not merged - pending Kristo T.': stale once that id's rows sit on this row's cell
+NOT_MERGED = re.compile(r"\b(\d{15,})\b[^;]*\bnot merged\b|\bnot merged\b[^;]*\b(\d{15,})\b", re.I)
 # a part that says the soma is missing (and nothing that records it was found or attached)
 SOMA_MISSING = re.compile(r"^(no soma\??|soma missing\??|missing soma\??|can'?t find (the )?soma|"
                           r"(hard|difficult) to identify (the )?(missing )?soma\b.*)$", re.I)
@@ -33,15 +48,23 @@ def parts(notes):
     return [p.strip() for p in notes.split(";") if p.strip()]
 
 
-def clean(notes, point_on_cell, n_nuclei, at=""):
-    """(new notes, [reasons]) for one row; n_nuclei None = unknown (no soma rule applied); at = the root at the xyz
-    now: when the point is still off the cell, older flags naming another segment are dropped (the sync adds the
-    current one)"""
+def clean(notes, point_on_cell, n_nuclei, at="", cells_of=None):
+    """(new notes, [reasons]) for one row; only removes (or shortens 'missing soma, ...'), never adds.
+    n_nuclei None = unknown (no soma rule applied); at = the root at the xyz now: when the point is still off the cell,
+    older flags naming another segment are dropped (the sync adds the current one); cells_of(id) -> the live cells of
+    the sheet rows with that root_id_orig (for 'not merged' flags), or None"""
     out, why = [], []
     off = point_on_cell and any(OFF.match(p) for p in parts(notes))
     for p in parts(notes):
         if off and (OFF.match(p) or REPLY.match(p)):
             why.append("point is on the cell again")
+            continue
+        if point_on_cell and at and HISTORY.search(p) and not FLAG.search(p):
+            why.append("reply / report of work done, point checked on the cell")
+            continue
+        m = NOT_MERGED.search(p) if point_on_cell and at and cells_of else None
+        if m and at in cells_of(m.group(1) or m.group(2)):
+            why.append("merged now (same cell)")
             continue
         if not point_on_cell and at and OFF.match(p) and f"(on {at})" not in p:
             why.append("older off-cell flag replaced")
