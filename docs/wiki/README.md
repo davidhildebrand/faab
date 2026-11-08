@@ -48,6 +48,9 @@ We use Neuroglancer (Spelunker) to view and proofread the neurons in this datase
 ### Adding neurons to the view
 
 - Paste root_id number(s) into the Seg tab of the wclee_aedes_brain layer to display them with their annotations.
+
+![The Seg tab of the segmentation layer: paste root_ids into the box at the top; the selected neurons are listed below with their SeaTable labels](images/seg-tab.png)
+
 - You can also retrieve sets of neurons by filtering for annotations.
 - In the Source tab, near the bottom, you can edit which annotations are displayed (in curly brackets).
 
@@ -93,32 +96,42 @@ Do this before you start on a cell and before you add a row.
 
 ### Adding a cell by hand
 
-1. Check that the cell is not already in SeaTable (above).
+1. Check that the cell is not already in SeaTable (above): search for its current root_id.
 2. Add a new row at the bottom of the **unfiltered** table.
 3. Fill in at least the [minimal annotation](#minimal-annotation).
-4. Do **not** fill in root_id, serial_id, or supervoxel_id: they are filled in automatically from point_xyz.
+4. Leave root_id, serial_id, and supervoxel_id **blank**: the scripts fill them in from point_xyz about every 30 minutes.
+5. Don't leave empty rows. An empty row uses up a serial_id (we want to keep these numbers small) and counts as a bad supervoxel row, which causes glitches in downstream analysis. If you add one by accident, delete it.
 
 ### Minimal annotation
 
 Every new row should have:
 
-- **point_xyz**, chosen as described below (**not** on the soma);
+- **point_xyz** on the backbone, in clear cytoplasm (see [Choosing point_xyz](#choosing-point_xyz));
 - **side**;
 - **superclass**;
 - **status**;
-- **annotator** (your initials).
+- **annotator** (your initials), and **proofreader** as well if you also merged or cleaved the neuron.
 
 SeaTable and the update scripts then fill in supervoxel_id (from point_xyz), root_id (from supervoxel_id), and serial_id.
 
 ### Choosing point_xyz
 
-point_xyz is the cell's anchor: supervoxel_id and root_id are derived from it, so a point that misses the cell attaches the row to the wrong neuron.
+point_xyz is the cell's anchor: supervoxel_id and root_id are derived from it, so a point that misses the cell attaches the row to the wrong neuron, and a point on unsegmented tissue attaches it to no neuron at all.
 
-1. Choose a point on the main backbone, in a large profile (near the branch that leads to the soma tract, if known), **not** on the soma itself.
-2. Pick it in a 2D slice panel, not in the 3D view: a click on the 3D mesh surface can land on a neighboring speck.
-3. Right-click inside the cell's profile in the 2D panel.
-4. Hover over the point to confirm that the segment ID shown is the cell's root_id.
-5. Copy the coordinates from the position readout at the top left (voxels) and paste them into point_xyz.
+1. Choose a point on the main backbone, in a large profile (near the branch that leads to the soma tract, if known).
+2. Put it in **clear cytoplasm**: away from mitochondria, vesicle clusters, membranes, and the soma. Mitochondria are often left out of the neuron's segmentation, so a point on one maps to segment 0, and SeaTable then cannot fill in supervoxel_id or root_id (both stay 0).
+3. Pick it in a 2D slice panel, not in the 3D view: a click on the 3D mesh surface can land on a neighboring speck.
+4. Right-click inside the cell's profile in the 2D panel to move the position there.
+5. Before you save, click at that spot and check that your neuron gets selected; hovering shows the segment ID, which should be the cell's root_id.
+6. Copy the coordinates from the position readout at the top left (voxels) and paste them into point_xyz.
+
+![A good point_xyz: clear cytoplasm in a large backbone profile, with the neuron selected](images/point-good.png)
+
+![A bad point_xyz: on a mitochondrion inside the neuron, where the segmentation has no segment (ID 0)](images/point-mitochondrion.png)
+
+![The position readout at the top left gives point_xyz in voxels](images/position-readout.png)
+
+The **bad supervoxel** view in SeaTable lists every row whose point maps to no segment; check it now and then.
 
 [aedes_key_point()](https://flyconnectome.github.io/aedes/reference/aedes_key_point.html) chooses good points automatically and is wrapped by [aedes_add_neurons()](https://flyconnectome.github.io/aedes/reference/aedes_add_neurons.html).
 
@@ -131,11 +144,10 @@ point_xyz is the cell's anchor: supervoxel_id and root_id are derived from it, s
 
 ### Duplicates
 
-Each reconstructed neuron should occupy one row. Avoid adding duplicates, and regularly check the [Duplicates view](https://flytable.mrc-lmb.cam.ac.uk/workspace/148/dtable/aedes/?tid=0000&vid=8yT4), where rows with the same root_id appear together:
+Each reconstructed neuron should occupy one row. Before adding a new row, check whether the root_id is already in the table, and regularly check the [Duplicates view](https://flytable.mrc-lmb.cam.ac.uk/workspace/148/dtable/aedes/?tid=0000&vid=8yT4), where rows with the same root_id appear together. A row whose point was fixed can turn out to be a duplicate: once the point is on the neuron, it resolves to the neuron's root_id, which may already have a row.
 
-1. Set status = "duplicate" on all but one of the rows with the same root_id.
-2. Move their annotations to the remaining row as appropriate, and check that its point_xyz is on the neuron's backbone.
-3. Rows with status = "duplicate" can then be deleted.
+- **Both rows are yours:** cross-check the annotations, keep the better row, and delete the other.
+- **The rows came from different people or efforts:** set status = "duplicate" on all but one, move their annotations to the remaining row as appropriate, and check that its point_xyz is on the neuron's backbone. Rows with status = "duplicate" can then be deleted.
 
 ### Statuses
 
@@ -168,9 +180,9 @@ Each reconstructed neuron should occupy one row. Avoid adding duplicates, and re
 | subclass | third level; rules vary by superclass. Central brain intrinsic neurons: IR (ipsilateral to the soma, one neuropil), BR (bilateral, one neuropil), CR (contralateral, one neuropil), II (ipsilateral, two neuropils), BI (bilateral, two neuropils), CI (contralateral, two neuropils); more detail where useful, for example II_UNI / II_MUL for uniglomerular / multiglomerular ALPNs |
 | subsubclass | currently glomerulus number(s); may be used for other purposes for other neurons |
 | notes | comments from annotators and proofreaders: prefix with your initials and separate entries with semicolons |
-| annotator | who reviewed and annotated the neuron |
+| annotator | who labeled and annotated the neuron (if you did both this and the proofreading, put your initials in both columns) |
 | status | proofreading status (see [Statuses](#statuses)) |
-| proofreader | who merged or cleaved the neuron in Neuroglancer |
+| proofreader | who merged or cleaved the neuron in Neuroglancer (not who annotated it) |
 | soma_xyz | soma coordinates, when the soma cannot be connected |
 | birthtime | "early" (larger soma, more elaborate, likely unique per side) or "late" (likely one of a population of similar neurons) |
 | nerve | nerve through which a sensory neuron enters or an efferent / motor neuron exits |

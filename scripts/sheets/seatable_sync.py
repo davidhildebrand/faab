@@ -17,6 +17,9 @@ but elsewhere (MISMATCH) are highlighted and get the short note 'xyz off the cel
 (notes are for the proofreaders: generated notes stay short, David 2026-10-30); notes our scripts wrote earlier are
 shortened by faab.partners.short_notes (proofreaders' text kept verbatim; 'duplicate target of <id>' -> 'duplicate of
 r<row>' pointing at the record row); statuses lowercase ('stoppped' -> 'stopped');
+stale notes (faab.partners.stale_notes, 2026-11-07): an earlier 'xyz off the cell' flag and the proofreader's
+'resolved' reply go when the point is on the cell again (highlight cleared), 'missing soma' notes when the cell carries
+one nucleus now (nucleus table mapped to today's roots; --no-stale-notes skips it);
 'added' typed into checker moves to SeaTable; dates typed day-month-year (2020-10-26 for 20-10-2026, text 27-10-26)
 are corrected; text dates become dates and other text in date columns moves to notes. Hand edits (--edits JSON:
 tab, row or root, column, value, optional append; column 'fill' with value clear / highlight) are applied next. --reconcile then brings the
@@ -48,6 +51,7 @@ from openpyxl.styles import Font, PatternFill
 from faab import synsnap
 from faab.clients.cave import client as cave_client, throttle
 from faab.config import FIGURES, TMP
+from faab.partners import stale_notes as SN
 from faab.partners.sheet import cell_text as s, scan_book, utc_stamp
 from faab.partners.short_notes import shorten
 from faab.pr import prs_tab as T
@@ -158,6 +162,7 @@ def main():
     ap.add_argument("--left-link", default="")
     ap.add_argument("--reconcile", action="store_true")
     ap.add_argument("--sizes")
+    ap.add_argument("--no-stale-notes", action="store_true", help="skip faab.partners.stale_notes (no nucleus lookup)")
     a = ap.parse_args()
     stamp = utc_stamp()
     match_path = a.match or sorted(glob.glob(fig("*_seatable_match.tsv")))[-1]
@@ -174,6 +179,10 @@ def main():
     c = cave_client()
     throttle(0)
     latest = dict(zip(diff, np.asarray(c.chunkedgraph.is_latest_roots([int(i) for i in diff])).astype(bool))) if diff else {}
+    # stale notes (2026-11-07): nuclei per live root, for 'missing soma' notes on cells that have one now
+    copy_path = None if a.no_stale_notes else SN.default_table_copy(TMP)
+    nuc = SN.nuclei_by_root(c, copy_path, throttle) if copy_path else None
+    soma_status = []  # rows whose (SeaTable) status says 'missing soma' although the cell has a nucleus
 
     sea_col = {}  # PRs: blocks after the first have no 'SeaTable' header (the column holds the marks) -> name it
     for x in rows:
@@ -253,6 +262,22 @@ def main():
                 label = "; ".join(t for t in dict.fromkeys(x.strip() for x in mm["st_label"].split(";")) if t)
                 mark = seatable_mark(s(wb[tab].cell(r, col("SeaTable")).value))
                 B.put(tab, r, col("SeaTable"), mark + (f": {label}" if label else ""), "SeaTable mark + label")
+        # --- stale notes (faab.partners.stale_notes): fixed off-cell points, somata found since
+        if nuc is not None and "notes" in cols:
+            ok_at = at if at and at != "0" else ""
+            on_cell = bool(ok_at) and (ok_at == curr or not latest.get(curr, True))
+            cell = ok_at or curr
+            cur_notes = s(wb[tab].cell(r, cols["notes"]).value)
+            # soma rule only where the point is on the row's cell (a MISMATCH point would count the wrong segment)
+            n_nuc = nuc.get(cell, 0) if cell and (on_cell or not ok_at) else None
+            new_notes, why = SN.clean(cur_notes, on_cell, n_nuc, ok_at)
+            if new_notes != cur_notes:
+                B.put(tab, r, cols["notes"], new_notes, "stale note: " + ", ".join(why))
+                if "point is on the cell again" in why:
+                    B.fill(tab, r, cols.values(), "clear", "stale note: point is on the cell again")
+            st_now = s(wb[tab].cell(r, cols["status"]).value) if "status" in cols else ""
+            if "soma" in st_now.lower() and n_nuc == 1:
+                soma_status.append((tab, v.get("root_id_orig", ""), cell, st_now))
         if notes_add and "notes" in cols:
             old = s(wb[tab].cell(r, cols["notes"]).value)
             B.put(tab, r, cols["notes"], "; ".join([old] * bool(old) + notes_add), "notes added")
@@ -349,6 +374,11 @@ def main():
         out = fig(f"{stamp}_FAABopticlobetargets-{tab}.xlsx")
         w2.save(out)
         print(f"wrote {out}")
+    if soma_status:
+        print(f"\nstatus says 'missing soma' but the cell has a nucleus now ({len(soma_status)} rows; tab, "
+              f"root_id_orig, cell, status):")
+        for x in soma_status:
+            print("  " + "\t".join(x))
     print(f"\nchanges: {len(log)} cells; per tab and reason:")
     print(log.groupby(["tab", "why"]).size().to_string())
     print(f"full workbook {full}; log figures/{stamp}_seatable_sync_changes.tsv")

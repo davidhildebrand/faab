@@ -37,7 +37,8 @@ REF_COLS = ("notes", "tracked_in")
 FALSE_MERGE = re.compile(r"false(ly)? merge|merge error|wrongly merged", re.I)
 POINTER = re.compile(r"^(duplicate( target)? of\b|merged into (r\d+|[A-Za-z0-9_]+ r\d+)\b)", re.I)
 REPEAT = re.compile(r"^(duplicate|same (id|neuron) appeared in multiple columns?|multiple ent(e)?ries|this id is repeated "
-                    r"(throughout|in the document))[.\s]*$", re.I)
+                    # 'this ID is repeated again later' (2026-11-07: the lead alone was cut, leaving 'again later')
+                    r"(throughout|in the document|(again )?(later|below|above)))[.\s]*$", re.I)
 OWN = re.compile(r"^(xyz off the cell|census bundle|second bundle|off-bundle|moved to group|split from group|added by "
                  r"bundle tracking|pair|terminal|names differ|probable merge error|extra axon|check that|"
                  r"(branch |fragment )?merged (to|into|with)\b|"

@@ -47,7 +47,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("book")
     ap.add_argument("--drop-prs", action="store_true")
-    ap.add_argument("--move", nargs="*", default=[])
+    ap.add_argument("--move", nargs="+", action="extend", default=[])  # repeatable: --move A:L2 --move B:L2
     ap.add_argument("--links", action="store_true")
     a = ap.parse_args()
     wb = openpyxl.load_workbook(a.book)

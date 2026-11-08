@@ -31,18 +31,23 @@ In the sheet, set the row's status to **in progress** and add your name as proof
 
 The xyz is the row's anchor. At each sheet update, root_id_curr is refreshed from the xyz, so a point off the cell attaches the row to the wrong neuron.
 
-1. Choose a point on the main backbone, in a large profile, **not** on the soma.
+1. Choose a point on the main backbone, in a large profile, in **clear cytoplasm**: away from mitochondria, vesicle clusters, membranes, and the soma. A point on a mitochondrion maps to segment 0 (no neuron).
 2. Pick it in a 2D slice panel, not in the 3D view (a click on the 3D mesh surface can land on a neighboring speck).
 3. Right-click inside the cell's profile.
-4. Hover to confirm that the segment ID shown is the cell's root_id.
+4. Click there and check that your neuron gets selected; hovering shows the segment ID, which should be the cell's root_id.
 5. Copy the coordinates from the position readout at the top left (voxels) into xyz.
 
+![A good point: clear cytoplasm in a large backbone profile](images/point-good.png)
+
 If the cell's ID changed, update the xyz. Don't type a new ID into root_id_curr.
+
+When you fix something the sheet flagged (a yellow "xyz off the cell" row, a "missing soma" note), update the row: change the xyz, delete the note that is no longer true, and put your name and the date in. The update scripts remove flags they can confirm are fixed, but they can't read your mind.
 
 ## 5. Record it
 
 - **Sheet:** set the status (**proofread** when done, **review** if you would like a second look), the pr_date, and a short note if needed (for example, "backbone seems fine"). Type dates year first (26-11-07), not day first.
-- **SeaTable:** if the cell is missing, add it with the [minimal annotation](README#minimal-annotation); if it is there, update its status and add your initials as proofreader. Then write "added" in the sheet's SeaTable column.
+- **Every change gets your name.** Whenever you change a row (status, xyz, notes), put your name in proofreader and the date in pr_date, even for a small change such as marking an orphan fragment "stopped". Unsigned changes can't be followed up.
+- **SeaTable:** if the cell is missing, add it with the [minimal annotation](README#minimal-annotation); if it is there, update its status and add your initials as proofreader (and as annotator if you also labeled it). Then write "added" in the sheet's SeaTable column.
 - **Checking:** the checker sets the status to **checked** and fills in chk_date and checker.
 
 ## Statuses in the sheet
