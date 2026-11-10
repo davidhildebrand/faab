@@ -246,7 +246,18 @@ def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, latest_of=None,
                               f"into it), not a partner"))
         B.touched.add(x["tab"])
 
-    # ---- delete, then renumber references
+    new_of = delete_rows(wb, B, drop, rec_of)
+    log(f"reconcile: {stats['cells']} cells on several rows; tracking carried over on {stats['carried']}; "
+        f"{stats['collapsed_rows']} same-block rows collapsed and {stats['self_rows']} rows removed whose cell is the "
+        f"block's own upstream cell ({', '.join(f'{t} {len(v)}' for t, v in drop.items()) or 'none'})")
+    return new_of
+
+
+def delete_rows(wb, B, drop, rec_of):
+    """delete rows {tab: {row, ...}} and renumber 'rN' / '<tab> rN' references in notes and tracked_in of every tab;
+    rec_of[(tab, row)] = the row that replaces a deleted one (references move to it) or None (references dropped from
+    tracked_in; a note naming it stays as written). Hyperlinks and row heights follow their rows. Returns
+    {tab: {old row: new row (0 = removed)}}"""
     new_of = {}
     for tab, rs in drop.items():
         ws = wb[tab]
@@ -292,7 +303,4 @@ def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, latest_of=None,
                     cell.value = u
                     B.log.append(dict(tab=x["tab"], row=x["row"], column=n, old=t, new=u, why="row references renumbered"))
                     B.touched.add(x["tab"])
-    log(f"reconcile: {stats['cells']} cells on several rows; tracking carried over on {stats['carried']}; "
-        f"{stats['collapsed_rows']} same-block rows collapsed and {stats['self_rows']} rows removed whose cell is the "
-        f"block's own upstream cell ({', '.join(f'{t} {len(v)}' for t, v in drop.items()) or 'none'})")
     return new_of

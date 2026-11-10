@@ -23,6 +23,7 @@ This page collects resources, links, and working rules for the Female Adult *Aed
 3. Ask for an interview to assess your readiness for the Aedes dataset: David Hildebrand (optic lobe collaborators), or Farzaan or Mohd Freezly (Freeze), on Slack.
 4. Once you have passed the interview, ask Wei Lee for editing access to the production instance.
 5. For SeaTable access, contact Greg Jefferis. Read the [SeaTable](#seatable) section below before you make any edit there, including changes to a view.
+6. Use an external mouse with left and right buttons and a scroll wheel. Neuroglancer relies on right-clicks, scrolling, and control-scrolling, which are slow and error-prone on a trackpad.
 
 ## Neuroglancer
 
@@ -72,6 +73,8 @@ Proofreading is a skill, and mastery takes time. As the Code of Conduct says, fo
 
 1. **Check SeaTable before you start on a cell,** so that nobody redoes a cell that someone else has finished or is working on. See [Checking whether a cell is already in SeaTable](#checking-whether-a-cell-is-already-in-seatable).
 2. **Keep each cell's point on the cell.** See [Choosing point_xyz](#choosing-point_xyz).
+
+If an orphan fragment can easily be merged into a glial cell (particularly one with a soma), merge it and add the glial cell to SeaTable with superclass "glia": this lets us exclude these synapses from some analyses and helps future studies of glia. See the [Proofreading guide](Proofreading-guide).
 
 If you edit a neuron that belongs to another group's proofreading project (for example, by cleaving a false merge with your own neuron), add your initials to its proofreader column and send the relevant person(s) a Slack message.
 

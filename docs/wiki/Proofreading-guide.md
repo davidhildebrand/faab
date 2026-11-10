@@ -4,6 +4,8 @@
 
 This page takes one cell from "I'd like to work on this" to "done and recorded". It is written for the optic lobe team, who track their cells in the optic lobe targets sheet as well as in SeaTable. As the [Code of Conduct](https://github.com/htem/faab/wiki/Code-of-Conduct) says, only make edits that are clearly correct. The Neuroglancer tools (merge, cleave, find path) are described in the [README](README#proofreading-functions).
 
+**Use an external mouse with left and right buttons and a scroll wheel.** Proofreading relies on right-clicks (to move the position) and on scrolling (through slices) and control-scrolling (to zoom); with a trackpad these are slow and easy to get wrong.
+
 ## 1. Check SeaTable before you start
 
 This keeps anyone from redoing a cell that someone else has finished or is working on.
@@ -25,6 +27,7 @@ In the sheet, set the row's status to **in progress** and add your name as proof
 
 - Make the clearly correct edits: merge the missing pieces and cleave the false merges.
 - If you cleave a merge with someone else's neuron, add your initials to that neuron's proofreader column too. If it belongs to another group's project, send them a Slack message.
+- **Orphan fragments that belong to glia:** if an orphan fragment in one of our subtables can easily be merged into a glial cell, particularly one with a soma, merge it. Then add that glial cell to SeaTable with superclass "glia", and put "glia" in the row's annotation column. It is a small amount of work that lets us exclude these synapses from some analyses, and it helps future studies of glia.
 - If you can't attach a small fragment to anything, set its status to **stopped** and its note to "orphan fragment".
 
 ## 4. Keep the xyz on the cell
