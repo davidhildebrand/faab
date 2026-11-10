@@ -28,7 +28,8 @@ REPLY = re.compile(r"^(the |this )?issue (is )?resolved\b", re.I)
 # 'updated ID: ... Coordinates: ...', 'New ID: ...', 'the merging is complete' - dropped only when the row's point is on
 # its cell, and never when the part still asks or flags something (FLAG)
 HISTORY = re.compile(r"\b(issue|problem)s?\b[^;]*\b(resolved|fixed)\b|"
-                     r"\b(xyz|coordinates?|root ?ids?|ids?|links?|point)\b[^;]*\b(updated|corrected|fixed)\b|"
+                     r"\b(xyz|coordinates?|root ?ids?|ids?|links?|point)\b[^;]*\b(updated|corrected|fixed|changed|moved)\b|"
+                     r"\b(changed|moved|updated|corrected|fixed) (the )?(xyz|point|coordinates?)\b|"
                      r"\bupdated (root )?(id|xyz|coordinates?)\b|\bnew id:|have worked on (that|it)\b|"
                      r"merging is complete", re.I)
 FLAG = re.compile(r"\?|answer|pending|please|check|unsure|incomplete|missing|"
