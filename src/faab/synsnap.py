@@ -19,7 +19,8 @@ Use:
     from faab import synsnap
     synsnap.download()                       # once (~2.15 GB over HTTP, resumable, md5-checked); later: new checkpoints
     synsnap.refresh()                        # download() only if the last check is > 6 h old
-    snap = synsnap.Snapshot()                # local folder (default FAAB/snapshots/aedes_synapses)
+    snap = synsnap.Snapshot()                # local folder (default FAAB/snapshots/aedes_synapses); since 2026-11-10
+                                             # every query not pinned to a local tag refreshes first (AUTO_REFRESH_H)
     snap.tags()                              # local checkpoints
     e = snap.edges(pre=[...])                # pre, post, n at the newest local checkpoint (self-synapses dropped)
     e = snap.edges(post=[...], when="v540")  # at a version / tag / datetime (newest checkpoint at or before it)
@@ -134,6 +135,9 @@ def download(root=ROOT, url=None, client=None, log=print):
     return man["latest"]
 
 
+AUTO_REFRESH_H = 1.0  # Snapshot queries pull new checkpoints first when the last check is older than this
+
+
 def refresh(root=ROOT, max_age_h=6.0, log=print):
     """download() new checkpoints if the last check is older than max_age_h (HTTP only; like the R package's
     aedes_snapshot_refresh). The check time is kept in <root>/.last_check.json. Returns the newest local tag."""
@@ -143,17 +147,31 @@ def refresh(root=ROOT, max_age_h=6.0, log=print):
         try:
             download(root, log=log)
             json.dump({"t": time.time()}, open(stamp, "w"))
-        except Exception as e:  # keep working from the local checkpoints
-            log(f"snapshot refresh failed ({str(e)[:120]}); using the local checkpoints")
-    return Snapshot(root, log=log).tags().tag.iloc[-1]
+        except Exception as e:  # keep working from the local checkpoints, loudly
+            log(f"WARNING: snapshot refresh failed ({str(e)[:120]}); using the local checkpoints (catch-up through CAVE "
+                f"from the newest local one)")
+    return Snapshot(root, log=log, auto_refresh=False).tags().tag.iloc[-1]
 
 
 # ---------------------------------------------------------------- reading
 class Snapshot:
-    def __init__(self, root=ROOT, log=print):
+    def __init__(self, root=ROOT, log=print, auto_refresh=True):
+        """auto_refresh (David 2026-11-10: "consistently pull in the new checkpoints before querying and updating
+        sheets"): every query that is not pinned to a local tag first runs refresh() when the last check is older
+        than AUTO_REFRESH_H; the first query on a new checkpoint builds its root table (~4 min, 1.7 GB in heads/)"""
         self.root, self.log = root, log
+        self.auto_refresh = auto_refresh
         self._loaded = {}
         self._patches = {}  # (tag, time) -> (computed at, catch-up patch): one CAVE catch-up shared by many queries
+
+    def _refresh(self, when):
+        if not self.auto_refresh or (isinstance(when, str) and when not in ("now", "latest")
+                                     and os.path.exists(os.path.join(self.root, when, "meta.json"))):
+            return
+        before = self.tags().tag.iloc[-1]
+        tag = refresh(self.root, max_age_h=AUTO_REFRESH_H, log=self.log)
+        if tag != before:
+            self.log(f"snapshot: new checkpoints {before} -> {tag}")
 
     def patch(self, tag, when, client=None, **catch):
         """catch_up(tag, when), computed once per (tag, when); for when='now' reused for 60 s"""
@@ -296,6 +314,7 @@ class Snapshot:
         post_root in `post`; when='now' (or a time after the newest local checkpoint) adds a CAVE catch-up"""
         if pre is None and post is None:
             raise ValueError("give pre and/or post root ids")
+        self._refresh(when)
         tag = self.at(when)
         H = self.load(tag)
         side = "pre" if pre is not None and (post is None or len(set(pre)) <= len(set(post))) else "post"

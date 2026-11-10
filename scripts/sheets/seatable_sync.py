@@ -165,6 +165,7 @@ def main():
     ap.add_argument("--reconcile", action="store_true")
     ap.add_argument("--sizes")
     ap.add_argument("--no-stale-notes", action="store_true", help="skip faab.partners.stale_notes (no nucleus lookup)")
+    ap.add_argument("--export", nargs="*", default=[], help="tabs exported even when this run did not change them")
     a = ap.parse_args()
     stamp = utc_stamp()
     match_path = a.match or sorted(glob.glob(fig("*_seatable_match.tsv")))[-1]
@@ -376,7 +377,7 @@ def main():
     wb.save(full)
     log = pd.DataFrame(B.log)
     log.to_csv(fig(f"{stamp}_seatable_sync_changes.tsv"), sep="\t", index=False)
-    for tab in [t for t in TABS if t in B.touched]:
+    for tab in [t for t in TABS if t in B.touched or t in a.export]:
         w2 = openpyxl.load_workbook(full)
         for other in list(w2.worksheets):
             if other.title != tab:

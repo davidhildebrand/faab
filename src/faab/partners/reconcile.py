@@ -279,8 +279,17 @@ def delete_rows(wb, B, drop, rec_of):
         for r, h in heights.items():
             if r not in rs:
                 ws.row_dimensions[m[r]].height = h
+    renumber_refs(wb, B, new_of)
+    return new_of
+
+
+def renumber_refs(wb, B, new_of, why="row references renumbered"):
+    """'rN' / '<tab> rN' references in notes and tracked_in of every tab (backup copies skipped) follow new_of
+    {tab: {old row: new row (0 = removed)}}: tracked_in drops removed rows; a note naming a removed row stays as
+    written. Rows are read at their NEW positions (call after the rows moved)."""
     if new_of:
-        ref = re.compile(r"\b(?:(" + "|".join(re.escape(w.title) for w in wb.worksheets) + r") )?(r|row )(\d+)\b")
+        tabs = {w.title for w in wb.worksheets}
+        ref = re.compile(r"\b(?:(\w+) )?(r|row )(\d+)\b")
         for x in scan_book(wb):
             if re.search(r"_b\d{6}d$", x["tab"]):
                 continue
@@ -291,9 +300,13 @@ def delete_rows(wb, B, drop, rec_of):
                 t = s(cell.value)
 
                 def sub(q):
-                    m = new_of.get(q[1] or x["tab"], {})
-                    k = m.get(int(q[3]), int(q[3]))
-                    return f"{q[1] + ' ' if q[1] else ''}{q[2]}{k}" if k else "\0"  # \0: a removed row
+                    w = q[1]
+                    if w and w not in tabs and re.search(r"[A-Z0-9_]", w):
+                        return q[0]  # '<name> rN' with a name that is no tab here ('HomeR7column r5'): left alone
+                    tab = w if w in tabs else x["tab"]  # 'r12', 'of r12': this row's own tab
+                    k = new_of.get(tab, {}).get(int(q[3]), int(q[3]))
+                    lead = f"{w} " if w else ""
+                    return f"{lead}{q[2]}{k}" if k else "\0"  # \0: a removed row
                 u = ref.sub(sub, t)
                 if n == "tracked_in":  # two rows collapsed into one; removed rows dropped
                     u = "; ".join(dict.fromkeys(p for p in u.split("; ") if p and "\0" not in p))
@@ -301,6 +314,5 @@ def delete_rows(wb, B, drop, rec_of):
                     u = t  # a note naming a removed row stays as written
                 if u != t:
                     cell.value = u
-                    B.log.append(dict(tab=x["tab"], row=x["row"], column=n, old=t, new=u, why="row references renumbered"))
+                    B.log.append(dict(tab=x["tab"], row=x["row"], column=n, old=t, new=u, why=why))
                     B.touched.add(x["tab"])
-    return new_of

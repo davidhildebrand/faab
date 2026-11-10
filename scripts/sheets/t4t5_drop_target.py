@@ -37,6 +37,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from seatable_sync import Book  # noqa: E402
 
 NO_WORK = ("", "new", "new-dup", "candidate")  # statuses of rows nobody has worked on yet
+# stage names (2026-11-10, scripts/partners/hop_in2_block.py): PR+N = hop N, T4T5-1 = 'in' (was 'more inputs'),
+# T4T5-2 = 'in-2'; read back to the old values here
+HOP_OLD = {"PR+1": "1", "PR+2": "2", "PR+3": "3", "T4T5-1": "in", "in-1": "in", "T4T5-2": "in-2"}
 
 
 def main():
@@ -54,7 +57,8 @@ def main():
     ws = wb[a.tab]
     B = Book(wb)
     rows = [x for x in scan_book(wb) if x["tab"] == a.tab]
-    v = lambda x, n: s(x["values"].get(n))
+    v0 = lambda x, n: s(x["values"].get(n))
+    v = lambda x, n: HOP_OLD.get(v0(x, n), v0(x, n)) if n == "hop" else v0(x, n)  # stage names of 2026-11-10 -> old
     targets = [x for x in rows if v(x, "hop") == "3" and v(x, "root_id_curr") == root]
     if not targets:
         sys.exit(f"{root} is not a hop-3 target (root_id_curr) in {a.tab}")
@@ -105,8 +109,20 @@ def main():
         if new != old:
             B.put(a.tab, x["row"], x["cols"]["nsyn_out"], new, f"minus synapses onto {root}")
 
+    in2_orphans = []
+    for x in rows:  # hop-in-2 rows (2026-11-10): T4T5_root_id = targets reached through their hop-in-1 cells
+        tg = [i.strip() for i in v(x, "T4T5_root_id").split(",") if i.strip()]
+        if v(x, "hop") != "in-2" or root not in tg:
+            continue
+        tg.remove(root)
+        B.put(a.tab, x["row"], x["cols"]["T4T5_root_id"], ", ".join(tg), f"{root} is not a T4/T5")
+        B.put(a.tab, x["row"], x["cols"]["T4T5_reached"], len(tg), f"{root} is not a T4/T5")
+        if not tg:
+            in2_orphans.append(v(x, "root_id_curr"))
+    if in2_orphans:
+        print(f"hop-in-2 rows that reach no other target now (check by hand; not removed): {in2_orphans}")
     for x in rows:
-        if v(x, "hop") != "in":
+        if v(x, "hop") not in ("in", "in-1"):  # 'in' renamed 'in-1' on 2026-11-10
             continue
         tg = [i.strip() for i in v(x, "T4T5_root_id").split(",") if i.strip()]
         if root not in tg:
@@ -134,11 +150,11 @@ def main():
     for r in range(1, ws.max_row + 1):
         t = s(ws.cell(r, 1).value)
         new = t
-        if t.startswith("hop-3"):
+        if t.startswith(("hop-3", "PR+3")):
             new = re.sub(r"(\d+) T4/T5 candidates", lambda m: f"{int(m.group(1)) - len(targets)} T4/T5 candidates", t)
         elif r in blocks_dropped:
             new = re.sub(r"(\d+) (further cells|cells)", lambda m: f"{int(m.group(1)) - blocks_dropped[r]} {m.group(2)}", t, 1)
-        elif t.startswith("note: 'more inputs' block"):
+        elif t.startswith(("note: 'more inputs' block", "note: T4T5-1 block")):
             new = re.sub(r"all (\d+) targets", lambda m: f"all {int(m.group(1)) - len(targets)} targets", t)
         if new != t:
             B.put(a.tab, r, 1, new, "counts")
@@ -213,8 +229,11 @@ def new_block(ws, B, a, root, targets, moved, rec_of):
         r += 1
         for x in xs:
             restore(ws, r, snaps[x["row"]])
+            new_names = s(x["values"].get("hop")) in ("PR+3", "T4T5-1")  # the tab uses the 2026-11-10 stage names
+            if x not in tgt and new_names:
+                ws.cell(r, x["cols"]["hop"]).value = "notT4T5-1"
             if x in tgt:
-                ws.cell(r, x["cols"]["hop"]).value = "not T4/T5"
+                ws.cell(r, x["cols"]["hop"]).value = "PR+3, not T4/T5" if new_names else "not T4/T5"
                 if "notes" in x["cols"]:  # our generated 'T4/T5 candidate (line N)' is no longer true: cleared
                     keep = [p.strip() for p in s(ws.cell(r, x["cols"]["notes"]).value).split(";")
                             if p.strip() and not re.match(r"T4/T5 candidate \(line \d+", p.strip())]

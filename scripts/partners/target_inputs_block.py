@@ -57,7 +57,7 @@ HL = SS.HL
 KEEP = SS.KEEP
 RANK = ["checked", "proofread", "adequate", "review", "in progress", "stopped"]
 STYLE_ALIAS = {"PR_root_id": "upstream_PR", "hop": "PR_root_id", "hop2_root_id": "hop1_root_id",
-               "T4T5_root_id": "hop1_root_id", "nsyn_out": "nsyn", "T4T5_reached": "h1_conv", "cable_um": "syn_pct",
+               "T4T5_root_id": "hop1_root_id", "T4T5-1_root_id": "hop1_root_id", "nsyn_out": "nsyn", "T4T5_reached": "h1_conv", "cable_um": "syn_pct",
                "neuropils": "notes", "tracked_in": "notes"}
 OUTSIDE = ("CB", "OL_L", "LA_L", "ME_L", "LO_L", "LOP_L")
 SKEL = fig("fragment_skeletons.pkl")
@@ -101,63 +101,27 @@ def solid(cell):
     return cell.fill is not None and cell.fill.fill_type == "solid"
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--book", required=True)
-    ap.add_argument("--tab", default="PRg1toT4T5")
-    ap.add_argument("--thr", type=int, default=3)
-    ap.add_argument("--large-cable", type=float, default=1500.0)
-    ap.add_argument("--large-outside", type=float, default=0.15)
-    a = ap.parse_args()
-    import navis
-    from fafbseg import flywire
-    from faab.partners.top10_xyz import backbone_midpoint_nm, primary_neurite_point_nm
-    t0, stamp = time.time(), utc_stamp()
-
-    # ---- the book: every row with an xyz -> its live cell (one point lookup, one is_latest_roots call)
-    wb = openpyxl.load_workbook(a.book)
+def live_rows(wb, c):
+    """every row with an xyz (backup tabs '*_bYYMMDDd' skipped) -> x['at'] = the live root at its xyz, x['cell'] = its
+    root_id_curr while that is current (even when the xyz lies off it), else x['at'] (one point lookup, one
+    is_latest_roots call)"""
     rows = [x for x in scan_book(wb) if not re.search(r"_b\d{6}d$", x["tab"])]
     for x, r in zip(rows, roots_at_xyz([s(x["values"]["xyz"]) for x in rows])):
         x["at"] = str(r)
     ids = sorted({s(x["values"].get("root_id_curr")) for x in rows if re.fullmatch(r"\d{15,}", s(x["values"].get("root_id_curr")))})
-    c = cave_client()
     wait()
     latest = dict(zip(ids, np.asarray(c.chunkedgraph.is_latest_roots([int(i) for i in ids])).astype(bool)))
     for x in rows:
         cu = s(x["values"].get("root_id_curr"))
         x["cell"] = cu if latest.get(cu) else x["at"]  # a current root_id_curr wins over an xyz that lies off it
-    tab_rows = [x for x in rows if x["tab"] == a.tab]
-    in_tab = {x["cell"] for x in tab_rows}
-    hop3 = [x for x in tab_rows if s(x["values"].get("hop")) == "3" and x["cell"] != "0"]
-    targets = sorted({x["cell"] for x in hop3})
-    tset = set(targets)
-    print(f"{a.tab}: {len(tab_rows)} rows, {len(targets)} targets (hop-3); xyz off the target: "
-          f"{[x['row'] for x in hop3 if x['at'] != x['cell']]}; other tabs {len(rows) - len(tab_rows)} rows", flush=True)
+    return rows
 
-    # ---- inputs of the targets
-    wait()
-    syn = synsnap.Snapshot().synapses(post=[int(t) for t in targets], when="now", client=c)
-    when = datetime.datetime.now(datetime.timezone.utc)
-    syn = syn[syn.pre_root != syn.post_root]
-    e = syn.groupby(["pre_root", "post_root"]).size().rename("n").reset_index()
-    e["pre_root"], e["post_root"] = e.pre_root.astype(str), e.post_root.astype(str)
-    info, n_thr = {}, 0
-    for pre, g in e.groupby("pre_root"):
-        g = g.sort_values(["n", "post_root"], ascending=[False, True])
-        strong = g[g.n >= a.thr]
-        if not len(strong):
-            continue
-        n_thr += 1
-        if pre not in in_tab and pre not in tset:
-            info[pre] = dict(tg=list(strong.post_root), n=[int(v) for v in strong.n], total=int(g.n.sum()))
-    cells = sorted(info)
-    print(f"inputs: {e.pre_root.nunique()} cells with any synapse onto a target; {n_thr} with >= {a.thr} onto one; "
-          f"{n_thr - len(cells)} of these already in the tab or targets; {len(cells)} new; {time.time() - t0:.0f} s", flush=True)
 
-    # ---- tracking in the other tabs, SeaTable
+def tracking(cells, rows, tab):
+    """cell -> its tracking carried from the other tabs' rows and SeaTable (see the module docstring)"""
     by_cell = {}
     for x in rows:
-        if x["tab"] != a.tab:
+        if x["tab"] != tab:
             by_cell.setdefault(x["cell"], []).append(x)
     st_path = sorted(glob.glob(fig("*_seatable_aedes_main.tsv")))[-1]
     sea = {}
@@ -192,11 +156,16 @@ def main():
                       tracked_in="; ".join(f"{x['tab']} r{x['row']}" for x in rs))
     print(f"tracked in other tabs: {sum(bool(rec[r]['rows']) for r in cells)} (with a status {sum(bool(rec[r]['best']) for r in cells)}); "
           f"in SeaTable ({os.path.basename(st_path)}): {sum(rec[r]['in_sea'] for r in cells)}", flush=True)
+    return rec
 
-    # ---- skeletons -> cable, neuropils, size
+
+def geometry(cells, large_cable, large_outside, t0):
+    """L2 skeletons (cached in figures/fragment_skeletons.pkl) -> (sk, geo {cell: cable, fr, summ}, large cells)"""
+    import navis
+    from fafbseg import flywire
     sk = pickle.load(open(SKEL, "rb")) if os.path.exists(SKEL) else {}
     need = [r for r in cells if r not in sk]
-    print(f"skeletons: {len(cells) - len(need)} cached, {len(need)} to fetch (>= 5 s apart)", flush=True)
+    print(f"skeletons: {len(cells) - len(need)} cached, {len(need)} to fetch (throttled)", flush=True)
     for i, r in enumerate(need):
         wait()
         try:
@@ -223,11 +192,16 @@ def main():
             p = k.nodes[["x", "y", "z"]].values
         fr = ol_meshes.neuropil_fractions(p)
         geo[r] = dict(cable=float(k.cable_length), fr=fr, summ=ol_meshes.summary(fr))
-    large = {r for r in cells if geo[r]["cable"] >= a.large_cable
-             or sum(v for kk, v in geo[r]["fr"].items() if kk in OUTSIDE) >= a.large_outside}
+    large = {r for r in cells if geo[r]["cable"] >= large_cable
+             or sum(v for kk, v in geo[r]["fr"].items() if kk in OUTSIDE) >= large_outside}
     print(f"very large (low priority): {len(large)}", flush=True)
+    return sk, geo, large
 
-    # ---- xyz: a tracked row's when it lies on the cell, else a new point verified on the cell
+
+def find_xyz(cells, rec, sk, c):
+    """cell -> xyz: a tracked row's when it lies on the cell, else a new point verified on the cell (primary neurite
+    near the nucleus; no nucleus: the middle of the backbone; one-chunk fragments: their L2 chunks)"""
+    from faab.partners.top10_xyz import backbone_midpoint_nm, primary_neurite_point_nm
     xyz = {r: s(rec[r]["xyz_src"]["values"]["xyz"]) for r in cells if rec[r]["xyz_src"]}
     need = [r for r in cells if r not in xyz]
     soma = {}
@@ -274,6 +248,102 @@ def main():
                 xyz[r] = f"{p[0]}, {p[1]}, {p[2]}"
     print(f"xyz: {len(cells) - len(need)} from tracked rows; new {sum(r in xyz for r in need)} of {len(need)} verified "
           f"on their cell ({sum(r in soma for r in need)} with a nucleus); without: {[r for r in cells if r not in xyz]}", flush=True)
+    return xyz
+
+
+class Writer:
+    """writes titles, header rows and data rows into a tab in the tab's own styles: a data row takes the cell styles of
+    its tracked source row (another tab's), else of a plain row of this tab; the yellow MISMATCH fill is dropped"""
+
+    def __init__(self, wb, ws, title_row, hdr, out_names, plain, tab_cols):
+        self.wb, self.ws, self.title_row, self.hdr, self.out_names = wb, ws, title_row, hdr, out_names
+        self.plain, self.tab_cols = plain, tab_cols
+        self.title_style = copy.copy(ws.cell(title_row, 1)._style)
+        self.hdr_styles = [copy.copy(ws.cell(hdr, j)._style) for j in range(1, len(out_names) + 1)]
+        self.plain_styles = {j: copy.copy(ws.cell(plain, j)._style) for j in range(1, ws.max_column + 1)}
+
+    def title(self, r, text):
+        cell = self.ws.cell(r, 1, text)
+        cell._style = copy.copy(self.title_style)
+        f = cell.font
+        cell.font = Font(name=f.name, size=f.size, bold=True, italic=f.italic, color=f.color)
+
+    def header(self, r, names=None):
+        for j, n in enumerate(names or self.out_names, 1):
+            cell = self.ws.cell(r, j, n or None)
+            cell._style = copy.copy(self.hdr_styles[j - 1])
+
+    def row(self, r, d, names=None):
+        src = d["_src"]
+        for j, n in enumerate(names or self.out_names, 1):
+            val = d.get(n)
+            if n in ("pr_date", "chk_date"):
+                val = val if isinstance(val, datetime.datetime) else (as_date(s(val)) or (s(val) or None))
+            elif isinstance(val, (int, np.integer)):
+                val = int(val)
+            elif n == "nsyn" and re.fullmatch(r"\d+", s(val)):
+                val = int(val)
+            else:
+                val = s(val) or None
+            cell = self.ws.cell(r, j, val)
+            if src:
+                cell._style = copy.copy(self.wb[src["tab"]].cell(src["row"], src_col(src["cols"], n) or 1)._style)
+            else:
+                cell._style = copy.copy(self.plain_styles[src_col(self.tab_cols, n) or 1])
+            if solid(cell) and cell.fill.fgColor.rgb == HL:
+                cell.fill = PatternFill(fill_type=None)
+            if isinstance(val, datetime.datetime):
+                cell.number_format = DATE_FMT
+            if n == "link" and isinstance(val, str) and val.startswith("http"):
+                cell.hyperlink = val
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--book", required=True)
+    ap.add_argument("--tab", default="PRg1toT4T5")
+    ap.add_argument("--thr", type=int, default=3)
+    ap.add_argument("--large-cable", type=float, default=1500.0)
+    ap.add_argument("--large-outside", type=float, default=0.15)
+    a = ap.parse_args()
+    t0, stamp = time.time(), utc_stamp()
+
+    # ---- the book: every row with an xyz -> its live cell (one point lookup, one is_latest_roots call)
+    wb = openpyxl.load_workbook(a.book)
+    c = cave_client()
+    rows = live_rows(wb, c)
+    tab_rows = [x for x in rows if x["tab"] == a.tab]
+    in_tab = {x["cell"] for x in tab_rows}
+    hop3 = [x for x in tab_rows if s(x["values"].get("hop")) in ("3", "PR+3") and x["cell"] != "0"]  # PR+3 since 2026-11-10
+    targets = sorted({x["cell"] for x in hop3})
+    tset = set(targets)
+    print(f"{a.tab}: {len(tab_rows)} rows, {len(targets)} targets (hop-3); xyz off the target: "
+          f"{[x['row'] for x in hop3 if x['at'] != x['cell']]}; other tabs {len(rows) - len(tab_rows)} rows", flush=True)
+
+    # ---- inputs of the targets
+    wait()
+    syn = synsnap.Snapshot().synapses(post=[int(t) for t in targets], when="now", client=c)
+    when = datetime.datetime.now(datetime.timezone.utc)
+    syn = syn[syn.pre_root != syn.post_root]
+    e = syn.groupby(["pre_root", "post_root"]).size().rename("n").reset_index()
+    e["pre_root"], e["post_root"] = e.pre_root.astype(str), e.post_root.astype(str)
+    info, n_thr = {}, 0
+    for pre, g in e.groupby("pre_root"):
+        g = g.sort_values(["n", "post_root"], ascending=[False, True])
+        strong = g[g.n >= a.thr]
+        if not len(strong):
+            continue
+        n_thr += 1
+        if pre not in in_tab and pre not in tset:
+            info[pre] = dict(tg=list(strong.post_root), n=[int(v) for v in strong.n], total=int(g.n.sum()))
+    cells = sorted(info)
+    print(f"inputs: {e.pre_root.nunique()} cells with any synapse onto a target; {n_thr} with >= {a.thr} onto one; "
+          f"{n_thr - len(cells)} of these already in the tab or targets; {len(cells)} new; {time.time() - t0:.0f} s", flush=True)
+
+    # ---- tracking in the other tabs, SeaTable; skeletons -> cable, neuropils, size; xyz
+    rec = tracking(cells, rows, a.tab)
+    sk, geo, large = geometry(cells, a.large_cable, a.large_outside, t0)
+    xyz = find_xyz(cells, rec, sk, c)
 
     # ---- rows
     def row(r):
@@ -282,7 +352,8 @@ def main():
         return {"hop": "in", "T4T5_root_id": ", ".join(i["tg"]), "root_id_orig": r, "root_id_curr": r, "xyz": xyz.get(r, ""),
                 "nsyn": ", ".join(str(n) for n in i["n"]), "nsyn_out": i["total"], "annotation": R["annotation"],
                 "status": R["status"], "pr_date": b.get("pr_date"), "proofreader": R["proofreader"],
-                "chk_date": b.get("chk_date"), "checker": R["checker"], "notes": R["notes"], "SeaTable": R["seatable"],
+                # notes are not copied between rows any more (David 2026-11-08)
+                "chk_date": b.get("chk_date"), "checker": R["checker"], "notes": "", "SeaTable": R["seatable"],
                 "link": R["link"], "tracked_in": R["tracked_in"], "T4T5_reached": len(i["tg"]),
                 "cable_um": "" if np.isnan(g["cable"]) else int(round(g["cable"])), "neuropils": g["summ"],
                 "_src": R["best"] or (R["rows"][0] if R["rows"] else None),
@@ -314,39 +385,8 @@ def main():
             ws.cell(r, cc)._style = copy.copy(ws.cell(blank, cc)._style)
     out_names = ["T4T5_root_id" if n == "hop2_root_id" else n for n in names]
     stamp_when = f"{when:%Y-%m-%d %H:%M} UTC"
-
-    def put_title(r, text):
-        cell = ws.cell(r, 1, text)
-        cell._style = copy.copy(ws.cell(title_row, 1)._style)
-        f = cell.font
-        cell.font = Font(name=f.name, size=f.size, bold=True, italic=f.italic, color=f.color)
-
-    def put_header(r):
-        for j, n in enumerate(out_names, 1):
-            cell = ws.cell(r, j, n or None)
-            cell._style = copy.copy(ws.cell(hdr, j)._style)
-
-    def put_row(r, d):
-        src = d["_src"]
-        sws, srow, scols = (wb[src["tab"]], src["row"], src["cols"]) if src else (ws, plain, tab_cols)
-        for j, n in enumerate(out_names, 1):
-            val = d.get(n)
-            if n in ("pr_date", "chk_date"):
-                val = val if isinstance(val, datetime.datetime) else (as_date(s(val)) or (s(val) or None))
-            elif isinstance(val, (int, np.integer)):
-                val = int(val)
-            elif n == "nsyn" and re.fullmatch(r"\d+", s(val)):
-                val = int(val)
-            else:
-                val = s(val) or None
-            cell = ws.cell(r, j, val)
-            cell._style = copy.copy(sws.cell(srow, src_col(scols, n) or 1)._style)
-            if solid(cell) and cell.fill.fgColor.rgb == HL:
-                cell.fill = PatternFill(fill_type=None)
-            if isinstance(val, datetime.datetime):
-                cell.number_format = DATE_FMT
-            if n == "link" and isinstance(val, str) and val.startswith("http"):
-                cell.hyperlink = val
+    W = Writer(wb, ws, title_row, hdr, out_names, plain, tab_cols)
+    put_title, put_header, put_row = W.title, W.header, W.row
 
     r = last + 2
     first = r
