@@ -3,8 +3,14 @@
   - Rows of one cell in the SAME block (same header row) were correctly merged: they collapse into one row. The record
     row (best status, then most nsyn, then the first) stays with the cell's tracking and an nsyn recount (synapse
     snapshot caught up to now) from the
-    block's upstream cell (upstream_PR / hop1_root_id); the other rows are deleted. Not collapsed: the PRs tab (groups
-    have their own rules), yellow MISMATCH rows, and cells whose notes mention a false merge / merge error.
+    block's upstream cell (upstream_PR / hop1_root_id); the other rows are deleted. Rows that list the cells they FEED
+    instead (T4T5-1: T4T5_root_id, T4T5-2: T4T5-1_root_id, with nsyn aligned to that list) are recounted per partner
+    (2026-11-11: two T4T5-1 rows of a merged cell got '11, 3' + '4' -> '15', dropping the second target): every partner
+    that block lists is counted from the cell, those with >= MIN_SYN are listed strongest first with their nsyn,
+    nsyn_out = the sum over all of them and T4T5_reached / T4T5_root_id follow (without a recount: per-partner sums of
+    the rows' own lists). cable_um / neuropils come from the collapsed row with the most cable (the merged cell is at
+    least that big). Not collapsed: the PRs tab (groups have their own rules), yellow MISMATCH rows, and cells whose
+    notes mention a false merge / merge error.
   - Every other row of the cell (other blocks, other tabs) carries the same tracking: the best status (RANK: checked >
     proofread > complete > adequate > review > to_review > needs_extending > missing soma > in progress > stopped),
     proofreader and checker names merged (each person once; full name over initials), the newest pr_date of the
@@ -34,6 +40,9 @@ RANK = ["checked", "proofread", "complete", "adequate", "review", "to_review", "
 WHOLE_L2 = 100
 NO_COLLAPSE = ("PRs",)
 UPSTREAM = ("hop1_root_id", "upstream_PR")
+DOWNSTREAM = ("T4T5-1_root_id", "T4T5_root_id")  # lists of the cells a row's cell feeds (T4T5-2 / T4T5-1 rows)
+MIN_SYN = 3  # the blocks' threshold for listing a partner
+IDS = re.compile(r"\d{15,}")
 REF_COLS = ("notes", "tracked_in")
 FALSE_MERGE = re.compile(r"false(ly)? merge|merge error|wrongly merged", re.I)
 POINTER = re.compile(r"^(duplicate( target)? of\b|merged into (r\d+|[A-Za-z0-9_]+ r\d+)\b)", re.I)
@@ -128,12 +137,29 @@ def first_n(v):
     return int(m.group()) if m else 0
 
 
-def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, latest_of=None, log=print):
+def retitle(wb, B, rows, hdr, drop):
+    """a block title that states the block's size ('101 cells' over 101 rows; title = the row above the header) follows
+    the rows dropped from it (2026-11-11: two T4T5-1 pairs merged, the title kept saying 101). Before delete_rows, on
+    the original row numbers; a title whose number is not the block's row count is left alone."""
+    gone = {}
+    for tab, rs in drop.items():
+        for r in rs:
+            gone[(tab, hdr[(tab, r)])] = gone.get((tab, hdr[(tab, r)]), 0) + 1
+    for (tab, h), k in gone.items():
+        n = sum(1 for y in rows if y["tab"] == tab and hdr[(tab, y["row"])] == h)
+        t = s(wb[tab].cell(h - 1, 1).value) if h > 1 else ""
+        if re.search(rf"\b{n} cells\b", t):
+            B.put(tab, h - 1, 1, re.sub(rf"\b{n} cells\b", f"{n - k} cells", t, count=1),
+                  f"block title: {n} -> {n - k} cells after collapsing")
+
+
+def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, latest_of=None, recount_out=None, log=print):
     """rows: scan_book rows of the tracking tabs (row numbers before any deletion); cell_of(x) -> live cell id or '';
     sizes: cell -> L2 chunks (cells not listed are never called whole); yellow(x) -> True for MISMATCH rows;
     recount(pairs) -> {(upstream id, cell): synapses now} for [(upstream id as written, cell)], or None (then the
     collapsed rows' nsyn are summed); latest_of(ids) -> {id: [current roots]} for upstream ids as written, or None
-    (then rows whose cell became the block's own upstream cell are not looked for)."""
+    (then rows whose cell became the block's own upstream cell are not looked for); recount_out(cell, ids) -> {id:
+    synapses now from cell onto it} for downstream ids as written, or None (then per-partner sums of the rows' lists)."""
     val = lambda x, n: wb[x["tab"]].cell(x["row"], x["cols"][n]).value if n in x["cols"] else None
     up_of = {}
     for x in rows:
@@ -218,18 +244,59 @@ def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, latest_of=None,
             continue
         g.sort(key=lambda x: (rank(val(x, "status")), s(val(x, "status")).upper() == "NEW-DUP", -first_n(val(x, "nsyn")), x["row"]))
         rec = g[0]
-        todo.append((rec, g[1:], c, up_of.get((rec["tab"], rec["row"]), "")))
+        u = up_of.get((rec["tab"], rec["row"]), "")
+        # no upstream cell: a row that lists the cells it feeds (T4T5-1 / T4T5-2), nsyn aligned to that list
+        dn = "" if u else next((n for n in DOWNSTREAM if n in rec["cols"] and any(IDS.search(s(val(x, n))) for x in g)), "")
+        todo.append((rec, g[1:], c, u, dn, h))
         for x in g[1:]:
             drop.setdefault(tab, set()).add(x["row"])
             rec_of[(tab, x["row"])] = rec["row"]
-    counts = recount([(u, c) for _, _, c, u in todo if u]) if recount and todo else {}
-    for rec, others, c, u in todo:
+    counts = recount([(u, c) for _, _, c, u, _, _ in todo if u]) if recount and todo else {}
+    for rec, others, c, u, dn, h in todo:
         tab, cols = rec["tab"], rec["cols"]
-        if "nsyn" in cols:
+        why_c = f"collapsed {len(others) + 1} rows of one cell"
+        if dn:
+            listed = {}  # partner -> synapses, summed over the rows' own aligned lists
+            for x in [rec] + others:
+                ids, ns = IDS.findall(s(val(x, dn))), re.findall(r"\d+", s(val(x, "nsyn")))
+                for i, p in enumerate(ids):
+                    listed[p] = listed.get(p, 0) + (int(ns[i]) if len(ns) == len(ids) else 0)
+            # every partner the block lists, so a partner both pieces fed weakly can reach MIN_SYN after the merge
+            pool = list(dict.fromkeys([*listed, *(p for y in rows if y["tab"] == tab and hdr[(tab, y["row"])] == h
+                                                    for p in IDS.findall(s(val(y, dn))))]))
+            live = recount_out(c, pool) if recount_out else {}
+            if any(live.values()):
+                n_of, how = live, "recount (synapse snapshot, caught up to now)"
+                keep = sorted((p for p in pool if live.get(p, 0) >= MIN_SYN), key=lambda p: -live[p])
+                total = sum(live.values())
+            else:
+                n_of, how = listed, "summed per partner"
+                keep = sorted(listed, key=lambda p: -listed[p])
+                total = sum(first_n(val(x, "nsyn_out")) for x in [rec] + others) if "nsyn_out" in cols else 0
+            if keep:
+                why = f"{why_c}: per-partner nsyn {how}"
+                B.put(tab, rec["row"], cols[dn], ", ".join(keep), why)
+                if "nsyn" in cols:
+                    B.put(tab, rec["row"], cols["nsyn"], ", ".join(str(n_of[p]) for p in keep), why)
+                if "nsyn_out" in cols and total:
+                    B.put(tab, rec["row"], cols["nsyn_out"], int(total), why)
+                reach = keep
+                if dn != "T4T5_root_id" and "T4T5_root_id" in cols:  # T4T5-2: the targets its T4T5-1 partners feed
+                    reach = list(dict.fromkeys(p for x in [rec] + others for p in IDS.findall(s(val(x, "T4T5_root_id")))))
+                    B.put(tab, rec["row"], cols["T4T5_root_id"], ", ".join(reach), why)
+                if "T4T5_reached" in cols:
+                    B.put(tab, rec["row"], cols["T4T5_reached"], len(reach), why)
+        elif "nsyn" in cols:
             n = counts.get((u, c)) if u else None
             n = n if n else sum(first_n(val(x, "nsyn")) for x in [rec] + others)
-            B.put(tab, rec["row"], cols["nsyn"], int(n), f"collapsed {len(others) + 1} rows of one cell: nsyn "
+            B.put(tab, rec["row"], cols["nsyn"], int(n), f"{why_c}: nsyn "
                   + ("recount (synapse snapshot, caught up to now)" if counts.get((u, c)) else "summed"))
+        if "cable_um" in cols:  # the merged cell is at least as big as its biggest piece
+            big = max([rec] + others, key=lambda x: first_n(val(x, "cable_um")))
+            if big is not rec and first_n(val(big, "cable_um")) > first_n(val(rec, "cable_um")):
+                for n in ("cable_um", "neuropils"):
+                    if n in cols:
+                        B.put(tab, rec["row"], cols[n], val(big, n), f"{why_c}: {n} of its largest piece")
         if "notes" in cols:  # pointers to the twins go with them
             B.put(tab, rec["row"], cols["notes"], "; ".join(p for p in parts(val(rec, "notes")) if not POINTER.search(p)),
                   "collapsed rows of one cell")
@@ -246,6 +313,7 @@ def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, latest_of=None,
                               f"into it), not a partner"))
         B.touched.add(x["tab"])
 
+    retitle(wb, B, rows, hdr, drop)
     new_of = delete_rows(wb, B, drop, rec_of)
     log(f"reconcile: {stats['cells']} cells on several rows; tracking carried over on {stats['carried']}; "
         f"{stats['collapsed_rows']} same-block rows collapsed and {stats['self_rows']} rows removed whose cell is the "

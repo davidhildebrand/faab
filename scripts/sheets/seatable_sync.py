@@ -363,7 +363,23 @@ def main():
             n = {(int(p), int(q)): int(k) for p, q, k in zip(e.pre, e.post, e.n)}
             return {(u, cc): sum(n.get((v, int(cc)), 0) for v in cur[u]) for u, cc in pairs}
 
-        reconcile(wb, B, rows, cell_of, sizes, yellow, recount=recount, latest_of=latest_of)
+        def recount_out(cell, ids):
+            """synapses from a collapsed cell onto each downstream id as written (all current pieces of a stale id),
+            local synapse snapshot caught up to now (T4T5-1 / T4T5-2 rows, 2026-11-11)"""
+            latest_of(ids)
+            wait()
+            try:
+                e = synsnap.Snapshot(log=lambda *_: None).edges(
+                    pre=[int(cell)], post=sorted({v for u in ids for v in cur[u]}), when="now", client=c)
+            except Exception as ex:
+                print(f"  recount failed ({str(ex)[:80]}); collapsed rows get their per-partner nsyn summed")
+                return {}
+            finally:
+                last[0] = time.time()
+            n = {int(q): int(k) for q, k in zip(e.post, e.n)}
+            return {u: sum(n.get(v, 0) for v in cur[u]) for u in ids}
+
+        reconcile(wb, B, rows, cell_of, sizes, yellow, recount=recount, latest_of=latest_of, recount_out=recount_out)
 
     # --- left-eye PRs section
     if a.left_rows:
