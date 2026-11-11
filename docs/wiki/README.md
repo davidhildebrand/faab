@@ -50,7 +50,7 @@ We use Neuroglancer (Spelunker) to view and proofread the neurons in this datase
 
 - Paste root_id number(s) into the Seg tab of the wclee_aedes_brain layer to display them with their annotations.
 
-![The Seg tab of the segmentation layer: paste root_ids into the box at the top; the selected neurons are listed below with their SeaTable labels](images/seg-tab.png)
+![The Seg tab of the segmentation layer: paste root_ids into the box at the top. The selected neurons are listed below with their SeaTable labels](images/seg-tab.png)
 
 - You can also retrieve sets of neurons by filtering for annotations.
 - In the Source tab, near the bottom, you can edit which annotations are displayed (in curly brackets).
@@ -109,10 +109,10 @@ Do this before you start on a cell and before you add a row.
 
 Every new row should have:
 
-- **point_xyz** on the backbone, in clear cytoplasm (see [Choosing point_xyz](#choosing-point_xyz));
-- **side**;
-- **superclass**;
-- **status**;
+- **point_xyz** on the backbone, in clear cytoplasm (see [Choosing point_xyz](#choosing-point_xyz))
+- **side**
+- **superclass**
+- **status**
 - **annotator** (your initials), and **proofreader** as well if you also merged or cleaved the neuron.
 
 SeaTable and the update scripts then fill in supervoxel_id (from point_xyz), root_id (from supervoxel_id), and serial_id.
@@ -125,18 +125,18 @@ point_xyz is the cell's anchor: supervoxel_id and root_id are derived from it, s
 2. Put it in **clear cytoplasm**: away from mitochondria, vesicle clusters, membranes, and the soma. Mitochondria are often left out of the neuron's segmentation, so a point on one maps to segment 0, and SeaTable then cannot fill in supervoxel_id or root_id (both stay 0).
 3. Pick it in a 2D slice panel, not in the 3D view: a click on the 3D mesh surface can land on a neighboring speck.
 4. Right-click inside the cell's profile in the 2D panel to move the position there.
-5. Before you save, click at that spot and check that your neuron gets selected; hovering shows the segment ID, which should be the cell's root_id.
-6. Copy the coordinates from the position readout at the top left (voxels) and paste them into point_xyz.
+5. Before you save, click at that spot and check that your neuron gets selected. Hovering shows the segment ID, which should be the cell's root_id.
+6. Copy the position: click the copy button (two overlapping squares) just to the right of the x, y, z readout at the top left. That puts the coordinates (in voxels) on your clipboard. Paste them into point_xyz.
 
 ![A good point_xyz: the crosshair sits in clear cytoplasm of a large backbone profile (blue). Hovering there shows the neuron's ID in the layer bar (boxed: supervoxel → root_id, then its SeaTable label), and the readout at the top left (boxed) gives the position to copy](images/point-good.png)
 
 ![A bad point_xyz: the crosshair sits on a mitochondrion, the unshaded patch inside the blue profile. Hovering shows segment 0 (boxed), so SeaTable gets supervoxel_id and root_id 0 for this row](images/point-mitochondrion.png)
 
-![Top left: the position in voxels (white; copy this into point_xyz) and the mouse position (orange). Below: the layer bar with the hovered supervoxel → root_id](images/position-readout.png)
+![Copying the point. The mouse pointer is on the copy button (two overlapping squares, circled in yellow) just to the right of the white x, y, z position at the top left. Click it to copy that position in voxels (here 7582, 18621, 4996), then paste it into point_xyz. The orange numbers further right are only the mouse position, so don't copy those. The layer bar below shows the hovered supervoxel → root_id](images/position-readout.png)
 
-![The same neuron in the 3D view; the crosshair marks the point, on the backbone and away from the soma (bottom right)](images/point-3d.png)
+![The same neuron in the 3D view. The crosshair marks the point, on the backbone and away from the soma (bottom right)](images/point-3d.png)
 
-The **bad supervoxel** view in SeaTable lists every row whose point maps to no segment; check it now and then.
+The **bad supervoxel** view in SeaTable lists every row whose point maps to no segment. Check it now and then.
 
 [aedes_key_point()](https://flyconnectome.github.io/aedes/reference/aedes_key_point.html) chooses good points automatically and is wrapped by [aedes_add_neurons()](https://flyconnectome.github.io/aedes/reference/aedes_add_neurons.html).
 
@@ -163,7 +163,7 @@ Each reconstructed neuron should occupy one row. Before adding a new row, check 
 | needs_extending | the neuron needs extending |
 | merge_error | the neuron needs a cleave |
 | complete | only for neurons judged entirely finished |
-| duplicate | a repeated row; ignore it |
+| duplicate | a repeated row (ignore it) |
 
 ### Columns
 
@@ -174,16 +174,16 @@ Each reconstructed neuron should occupy one row. Before adding a new row, check 
 | serial_id | a short sequential ID, assigned automatically |
 | point_xyz | an invariant position on the neuron (see [Choosing point_xyz](#choosing-point_xyz)) |
 | root_duplicated | checked when the same neuron appears more than once |
-| side | side of the soma (if known) or of the entry point (sensory and ascending neurons); note the [orientation](#orientation) |
-| group | the lowest serial_id of a pair or larger set of homologous neurons; neurons matched across sides share a group |
-| type | the neuron's name in this dataset; all neurons of a group share a type |
+| side | side of the soma (if known) or of the entry point (sensory and ascending neurons). Note the [orientation](#orientation) |
+| group | the lowest serial_id of a pair or larger set of homologous neurons. Neurons matched across sides share a group |
+| type | the neuron's name in this dataset. All neurons of a group share a type |
 | superclass | broadest class: cb_intrinsic, ol_intrinsic, ascending_neuron, descending_neuron, cb_sensory, ol_sensory, or cb_motor |
 | neuropils | main neuropil(s) innervated: AMMC, AL, CX, GNG, LH, LO, ME, MB, SLP, SMP, or TBD ([nomenclature](https://www.sciencedirect.com/science/article/pii/S0896627313011781?via%3Dihub)) |
 | axon_tract | main axon tract, for example mALT or lALT |
 | hemilineage | developmental origin, where known or inferred |
-| class | second level, for example ALPN or ALLN; descending neurons DNa, DNb, and so on |
-| subclass | third level; rules vary by superclass. Central brain intrinsic neurons: IR (ipsilateral to the soma, one neuropil), BR (bilateral, one neuropil), CR (contralateral, one neuropil), II (ipsilateral, two neuropils), BI (bilateral, two neuropils), CI (contralateral, two neuropils); more detail where useful, for example II_UNI / II_MUL for uniglomerular / multiglomerular ALPNs |
-| subsubclass | currently glomerulus number(s); may be used for other purposes for other neurons |
+| class | second level, for example ALPN or ALLN, or DNa, DNb, and so on for descending neurons |
+| subclass | third level, with rules that vary by superclass. Central brain intrinsic neurons: IR (ipsilateral to the soma, one neuropil), BR (bilateral, one neuropil), CR (contralateral, one neuropil), II (ipsilateral, two neuropils), BI (bilateral, two neuropils), and CI (contralateral, two neuropils), with more detail where useful, for example II_UNI / II_MUL for uniglomerular / multiglomerular ALPNs |
+| subsubclass | currently glomerulus number(s), but may be used for other purposes for other neurons |
 | notes | comments from annotators and proofreaders: prefix with your initials and separate entries with semicolons |
 | annotator | who labeled and annotated the neuron (if you did both this and the proofreading, put your initials in both columns) |
 | status | proofreading status (see [Statuses](#statuses)) |
@@ -199,8 +199,8 @@ Each reconstructed neuron should occupy one row. Before adding a new row, check 
 
 ### Reading and writing many rows
 
-- **Writing:** do not use the web interface to change more than a handful of rows at a time; the sort order and the set of rows can change while you work. Bulk uploads and changes are done programmatically, with great care: discuss them on #aedes-proofreading first (unless you already have significant experience), do a dry run, and work alongside someone who can sense-check. We recommend that each group designate one person to do bulk uploads from working spreadsheets. Greg Jefferis's code for this is documented at [aedes_add_neurons](https://flyconnectome.github.io/aedes/reference/aedes_add_neurons.html).
-- **Reading:** for offline use (consistent with the Code of Conduct), download programmatically; the web spreadsheet download is unreliable now that the table is large. In R:
+- **Writing:** do not use the web interface to change more than a handful of rows at a time, because the sort order and the set of rows can change while you work. Bulk uploads and changes are done programmatically, with great care: discuss them on #aedes-proofreading first (unless you already have significant experience), do a dry run, and work alongside someone who can sense-check. We recommend that each group designate one person to do bulk uploads from working spreadsheets. Greg Jefferis's code for this is documented at [aedes_add_neurons](https://flyconnectome.github.io/aedes/reference/aedes_add_neurons.html).
+- **Reading:** for offline use (consistent with the Code of Conduct), download programmatically. The web spreadsheet download is unreliable now that the table is large. In R:
 
 ```r
 library(aedes)
@@ -215,7 +215,7 @@ arrow::write_feather(am, "aedes_meta.feather")
 
 - **R:** the [aedes package](https://flyconnectome.github.io/aedes/).
 - **Python:** CAVE (caveclient), with a token from <https://global.daf-apis.com/auth/api/v1/user/token>.
-- A private [GitHub repository](https://github.com/flyconnectome/2025aedes) holds scripts, functions, and other artifacts for analysis and eventual publication; contact Greg Jefferis for access.
+- A private [GitHub repository](https://github.com/flyconnectome/2025aedes) holds scripts, functions, and other artifacts for analysis and eventual publication. Contact Greg Jefferis for access.
 
 ## Guides and resources
 

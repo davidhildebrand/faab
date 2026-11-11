@@ -4,7 +4,7 @@
 
 This page takes one cell from "I'd like to work on this" to "done and recorded". It is written for the optic lobe team, who track their cells in the optic lobe targets sheet as well as in SeaTable. As the [Code of Conduct](https://github.com/htem/faab/wiki/Code-of-Conduct) says, only make edits that are clearly correct. The Neuroglancer tools (merge, cleave, find path) are described in the [README](README#proofreading-functions).
 
-**Use an external mouse with left and right buttons and a scroll wheel.** Proofreading relies on right-clicks (to move the position) and on scrolling (through slices) and control-scrolling (to zoom); with a trackpad these are slow and easy to get wrong.
+**Use an external mouse with left and right buttons and a scroll wheel.** Proofreading relies on right-clicks (to move the position) and on scrolling (through slices) and control-scrolling (to zoom). With a trackpad, these are slow and easy to get wrong.
 
 ## 1. Check SeaTable before you start
 
@@ -37,8 +37,10 @@ The xyz is the row's anchor. At each sheet update, root_id_curr is refreshed fro
 1. Choose a point on the main backbone, in a large profile, in **clear cytoplasm**: away from mitochondria, vesicle clusters, membranes, and the soma. A point on a mitochondrion maps to segment 0 (no neuron).
 2. Pick it in a 2D slice panel, not in the 3D view (a click on the 3D mesh surface can land on a neighboring speck).
 3. Right-click inside the cell's profile.
-4. Click there and check that your neuron gets selected; hovering shows the segment ID, which should be the cell's root_id.
-5. Copy the coordinates from the position readout at the top left (voxels) into xyz.
+4. Click there and check that your neuron gets selected. Hovering shows the segment ID, which should be the cell's root_id.
+5. Copy the position: click the copy button (two overlapping squares) just to the right of the x, y, z readout at the top left, then paste into xyz.
+
+![Copying the point. The mouse pointer is on the copy button (two overlapping squares, circled in yellow) just to the right of the white x, y, z position at the top left. Click it to copy that position in voxels, then paste it into xyz. The orange numbers further right are only the mouse position, so don't copy those](images/position-readout.png)
 
 ![A good point: clear cytoplasm in a large backbone profile. Hovering shows the neuron's ID in the layer bar, and the top-left readout gives the xyz (both boxed)](images/point-good.png)
 
@@ -52,7 +54,7 @@ When you fix something the sheet flagged (a yellow "xyz off the cell" row, a "mi
 
 - **Sheet:** set the status (**proofread** when done, **review** if you would like a second look), the pr_date, and a short note if needed (for example, "backbone seems fine"). Type dates year first (26-11-07), not day first.
 - **Every change gets your name.** Whenever you change a row (status, xyz, notes), put your name in proofreader and the date in pr_date, even for a small change such as marking an orphan fragment "stopped". Unsigned changes can't be followed up.
-- **SeaTable:** if the cell is missing, add it with the [minimal annotation](README#minimal-annotation); if it is there, update its status and add your initials as proofreader (and as annotator if you also labeled it). Then write "added" in the sheet's SeaTable column.
+- **SeaTable:** if the cell is missing, add it with the [minimal annotation](README#minimal-annotation). If it is there, update its status and add your initials as proofreader (and as annotator if you also labeled it). Then write "added" in the sheet's SeaTable column.
 - **Checking:** the checker sets the status to **checked** and fills in chk_date and checker.
 
 ## Statuses in the sheet

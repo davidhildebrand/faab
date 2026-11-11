@@ -31,6 +31,7 @@ spec.json format (all fields optional except at least one of meshes/neurons):
   "slices": false,              # draw the EM cross-sections in the 3D panel (default: only when image and the
                                 # layout has 2D panels)
   "background": "#050505",      # 3D panel background (default dark)
+  "neuropil_alpha_scale": 0.25, # factor on every mesh layer's opacity (default NEUROPIL_ALPHA_SCALE: fainter neuropils)
   "position": [x, y, z], "scale": 12000,   # open on a region (voxels; whole brain = 31785)
   "out":    "figures/foo_ng.txt"
 }
@@ -48,6 +49,7 @@ BASE_MESH = {"brain": "brain mesh", "AL": "al_meshes3", "MB": "mb_meshes", "LH":
 SEG ="graphene://middleauth+https://cave.fanc-fly.com/segmentation/table/wclee_aedes_brain"
 IMG = "precomputed://gs://zetta_lee_mosquito_001_alignment_central/img/v2_sharded"
 DARK_BG = "#050505"  # 3D panel background (the README scene's is white; spec "background" overrides)
+NEUROPIL_ALPHA_SCALE = 0.25  # every neuropil / brain mesh opacity x this (2026-11-10: neuropils fainter in all links)
 _OUTDIMS = {"x": [1.6e-08, "m"], "y": [1.6e-08, "m"], "z": [4.5e-08, "m"]}
 
 # standard view (whole-brain framing from reference state 6364293577572352)
@@ -204,6 +206,12 @@ def build(spec):
                     L.pop("segmentColors", None)
         layers.append(L)
     layers += [mesh_layer(m["kind"], m.get("alpha"), m.get("color"), m.get("segments")) for m in asked.values()]
+    # neuropil meshes fainter in every link (David 2026-11-10: "make the opacity of the neuropils lower"): every
+    # mesh layer's opacity, default or asked for, times NEUROPIL_ALPHA_SCALE (spec "neuropil_alpha_scale" overrides)
+    k = spec.get("neuropil_alpha_scale", NEUROPIL_ALPHA_SCALE)
+    for L in layers:
+        if L["type"] == "segmentation" and L is not seg:
+            L["objectAlpha"] = round(float(L.get("objectAlpha", 1.0)) * k, 3)
     layers += [neuron_layer(n, seg["source"]) for n in spec.get("neurons", [])]
     layers += [annotation_layer(a) for a in spec.get("annotations", [])]
     view = spec.get("view", "anterior")
