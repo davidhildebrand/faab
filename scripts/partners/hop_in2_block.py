@@ -109,6 +109,27 @@ def blocks_of(ws, width):
     return out, last_used
 
 
+def link_spec(targets, seeds, main_ids, low_ids, excl_ids, xyzs, scale=14000):
+    """faab.nglink spec: targets, T4T5-1, T4T5-2 shown (Okabe-Ito colors, dark 3D background from nglink), excluded
+    wide-field T4T5-1 cells and LOW PRIORITY T4T5-2 cells as hidden layers; opened on the right optic lobe (median
+    of the T4T5-2 points) instead of the whole brain"""
+    pts = np.array([[float(v) for v in re.findall(r"-?\d+(?:\.\d+)?", s(p))] for p in xyzs if s(p)])
+    pts = pts[[len(p) == 3 for p in pts]] if len(pts) else pts
+    layers = [{"name": f"T4/T5 candidates ({len(targets)})", "color": COLORS["targets"], "ids": list(targets)},
+              {"name": f"T4T5-1 cells ({len(seeds)})", "color": COLORS["in1"], "ids": list(seeds)},
+              {"name": f"T4T5-2 cells ({len(main_ids)})", "color": COLORS["in2"], "ids": list(main_ids)},
+              {"name": f"T4T5-1 wide-field, inputs not followed ({len(excl_ids)})", "color": COLORS["wide"],
+               "ids": list(excl_ids), "visible": False}]
+    if low_ids:
+        layers.append({"name": f"T4T5-2 cells, low priority ({len(low_ids)})", "color": COLORS["in2_low"],
+                       "ids": list(low_ids), "visible": False})
+    spec = {"meshes": [{"kind": "OL", "segments": ["21", "22", "23", "24"], "alpha": 0.15}, {"kind": "neuropil"}],
+            "neurons": layers, "view": "anterior", "layout": "3d", "image": True, "select": layers[2]["name"]}
+    if len(pts):
+        spec.update(position=[float(v) for v in np.median(np.stack(pts), axis=0)], scale=scale)
+    return spec
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--book", required=True)
@@ -443,16 +464,8 @@ def main():
           f"{sum(1 for x in B.log if x['why'].startswith('rows moved'))}", flush=True)
     print(f"rows: T4T5-2 tsv {tsv}", flush=True)
 
-    layers = [{"name": f"T4/T5 candidates ({len(targets)})", "color": COLORS["targets"], "ids": targets},
-              {"name": f"T4T5-1 cells ({len(seeds)})", "color": COLORS["in1"], "ids": seeds},
-              {"name": f"T4T5-2 cells ({len(main_rows)})", "color": COLORS["in2"], "ids": [d["root_id_curr"] for d in main_rows]},
-              {"name": f"T4T5-1 wide-field, inputs not followed ({len(excl)})", "color": COLORS["wide"],
-               "ids": list(excl), "visible": False}]
-    if low_rows:
-        layers.append({"name": f"T4T5-2 cells, low priority ({len(low_rows)})", "color": COLORS["in2_low"],
-                       "ids": [d["root_id_curr"] for d in low_rows], "visible": False})
-    spec = {"meshes": [{"kind": "OL", "segments": ["21", "22", "23", "24"], "alpha": 0.15}, {"kind": "neuropil"}],
-            "neurons": layers, "view": "anterior", "layout": "3d", "image": True, "select": layers[2]["name"]}
+    spec = link_spec(targets, seeds, [d["root_id_curr"] for d in main_rows], [d["root_id_curr"] for d in low_rows],
+                     list(excl), [d["xyz"] for d in main_rows])
     state = nglink.build(spec)
     open(tsv.replace(".tsv", "_ng.txt"), "w").write(nglink.to_url(state) + "\n")
     TIB.wait()

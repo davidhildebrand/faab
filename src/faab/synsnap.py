@@ -136,6 +136,25 @@ def download(root=ROOT, url=None, client=None, log=print):
 
 
 AUTO_REFRESH_H = 1.0  # Snapshot queries pull new checkpoints first when the last check is older than this
+KEEP_HEADS = 2  # built root tables kept in heads/ (1.7 GB each); older ones are deleted (David 2026-11-10: "delete
+                # old ones automatically and keep the newest two"); they rebuild from the checkpoint logs (~4 min)
+
+
+def prune_heads(root=ROOT, keep=KEEP_HEADS, protect=(), log=print):
+    """delete built root tables in <root>/heads/ beyond the `keep` newest checkpoints (by checkpoint time); tags in
+    `protect` (the one in use) always stay; folders that are no local checkpoint are left alone"""
+    import shutil
+    d = os.path.join(root, "heads")
+    if not os.path.isdir(d):
+        return []
+    t = Snapshot(root, log=log, auto_refresh=False).tags().set_index("tag").timestamp
+    built = sorted((x for x in os.listdir(d) if os.path.isdir(os.path.join(d, x)) and x in t.index),
+                   key=lambda x: t[x], reverse=True)
+    gone = [x for x in built[keep:] if x not in set(protect)]
+    for x in gone:
+        shutil.rmtree(os.path.join(d, x))
+        log(f"removed old root table heads/{x} (keeping the newest {keep}: {', '.join(built[:keep])})")
+    return gone
 
 
 def refresh(root=ROOT, max_age_h=6.0, log=print):
@@ -292,6 +311,7 @@ class Snapshot:
                 and os.path.exists(fmt) and open(fmt).read().strip() == self.HEAD_FORMAT):
             self._build_head(tag)
             open(fmt, "w").write(self.HEAD_FORMAT + "\n")
+            prune_heads(self.root, protect=(tag,), log=self.log)
         H = {}
         for key in ("pre", "post"):
             tb = pq.read_table(os.path.join(d, f"by_{key}.parquet"))

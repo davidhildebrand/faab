@@ -28,6 +28,10 @@ spec.json format (all fields optional except at least one of meshes/neurons):
   "layout": "3d",               # "3d" | "4panel" | "xy-3d"
   "select": "A + B",            # layer name to open in the right-side panel
   "image":  false,              # include the EM image layer (for cross-sections)
+  "slices": false,              # draw the EM cross-sections in the 3D panel (default: only when image and the
+                                # layout has 2D panels)
+  "background": "#050505",      # 3D panel background (default dark)
+  "position": [x, y, z], "scale": 12000,   # open on a region (voxels; whole brain = 31785)
   "out":    "figures/foo_ng.txt"
 }
 """
@@ -43,6 +47,7 @@ BASE_MESH = {"brain": "brain mesh", "AL": "al_meshes3", "MB": "mb_meshes", "LH":
              "OL": "aedes_ol_meshes", "neuropil": "aedes_neuropil"}
 SEG ="graphene://middleauth+https://cave.fanc-fly.com/segmentation/table/wclee_aedes_brain"
 IMG = "precomputed://gs://zetta_lee_mosquito_001_alignment_central/img/v2_sharded"
+DARK_BG = "#050505"  # 3D panel background (the README scene's is white; spec "background" overrides)
 _OUTDIMS = {"x": [1.6e-08, "m"], "y": [1.6e-08, "m"], "z": [4.5e-08, "m"]}
 
 # standard view (whole-brain framing from reference state 6364293577572352)
@@ -205,10 +210,15 @@ def build(spec):
     orient = VIEWS.get(view, view)
     # optional "position": [x, y, z] in 16x16x45 nm voxels and "scale": projectionScale
     # (whole brain = 31785; ~6000 frames a single cell) to open the view on one cell
+    layout = spec.get("layout", "3d")
+    # 3D background dark and no EM planes in a pure 3D view (David 2026-11-10: "Spelunker link has white bg and I
+    # can't see anything" - the README scene's white background washed out the colors, and the EM cross-sections drawn
+    # in the 3D panel covered the cells); the EM layer stays (rule of 2026-09-25) and shows in the 2D panels
     state.update({"dimensions": DIMS, "position": spec.get("position", POS), "projectionOrientation": orient,
                   "projectionScale": spec.get("scale", PSCALE), "layers": layers,
-                  "showSlices": bool(spec.get("image", False)),
-                  "showDefaultAnnotations": False, "layout": spec.get("layout", "3d")})
+                  "showSlices": bool(spec.get("slices", spec.get("image", False) and layout != "3d")),
+                  "projectionBackgroundColor": spec.get("background", DARK_BG),
+                  "showDefaultAnnotations": False, "layout": layout})
     if spec.get("select"):
         state["selectedLayer"] = {"layer": spec["select"], "visible": True, "size": 361}
     if spec.get("cross_scale"):  # 2D panel zoom (nm per screen pixel / voxel; ~0.5 frames a 2 um cutout)
