@@ -5,6 +5,10 @@ cg.get_user_operations(user_id, start, end). Writes a per-user-per-day CSV and
 prints per-user totals.
 
 REQUIREMENTS
+  - 2026-11-12: the server gates user_operations with the dataset permission
+    'admin_view' (PyChunkedGraph routes.py), so the edit (read-write) key ALSO
+    gets 403 - tested by David. Use user_activity_ops.py instead (operation_details,
+    'view' only, default read-only key). The rest of this note is from June.
   - An EDIT-CAPABLE / permitted CAVE token. The read-only view account gets a
     403 FORBIDDEN on get_user_operations (and on auth.get_user_information).
     Either make your permitted token the default, or set CAVE_TOKEN in the env:
@@ -35,13 +39,13 @@ OUT = os.path.join(REPO, "figures")
 
 # ------------------------------- CONFIG -------------------------------
 USER_IDS = []                                   # e.g. [5694, 8041, 1019]; [] -> discover
-DATE_START = dt.datetime(2026, 7, 1, tzinfo=UTC)
-DATE_END = dt.datetime(2026, 8, 1, tzinfo=UTC)  # exclusive-ish upper bound
+DATE_END = dt.datetime.now(UTC)                 # now (David 2026-11-12: the last 4 months up to today)
+DATE_START = (pd.Timestamp(DATE_END) - pd.DateOffset(months=4)).to_pydatetime()
 INCLUDE_UNDO = False                            # False -> exclude undo ops
 DISCOVER_IF_EMPTY = True                        # sample recent edits to find users
 DISCOVER_SAMPLE = 40                            # #changed-roots to sample (server cost!)
 THROTTLE_S = 2.0                                # seconds between CAVE calls
-OUT_CSV = fig("user_activity_report.csv")
+OUT_CSV = fig(f"{DATE_END:%Y%m%dd%H%M%StUTC}_user_activity_report.csv")
 # ----------------------------------------------------------------------
 
 

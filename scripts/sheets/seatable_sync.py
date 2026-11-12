@@ -15,8 +15,8 @@ Rules (David, 2026-10-30):
 Always: root_id_curr -> the root at the xyz when root_id_curr is no longer current; rows whose root_id_curr is current
 but elsewhere (MISMATCH) are highlighted and get the short note 'xyz off the cell (on <root at xyz>)', nothing moved
 (notes are for the proofreaders: generated notes stay short, David 2026-10-30); notes our scripts wrote earlier are
-shortened by faab.partners.short_notes (proofreaders' text kept verbatim; 'duplicate target of <id>' -> 'duplicate of
-r<row>' pointing at the record row); statuses lowercase ('stoppped' -> 'stopped');
+shortened by faab.partners.short_notes (proofreaders' text kept verbatim; 'duplicate target of <id>' dropped, never a
+row number - rows move, David 2026-11-12); statuses lowercase ('stoppped' -> 'stopped');
 stale notes (faab.partners.stale_notes, 2026-11-07/08; notes are only ever cleared, never added or copied): an
 earlier 'xyz off the cell' flag and the proofreader's 'resolved' reply go when the point is on the cell again
 (highlight cleared), replies / reports of work done ('xyz coordinates and link updated') once the point is checked on
@@ -252,7 +252,10 @@ def main():
                     B.put(tab, r, cc, new, why)
         # --- roots
         curr, at = v.get("root_id_curr", ""), mm.get("root_at_xyz", "")
-        if re.fullmatch(r"\d{15,}", curr) and at and at != "0" and at != curr:
+        if curr and not re.fullmatch(r"\d{15,}", curr) and re.fullmatch(r"\d{15,}", at or ""):
+            # stray text typed over the id (2026-11-12: 'd'): the root at the row's xyz
+            B.put(tab, r, cols["root_id_curr"], at, "root_id_curr was not an id: root at xyz")
+        elif re.fullmatch(r"\d{15,}", curr) and at and at != "0" and at != curr:
             if not latest.get(curr, True):
                 B.put(tab, r, cols["root_id_curr"], at, "root update (root at xyz)")
             else:

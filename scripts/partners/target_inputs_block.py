@@ -153,7 +153,7 @@ def tracking(cells, rows, tab):
                       seatable=seatable, in_sea=bool(sr),
                       link=next((s(x["values"].get("link")) for x in ([best] if best else []) + rs if s(x["values"].get("link"))), ""),
                       xyz_src=next((x for x in ([best] if best else []) + rs if x["at"] == r), None),
-                      tracked_in="; ".join(f"{x['tab']} r{x['row']}" for x in rs))
+                      tracked_in="; ".join(dict.fromkeys(x["tab"] for x in rs)))  # tabs, never rows (2026-11-12)
     print(f"tracked in other tabs: {sum(bool(rec[r]['rows']) for r in cells)} (with a status {sum(bool(rec[r]['best']) for r in cells)}); "
           f"in SeaTable ({os.path.basename(st_path)}): {sum(rec[r]['in_sea'] for r in cells)}", flush=True)
     return rec

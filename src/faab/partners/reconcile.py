@@ -27,8 +27,11 @@
   - A row whose cell is now the block's own upstream cell (a fragment of that cell, merged into it: e.g. R8 pieces in
     the R8's partner block, David 2026-10-31) is not a partner any more and is removed; references to it are dropped
     from tracked_in. Its synapses would be the cell's synapses onto itself, so nsyn could not be recounted either.
-  - Row deletions shift the rows below: 'rN' / '<tab> rN' references in notes and tracked_in are renumbered (a deleted
-    row -> its record row) and hyperlinks / row heights follow their rows.
+  - Rows are no identifiers (David 2026-11-12: "they move around"): tracked_in names the cell's other tabs (and
+    '<tab> (<hop>)' for another block of the same tab), recomputed every update; notes that only point at another row
+    by number are cleared ('row N is the cell' names that row's root_id) - no_row_numbers().
+  - Row deletions shift the rows below: any 'rN' / '<tab> rN' reference left in notes is renumbered (a deleted row ->
+    its record row) and hyperlinks / row heights follow their rows.
 Every change goes through seatable_sync.Book (logged with the reason)."""
 import re
 
@@ -153,6 +156,72 @@ def retitle(wb, B, rows, hdr, drop):
                   f"block title: {n} -> {n - k} cells after collapsing")
 
 
+ROW_POINTER = re.compile(r"^(duplicate( target)? of|merged into)\s+(\w+ )?(r|row )\d+\.?$", re.I)
+CELL_AT = re.compile(r"\b(?:row |r)(\d+) is the cell\b")
+
+
+def no_row_numbers(wb, B, rows, cell_of, yellow, self_keys, val):
+    """rows are no identifiers - they move (David 2026-11-12): tracked_in names the OTHER places the cell is on (tab;
+    in the same tab, '<tab> (<hop>)' for another block), recomputed every update; notes that only point at another row
+    by number ('duplicate of r470' on a NEW-DUP row: its status says it) are cleared, and 'row 71 is the cell' names
+    that row's root_id. Yellow MISMATCH rows (cell unknown) keep their tracked_in tabs with the row numbers removed."""
+    hdr = {}  # tab -> {row: header row above it}, one pass per tab (B.header_row scans upward cell by cell)
+
+    def header(x):
+        if x["tab"] not in hdr:
+            m, h = {}, 0
+            for i, row in enumerate(wb[x["tab"]].iter_rows(values_only=True), 1):
+                names = [s(v) for v in row]
+                if "xyz" in names and ("root_id_curr" in names or "root_id_orig" in names):
+                    h = i
+                m[i] = h or i
+            hdr[x["tab"]] = m
+        return hdr[x["tab"]].get(x["row"], x["row"])
+
+    live = lambda x: re.search(r"_b\d{6}d$", x["tab"]) is None
+    every = {}
+    for x in rows:
+        c = cell_of(x)
+        if c and c != "0" and (x["tab"], x["row"]) not in self_keys and live(x):
+            every.setdefault(c, []).append(x)
+    at = {(x["tab"], x["row"]): x for x in rows}
+    why = "row numbers out: tracked_in names the cell's other tabs; row pointers cleared"
+    for x in rows:
+        if not live(x):
+            continue
+        tab, r = x["tab"], x["row"]
+        if "tracked_in" in x["cols"]:
+            old, c = s(val(x, "tracked_in")), cell_of(x)
+            if yellow(x) or not c or c == "0":
+                new = "; ".join(dict.fromkeys(re.sub(r"\s+(r|row )\d+\b", "", p).strip() for p in old.split(";") if p.strip()))
+            else:
+                h = header(x)
+                new = "; ".join(dict.fromkeys(
+                    (f"{y['tab']} ({s(val(y, 'hop'))})" if y["tab"] == tab and s(val(y, "hop")) else y["tab"])
+                    for y in every.get(c, []) if not (y["tab"] == tab and header(y) == h)))
+            if new != old:
+                B.put(tab, r, x["cols"]["tracked_in"], new, why)
+        if "notes" in x["cols"]:
+            old = s(val(x, "notes"))
+            if not old:
+                continue
+            keep, hit = [], False
+            for p in parts(old):
+                if ROW_POINTER.match(p):
+                    hit = True
+                    continue
+
+                def cell_at(m):
+                    y = at.get((tab, int(m[1])))
+                    root = (s(val(y, "root_id_curr")) or s(val(y, "root_id_orig"))) if y else ""
+                    return f"{root} is the cell" if root else m[0]
+                q = CELL_AT.sub(cell_at, p)
+                hit |= q != p
+                keep.append(q)
+            if hit:
+                B.put(tab, r, x["cols"]["notes"], "; ".join(keep), why)
+
+
 def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, latest_of=None, recount_out=None, log=print):
     """rows: scan_book rows of the tracking tabs (row numbers before any deletion); cell_of(x) -> live cell id or '';
     sizes: cell -> L2 chunks (cells not listed are never called whole); yellow(x) -> True for MISMATCH rows;
@@ -180,6 +249,7 @@ def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, latest_of=None,
             groups.setdefault(c, []).append(x)
     groups = {c: g for c, g in groups.items() if len(g) > 1}
     stats = dict(cells=len(groups), carried=0, collapsed_rows=0, self_rows=len(selfs))
+    no_row_numbers(wb, B, rows, cell_of, yellow, self_keys, val)
 
     # ---- one tracking per cell
     for c, g in groups.items():

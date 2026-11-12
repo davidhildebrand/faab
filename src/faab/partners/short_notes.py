@@ -4,8 +4,8 @@
 A notes cell is split into parts at ';' outside parentheses. A part's leading 'refine YYYY-MM-DD: ' is set aside, and
 the rest either matches a rule below (generated text: dropped, or replaced by a short form) or the whole part is kept
 as written. The PRs-tab flags that the PRs tool reads (prs_tab.ASIDE: OFF-BUNDLE, SECOND BUNDLE) are kept. References
-to another row's record ('duplicate target of <id>', 'merged into <id>') become row numbers through the `row_of`
-callback (root_id_orig -> 'r117' or 'PRg1hop1 r57'; None keeps the part)."""
+to another row's record: 'duplicate target of <id> (now <id>)' is dropped, 'merged into <id> (same cell <id>)' becomes
+'merged into <current id>' - never row numbers (David 2026-11-12: rows move). `row_of` is accepted and unused."""
 import re
 
 ID = r"\d{15,}"
@@ -50,9 +50,10 @@ SHORT = [  # (pattern, replacement): generated flags worth keeping, in a short f
     (r"T4/T5 candidate \(line (\w+); morphology negative-like.*\)", r"T4/T5 candidate (line \1; not T4/T5-like by morphology)"),
     (r"T4/T5 candidate \(line (\w+); morphology .*\)", r"T4/T5 candidate (line \1)"),
 ]
-REFS = [  # references to another row's record: (pattern, short form with {row})
-    (rf"duplicate target of ({ID}) \(now ({ID})\)", "duplicate of {row}"),
-    (rf"merged into ({ID}) \(same cell ({ID})\)", "merged into {row}"),
+REFS = [  # references to another row's record: (pattern, short form with {now} = the current root_id). Never row
+    # numbers (David 2026-11-12: rows move); a duplicate's NEW-DUP status and tracked_in already say it -> dropped
+    (rf"duplicate target of ({ID}) \(now ({ID})\)", ""),
+    (rf"merged into ({ID}) \(same cell ({ID})\)", "merged into {now}"),
 ]
 
 
@@ -81,8 +82,7 @@ def short_part(p, row_of):
     for rx, fmt in REFS:
         m = re.fullmatch(rx, rest)
         if m:
-            row = row_of(m.group(1))
-            return fmt.format(row=row) if row else p
+            return fmt.format(now=m.group(2))
     return p
 
 

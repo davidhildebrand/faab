@@ -9,11 +9,13 @@
                                   (same-block twins collapsed, self rows removed, one tracking per cell)
 Optional step after the fetch: --add-inputs (scripts/partners/target_inputs_block.py adds the 'more inputs' subtable
 to PRg1toT4T5 when the backup lacks it) or --add-in2 (scripts/partners/hop_in2_block.py: hop-in-1 / hop-in-2 blocks
-first, 2026-11-10); the later steps then run on its full workbook and the sync exports PRg1toT4T5. Point lookups share
+first, 2026-11-10); the later steps then run on its full workbook and the sync exports PRg1toT4T5. Then, on every
+update unless --no-t4t5-sort, scripts/partners/t4t5_sort.py (2026-11-12): T4T5-1 / T4T5-2 rows ordered by distance from
+the PR group 1 column, putative-LMC notes on T4T5-2 rows, the distance column far right. Point lookups share
 the supervoxel cache (faab.clients.cave.supervoxels_at_xyz), so only the first step reads new points. Each step's output
 goes to tmp/<stamp>_update_<step>.log; the summaries and the exports
 (figures/sheets/<stamp>_FAABopticlobetargets-<tab>.xlsx) are printed.
-Usage: update_book.py BACKUP.xlsx [--edits E.json] [--add-inputs | --add-in2]"""
+Usage: update_book.py BACKUP.xlsx [--edits E.json] [--add-inputs | --add-in2] [--no-t4t5-sort]"""
 import argparse
 import os
 import re
@@ -48,6 +50,7 @@ def main():
     ap.add_argument("--edits")
     ap.add_argument("--add-inputs", action="store_true")
     ap.add_argument("--add-in2", action="store_true")
+    ap.add_argument("--no-t4t5-sort", action="store_true", help="skip scripts/partners/t4t5_sort.py")
     ap.add_argument("--export", nargs="+", default=[], help="tabs the sync exports even when it changes nothing there")
     a = ap.parse_args()
     stamp = utc_stamp()
@@ -61,6 +64,10 @@ def main():
             out = run(script.split("_block")[0], [os.path.join(SCRIPTS, "partners", script), "--book", book], stamp)
             book = re.search(r"full workbook (\S+\.xlsx)", out).group(1)
             export = ["--export", *dict.fromkeys(a.export + ["PRg1toT4T5"])]
+    if not a.no_t4t5_sort:  # every update (David 2026-11-12): spatial order + putative-LMC notes of the T4T5 blocks
+        out = run("t4t5_sort", [os.path.join(SCRIPTS, "partners", "t4t5_sort.py"), "--book", book], stamp)
+        book = re.search(r"full workbook (\S+\.xlsx)", out).group(1)
+        export = ["--export", *dict.fromkeys(a.export + ["PRg1toT4T5"])]
     out = run("seatable_match", [os.path.join(HERE, "seatable_match.py"), book], stamp)
     match = re.search(r"written (\S+_seatable_match\.tsv)", out).group(1)
     out = run("cell_consistency", [os.path.join(HERE, "cell_consistency.py"), book], stamp)

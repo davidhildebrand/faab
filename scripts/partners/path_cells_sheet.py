@@ -234,7 +234,7 @@ def main():
                       seatable=("added" + (f" ({ft[now_of[c]][1]})" if now_of[c] in ft and ft[now_of[c]][1] else ""))
                       if (now_of[c] in ft or any(s(t["values"].get("SeaTable")).lower() == "added" for t in rows)) else "",
                       link=next((s(t["values"].get("link")) for t in ([best] if best else []) + rows if s(t["values"].get("link"))), ""),
-                      tracked_in="; ".join(f"{t['tab']} r{t['row']}" for t in rows))
+                      tracked_in="; ".join(dict.fromkeys(t["tab"] for t in rows)))  # tabs, never rows (2026-11-12)
 
     # ---- xyz: tracked rows keep theirs, others get a primary-neurite point, verified on the cell
     xyz = {}
