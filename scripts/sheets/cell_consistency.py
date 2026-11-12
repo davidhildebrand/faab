@@ -22,7 +22,14 @@ from faab.partners.sheet import cell_text as s, scan_book, utc_stamp
 
 FRAG = re.compile(r"fragment|chunk|short portion|small portion|small piece|piece of|portion of|part of another|"
                   r"belonging to|broken|orphan|split.?off", re.I)
+# computed remarks of the LMCs / T4T5s tabs (scripts/sheets/lmc_tab.py, t4t5_tab.py) say 'fragment' but are not a
+# proofreader's claim; sizing them would cost one get_l2_info call per cell on every update (thousands on T4T5s)
+COMPUTED = re.compile(r"no nucleus on this root \(cell body cut off, or a fragment\)", re.I)
 FIELDS = ("status", "pr_date", "proofreader", "chk_date", "checker", "notes", "SeaTable")
+
+
+def frag_note(text):
+    return bool(FRAG.search(COMPUTED.sub("", s(text))))
 _t = [0.0]
 
 
@@ -64,7 +71,7 @@ def main():
     for x in rows:
         if x["cell"] != "0":
             by.setdefault(x["cell"], []).append(x)
-    frag_cells = sorted({x["cell"] for x in rows if FRAG.search(s(x["values"].get("notes"))) and x["cell"] != "0"})
+    frag_cells = sorted({x["cell"] for x in rows if frag_note(x["values"].get("notes")) and x["cell"] != "0"})
     multi = {k: g for k, g in by.items() if len(g) > 1}
     print(f"{len(rows)} rows on {len(by)} cells; {len(multi)} cells have several rows; {len(frag_cells)} cells have a "
           f"fragment-like note; sizing those ({len(frag_cells)} get_l2_info calls, >= 5 s apart)", flush=True)
@@ -90,7 +97,7 @@ def main():
         for x in g:
             v = x["values"]
             out.append(dict(cell=cell, n_rows=len(g), length_um=L if not np.isnan(L) else "", l2_chunks=n2,
-                            frag_note=bool(FRAG.search(s(v.get("notes")))), differs=", ".join(differs),
+                            frag_note=frag_note(v.get("notes")), differs=", ".join(differs),
                             tab=x["tab"], row=x["row"], hop=s(v.get("hop")), root_id_orig=s(v.get("root_id_orig")),
                             root_id_curr=s(v.get("root_id_curr")), at_xyz=x["at"], xyz=s(v.get("xyz")),
                             **{f: s(v.get(f)) for f in FIELDS}))

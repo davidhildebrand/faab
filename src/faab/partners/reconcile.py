@@ -59,7 +59,11 @@ OWN = re.compile(r"^(xyz off the cell|census bundle|second bundle|off-bundle|mov
                  # notes are split at ';', so 'SeaTable says L3; the automatic typing says L2 ...' arrives in two parts
                  r"SeaTable says L[1-5]$|the automatic typing says|no nucleus on this root|several nuclei on this root|"
                  r"medulla part short or missing|features unlike the typed LMCs|left side: the automatic typing|"
-                 r"no point found on the cell|flagged as an LMC by David)", re.I)  # merge history is about the row's own root_id_orig
+                 r"no point found on the cell|flagged as an LMC by David|"
+                 # the T4T5s tab's remarks (scripts/sheets/t4t5_tab.py, 2026-11-12)
+                 r"about \d+ times the usual T4/T5 size|smaller than the usual T4/T5|only \d+% of its outputs in the "
+                 r"lobula plate|shape unlike the typed T4/T5|SeaTable says T[45]$|its inputs say T[45]$)",
+                 re.I)  # merge history is about the row's own root_id_orig
 STALE = re.compile(r"small chunk (of|connecte?d? to) a (big|larger) neuron|in between EM slices are broken|"
                    r"(tiny )?chunk connected to (a )?neuron|small fragment, belonging to a neuron|orphan (fragment|segment)\??",
                    re.I)

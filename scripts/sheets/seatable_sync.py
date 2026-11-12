@@ -63,7 +63,8 @@ HL = "FFFFF9C4"
 KEEP = ("checked", "proofread")
 STATUSES = ("checked", "proofread", "adequate", "review", "in progress", "stopped", "candidate")
 SPELL = {"stoppped": "stopped"}
-TABS = ("PRg1toT4T5", "PRs", "PRg1hop1", "PRg1hop2", "PRg2hop1", "Mi1s", "LMCs")  # LMCs: 2026-11-07, proofreaders work there
+TABS = ("PRg1toT4T5", "PRs", "PRg1hop1", "PRg1hop2", "PRg2hop1", "Mi1s", "LMCs",  # LMCs: 2026-11-07, proofreaders work there
+        "T4T5s")  # 2026-11-12, scripts/sheets/t4t5_tab.py
 
 
 def initials(name):
