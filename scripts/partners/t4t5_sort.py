@@ -18,8 +18,12 @@ Per cell: the median distance of its path synapses inside those four neuropils -
 the PR+3 targets; T4T5-2 cells: their synapses onto the T4T5-1 cells their row lists. Groups: up to 2, 2-3, 3-4, more
 than 4 columns apart, none in the optic lobe.
 
+On a photoreceptor path (David 2026-11-12, after the 'PRgroupAny' test: nearly every cell on a path from ANY PR to the
+19 targets is in these blocks already): T4T5-2 cell that gets >= 3 synapses from a PR on the PRs tab (any group or
+status), T4T5-1 cell that gets >= 3 from a cell that gets >= 3 from a PR. Such rows go first, column A light blue.
 Writes, in the T4T5-1 / T4T5-2 blocks and their LOW PRIORITY blocks:
-  - row order: (T4T5-2 blocks) putative LMCs first, then by distance group, the old order inside each group; rows move
+  - row order: rows on a photoreceptor path first, then (T4T5-2 blocks) putative LMCs, then the rest; inside each of
+    those by distance group, the old order inside each group; rows move
     with their values, styles, links and heights; any 'rN' reference left in notes follows (renumber_refs);
   - notes (T4T5-2 rows whose live cell is on the LMCs tab): 'putative L3 (high confidence)' / '(medium confidence)' /
     '(low confidence)' / 'putative L3 (annotated)' / 'L3 (confirmed)' / 'putative LMC, type unclear (low
@@ -43,6 +47,7 @@ import numpy as np
 import openpyxl
 import pandas as pd
 import trimesh
+from openpyxl.styles import PatternFill
 from scipy.spatial import cKDTree
 
 from faab import ol_meshes, synsnap
@@ -74,6 +79,14 @@ NOTE_DIST = ("note: distance from PR group 1 column (far-right column, 2026-11-1
              "there, across the layers - in columns (medulla 5.5 um, the spacing of neighboring R7 terminals; the other "
              "neuropils scaled to the same number of columns). Blank = no such synapses in the right optic lobe. "
              "'putative L# (... confidence)' notes on T4T5-2 rows = the cell's call on the LMCs tab.")
+PATH_THR = 3  # synapses per connection, as for PR group 1's paths
+PATH_FILL = "FFCCE8F8"  # light tint of Okabe-Ito sky blue (#56B4E9); column A of rows on a photoreceptor path
+PATH_TXT1 = ("rows on a photoreceptor path first (column A light blue: any PR -> a cell -> this cell -> T4/T5 candidate, "
+             ">= 3 synapses each), ")
+PATH_TXT2 = ("rows on a photoreceptor path first (column A light blue: any PR -> this cell -> a T4T5-1 cell -> T4/T5 "
+             "candidate, >= 3 synapses each), ")
+NOTE_PATH = (" Column A light blue = the cell is on a 3-connection path from a photoreceptor of ANY group on the PRs tab "
+             "(proofread or not) to the T4/T5 candidates, >= 3 synapses per connection (live synapses of each update).")
 TRACKED_OLD = "tracked_in lists those rows."
 TRACKED_NEW = "tracked_in names the cell's other tabs (no row numbers: rows move)."
 
@@ -129,6 +142,23 @@ def lmc_calls(wb):
     return out
 
 
+def pr_roots(wb):
+    """root_id_curr (or root_id_orig) of every row of the PRs tab (any group, any status)"""
+    out, cols = set(), None
+    for row in wb["PRs"].iter_rows(values_only=True):
+        v = [s(x) for x in row]
+        if "xyz" in v and ("root_id_curr" in v or "root_id_orig" in v):
+            cols = {n: i for i, n in enumerate(v) if n}
+            continue
+        if cols is None:
+            continue
+        r = v[cols["root_id_curr"]] if "root_id_curr" in cols and cols["root_id_curr"] < len(v) else ""
+        r = r or (v[cols["root_id_orig"]] if "root_id_orig" in cols and cols["root_id_orig"] < len(v) else "")
+        if IDS.fullmatch(r):
+            out.add(r)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--book", required=True)
@@ -172,13 +202,14 @@ def main():
     lmc = lmc_calls(wb)
     prs = pd.read_csv(os.path.join(DATA, "pr_groups.tsv"), sep="\t", dtype=str)
     g1 = sorted(set(prs[prs.group == "1"].root_id_curr))
+    pr_all = pr_roots(wb)  # every photoreceptor on the PRs tab (any group, any status)
     print(f"{a.tab}: {len(cell_rows)} rows in {len(sort_blocks)} blocks to order; path cells "
           f"{ {k: len(v) for k, v in path_ids.items()} }; PR group 1 {len(g1)}; LMCs tab calls {len(lmc)}", flush=True)
 
     # ---- live roots of every id involved (one is_latest call, then throttled get_latest_roots)
     c = cave_client()
     every = sorted({x["root"] for x in cell_rows if IDS.fullmatch(x["root"])} | {f for x in cell_rows for f in x["fed"]}
-                   | set().union(*path_ids.values()) | set(g1) | set(lmc))
+                   | set().union(*path_ids.values()) | set(g1) | set(lmc) | pr_all)
     ok = np.concatenate([np.asarray(c.chunkedgraph.is_latest_roots([int(x) for x in every[i:i + 5000]])).astype(bool)
                          for i in range(0, len(every), 5000)])
     last = time.time()
@@ -220,6 +251,16 @@ def main():
     tout = syn(path_ids["hop3"], None, side="pre")
     p1 = syn(t1, path_ids["hop3"])
     p2 = syn(t2, fed_all)
+    # on a path from ANY photoreceptor (David 2026-11-12, 'PRgroupAny'): T4T5-2 cell = gets >= THR from a PR (and feeds
+    # a T4T5-1 cell, which feeds a target: the block's rule); T4T5-1 cell = gets >= THR from a cell that gets >= THR
+    # from a PR. Same 3-connection paths as PR group 1's, from every PR on the PRs tab.
+    PR = now(pr_all)
+    e_pr = snap.edges(pre=PR, when="now", client=c, min_syn=PATH_THR)
+    pr_fed = set(e_pr.post) - set(PR)
+    e_x = snap.edges(pre=sorted(pr_fed), post=now(t1), when="now", client=c, min_syn=PATH_THR) if pr_fed else e_pr.iloc[:0]
+    t1_on = set(e_x.post)
+    print(f"photoreceptor paths: {len(PR)} PRs feed {len(pr_fed)} cells (>= {PATH_THR}); {len(t1_on)} T4T5-1 cells "
+          f"are fed by those", flush=True)
 
     # ---- the home-column lines
     X = ["x", "y", "z"]
@@ -263,6 +304,7 @@ def main():
         dd = g.d.dropna()
         x["dist"] = float(np.median(dd)) if len(dd) else np.nan
         x["grp"] = next((i for i, (hi, _) in enumerate(GROUPS) if x["dist"] <= hi), len(GROUPS))
+        x["on_path"] = bool(set(mine) & (t1_on if x["b"]["kind"] in ("in1", "low_in1") else pr_fed))
         x["lmc"] = ""
         if x["b"]["kind"] in ("in2", "low_in2"):
             parts = {lmc_now[y] for y in cur.get(x["root"], []) if y in lmc_now}
@@ -272,7 +314,18 @@ def main():
                              by_neuropil="; ".join(f"{k} {v}" for k, v in g.np.value_counts().items()),
                              distance_columns=round(x["dist"], 2) if len(dd) else "",
                              group=GROUPS[x["grp"]][1] if x["grp"] < len(GROUPS) else "none in the optic lobe",
-                             lmc_note=x["lmc"]))
+                             on_photoreceptor_path=x["on_path"], lmc_note=x["lmc"]))
+
+    # ---- column A light blue on rows on a photoreceptor path (an earlier such fill goes when a row is not any more)
+    for x in cell_rows:
+        cell = ws.cell(x["row"], 1)
+        has = cell.fill is not None and cell.fill.fill_type == "solid" and cell.fill.fgColor.rgb == PATH_FILL
+        if x["on_path"] and not has:
+            cell.fill = PatternFill("solid", fgColor=PATH_FILL)
+            B.log.append(dict(tab=a.tab, row=x["row"], column="hop", old="", new="light blue", why="on a photoreceptor path"))
+        elif has and not x["on_path"]:
+            cell.fill = PatternFill(fill_type=None)
+            B.log.append(dict(tab=a.tab, row=x["row"], column="hop", old="light blue", new="", why="not on a photoreceptor path"))
 
     # ---- notes: the LMC part (replaces an earlier one; skipped when the row's annotation names another type)
     conflicts, n_note = [], 0
@@ -331,7 +384,8 @@ def main():
         h, cols, data = info[id(b)]
         xs = [x for x in cell_rows if x["b"] is b]
         lmc_first = b["kind"] in ("in2", "low_in2")
-        order = sorted(range(len(xs)), key=lambda i: ((0 if (lmc_first and xs[i]["lmc"]) else 1), xs[i]["grp"], i))
+        tier = lambda x: 0 if x["on_path"] else (1 if (lmc_first and x["lmc"]) else 2)
+        order = sorted(range(len(xs)), key=lambda i: (tier(xs[i]), xs[i]["grp"], i))
         snap_rows = {x["row"]: [(ws.cell(x["row"], j).value, copy.copy(ws.cell(x["row"], j)._style),
                                  copy.copy(ws.cell(x["row"], j).hyperlink) if ws.cell(x["row"], j).hyperlink else None)
                                 for j in range(1, width + 1)] for x in xs}
@@ -355,7 +409,8 @@ def main():
         m = re.search(r"; order: .*?; within each group (.*)$", t)
         old_clause = m.group(1) if m else (re.search(r"; (most [^;]*)$", t).group(1) if re.search(r"; (most [^;]*)$", t) else "as before")
         base = t[:m.start()] if m else (t[:t.rfind("; most")] if re.search(r"; (most [^;]*)$", t) else t)
-        clause = ORDER_TXT.format(lmc="putative LMCs (notes) first, then " if lmc_first else "", dist=DIST, old=old_clause)
+        first = (PATH_TXT2 + "then putative LMCs (notes), then ") if lmc_first else (PATH_TXT1 + "then ")
+        clause = ORDER_TXT.format(lmc=first, dist=DIST, old=old_clause)
         B.put(a.tab, b["first"], 1, f"{base}; {clause}", "block title: row order")
     if new_of:
         renumber_refs(wb, B, {a.tab: new_of}, why="rows moved (T4T5 order)")
@@ -371,12 +426,12 @@ def main():
             if TRACKED_OLD in t:
                 B.put(a.tab, r, 1, t.replace(TRACKED_OLD, TRACKED_NEW), "note: tracked_in wording")
         if hit:
-            B.put(a.tab, hit, 1, NOTE_DIST, "note: distance column")
+            B.put(a.tab, hit, 1, NOTE_DIST + NOTE_PATH, "note: distance column")
         else:
             r = nb["last"] + 1
             if any(s(ws.cell(r, j).value) for j in range(1, width + 1)):
                 ws.insert_rows(r)
-            ws.cell(r, 1).value = NOTE_DIST
+            ws.cell(r, 1).value = NOTE_DIST + NOTE_PATH
             ws.cell(r, 1)._style = copy.copy(ws.cell(nb["last"], 1)._style)
             B.log.append(dict(tab=a.tab, row=r, column="notes row", old="", new=NOTE_DIST[:60], why="note: distance column"))
 
@@ -388,6 +443,8 @@ def main():
     t.to_csv(out, sep="\t", index=False)
     pd.DataFrame(B.log).to_csv(fig(f"{stamp}_t4t5_sort_changes.tsv"), sep="\t", index=False)
     print(f"\ncells per block and distance group:\n{pd.crosstab(t.block, t.group).to_string()}")
+    print(f"on a photoreceptor path (first, column A light blue): {t[t.on_photoreceptor_path].block.value_counts().to_dict()}; "
+          f"of them putative LMCs {int((t.on_photoreceptor_path & (t.lmc_note != '')).sum())}")
     tt = t[t.distance_columns != ""]
     for blk, g in tt.groupby("block"):
         v = g.distance_columns.astype(float)
