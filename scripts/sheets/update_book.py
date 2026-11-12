@@ -67,7 +67,7 @@ def main():
     if not a.no_t4t5_sort:  # every update (David 2026-11-12): spatial order + putative-LMC notes of the T4T5 blocks
         out = run("t4t5_sort", [os.path.join(SCRIPTS, "partners", "t4t5_sort.py"), "--book", book], stamp)
         book = re.search(r"full workbook (\S+\.xlsx)", out).group(1)
-        export = ["--export", *dict.fromkeys(a.export + ["PRg1toT4T5"])]
+        export = ["--export", *dict.fromkeys(a.export + ["PRg1toT4T5", "PRs"])]  # the sort marks PR groups too
     out = run("seatable_match", [os.path.join(HERE, "seatable_match.py"), book], stamp)
     match = re.search(r"written (\S+_seatable_match\.tsv)", out).group(1)
     out = run("cell_consistency", [os.path.join(HERE, "cell_consistency.py"), book], stamp)
