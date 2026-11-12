@@ -16,12 +16,11 @@ Steps:
                                       throttled call each; cache figures/t4t5/t4t5_tab_dotprops.pkl, which also takes
                                       the entries of type_copies_dotprops.pkl) + nuclei (nuclei_v1_aedes, filtered)
   knn POOL.tsv                        network-free shape check -> figures/t4t5/<stamp>_t4t5_tab_knn.tsv
-  build POOL KNN SEATABLE BOOK        points on the cells = one of their own synapse sites (the snapshot stores the
-                                      supervoxel there; nearest the nucleus when there is one, else the dendrite
-                                      middle), seeded into the shared tmp/sv_at_xyz.json cache, roots now by batched
-                                      get_roots (no segmentation reads: a 3,000-chunk cloudvolume lookup hung for an
-                                      hour on 2026-11-12), SeaTable / sheet status, confidence, one Spelunker link per
-                                      block (two state uploads) -> figures/t4t5/<stamp>_t4t5_tab.tsv
+  points POOL.tsv                     CAVE read-only, resumable: xyz on the primary neurite ~10 um from the nucleus, else
+                                      the middle of the longest backbone - never on a synapse (David 2026-11-12) -
+                                      from L2 skeletons, each checked to be on the cell -> figures/t4t5/t4t5_tab_points.tsv
+  build POOL KNN SEATABLE BOOK        rows: those points and roots, SeaTable / sheet status, confidence, one Spelunker
+                                      link per block (two state uploads) -> figures/t4t5/<stamp>_t4t5_tab.tsv
   xlsx BOOK TSV                       one-tab .xlsx in the look of BOOK's PRg1hop1 tab ->
                                       figures/sheets/<stamp>_FAABopticlobetargets-T4T5s.xlsx (Insert new sheet)
 Blocks 'putative T4' and 'putative T5' (columns of the LMCs tab, scripts/sheets/lmc_tab.py, + tracked_in far right);
@@ -236,45 +235,118 @@ SHEET_TABS = ("PRg1toT4T5", "PRs", "PRg1hop1", "PRg1hop2", "PRg2hop1", "Mi1s", "
 TAB = "T4T5s"
 
 
-def synapse_points(roots, tag, nuc):
-    """{root: (xyz text, supervoxel)}: a point on each cell that needs no segmentation lookup - one of its own synapse
-    sites, whose supervoxel the snapshot stores (the synapse table's pre/post supervoxel is the one AT that point).
-    With a nucleus: the site nearest it (toward the cell body); else the input site nearest the median of the inputs
-    (dendrite), else the output site nearest the median of the outputs."""
-    from faab import synsnap
-    snap = synsnap.Snapshot(log=lambda *_: None)
-    ids = [int(r) for r in roots]
-    ins = snap.synapses(post=ids, when=tag, positions=True)
-    outs = snap.synapses(pre=ids, when=tag, positions=True)
-    ins = ins[ins.pre_root != ins.post_root]
-    outs = outs[outs.pre_root != outs.post_root]
-    sites = pd.concat([
-        pd.DataFrame({"root": ins.post_root, "x": ins.post_x, "y": ins.post_y, "z": ins.post_z, "sv": ins.post_sv, "io": "in"}),
-        pd.DataFrame({"root": outs.pre_root, "x": outs.pre_x, "y": outs.pre_y, "z": outs.pre_z, "sv": outs.pre_sv, "io": "out"})])
-    sites = sites[sites.sv > 0]
-    out = {}
-    for r, g in sites.groupby("root"):
-        c = nuc.get(str(r))
-        if c is None and (g.io == "in").any():
-            g = g[g.io == "in"]
-        P = g[["x", "y", "z"]].to_numpy(float)
-        target = c if c is not None else np.median(P * VOXNM, axis=0)
-        i = int(np.argmin(np.linalg.norm(P * VOXNM - target, axis=1)))
-        x, y, z = (int(v) for v in P[i])
-        out[str(r)] = (f"{x}, {y}, {z}", int(g.sv.iloc[i]))
-    return out
+SKELS = fig("t4t5_tab_skels.pkl")
+POINTS_TSV = fig("t4t5_tab_points.tsv")
+SK_BATCH = 40
 
 
-def seed_sv_cache(points):
-    """add (xyz text -> supervoxel) to the shared lookup cache of faab.clients.cave.supervoxels_at_xyz (supervoxels
-    never change), so later root-at-xyz lookups of these rows need no segmentation read"""
-    from faab.clients.cave import SV_CACHE, parse_xyz
-    cache = json.load(open(SV_CACHE)) if os.path.exists(SV_CACHE) else {}
-    for xyz, sv in points.values():
-        cache[",".join(f"{float(v):g}" for v in parse_xyz(xyz))] = int(sv)
-    tmp = SV_CACHE + ".tmp"
-    json.dump(cache, open(tmp, "w"))
-    os.replace(tmp, SV_CACHE)
+def nuclei_nm():
+    N = pd.read_csv(NUCLEI, sep="\t", dtype={"pt_root_id": str})
+    g = N.groupby("pt_root_id").xyz_nm.agg(list).to_dict()
+    return {r: [np.array(json.loads(v) if isinstance(v, str) else v, float) for v in vs] for r, vs in g.items()}
+
+
+def trunk_nodes(sk, soma_nm=None):
+    """skeleton nodes (nm) in the order to try: the recipe's point first (faab.partners.top10_xyz - on the primary
+    neurite ~10 um from the nucleus, else the middle of the longest backbone), then its neighbors along the skeleton
+    (nearest first) as fall-backs when a point fails its check"""
+    from faab.partners.top10_xyz import backbone_midpoint_nm, primary_neurite_point_nm
+    pt, how = None, ""
+    if soma_nm is not None and sk.n_nodes >= 5:
+        pt, geo = primary_neurite_point_nm(sk, soma_nm)
+        if pt is not None:
+            how = f"primary neurite ~{geo:.0f} um from the nucleus"
+    if pt is None:
+        pt = backbone_midpoint_nm(sk)
+        how = "middle of the longest backbone" + (" (trunk too short)" if soma_nm is not None else " (no nucleus)")
+    xyz = sk.nodes[["x", "y", "z"]].to_numpy(float)
+    order = np.argsort(np.linalg.norm(xyz - pt, axis=1))
+    return [xyz[i] for i in order[:6]], how
+
+
+def vox_text(p_nm):
+    v = np.round(np.asarray(p_nm, float) / VOXNM).astype(int)
+    return f"{v[0]}, {v[1]}, {v[2]}"
+
+
+def cmd_points(a):
+    """CAVE read-only, resumable. Points for the rows, never on synapses (David 2026-11-12: on the primary neurite or
+    on mito-free cytosol on the backbone): L2 skeletons (batches of SK_BATCH roots, one throttled call each; cache
+    SKELS), then trunk_nodes(). A skeleton node is an L2 chunk's representative coordinate, which lies inside the
+    cell's own segment - so not in a separately segmented mitochondrion (this datastack has no mitochondria layer
+    to test against). Check: the supervoxel at the point (faab.clients.cave.supervoxels_at_xyz, kept in its shared
+    cache, read in parts) and its root now (get_roots, batched) must be the cell; else the next node is tried.
+    Writes POINTS_TSV (root, xyz, how, root_now, ok)."""
+    from fafbseg import flywire
+    from faab.clients.cave import DATASTACK, client as cave_client, supervoxels_at_xyz, throttle
+    P = pd.read_csv(a.pool, sep="\t", dtype={"root": str})
+    roots = list(dict.fromkeys(P.root))
+    sk = pickle.load(open(SKELS, "rb")) if os.path.exists(SKELS) else {}
+    todo = [r for r in roots if r not in sk]
+    print(f"skeletons cached {len(roots) - len(todo)}; to fetch {len(todo)} in batches of {SK_BATCH}", flush=True)
+    t0, t = time.time(), 0.0
+    for b in range(0, len(todo), SK_BATCH):
+        ids = todo[b:b + SK_BATCH]
+        t = throttle(t)
+        try:
+            for s_ in flywire.get_l2_skeleton([int(r) for r in ids], dataset=DATASTACK, max_threads=1, omit_failures=True,
+                                              progress=False):
+                sk[str(s_.id)] = s_
+        except Exception as e:
+            print(f"  batch {b} failed: {str(e)[:100]}", flush=True)
+        t = time.time()
+        for r in ids:
+            sk.setdefault(r, None)  # None = no skeleton (single L2 chunk, or failed): the dotprops point is used
+        pickle.dump(sk, open(SKELS, "wb"))
+        if (b // SK_BATCH) % 10 == 0 or b + SK_BATCH >= len(todo):
+            print(f"  skeletons {min(b + SK_BATCH, len(todo))}/{len(todo)} at {time.time() - t0:.0f} s", flush=True)
+    nuc = nuclei_nm()
+    dps = pickle.load(open(CACHE, "rb"))
+    cand, how = {}, {}
+    for r in roots:
+        s_ = sk.get(r)
+        ns = nuc.get(r)
+        if s_ is not None and s_.n_nodes >= 2:
+            cand[r], how[r] = trunk_nodes(s_, ns[0] if ns else None)
+        elif r in dps:  # one L2 chunk: its representative coordinate
+            p = np.asarray(dps[r].points, float) * 1000.0
+            cand[r] = [p[i] for i in np.argsort(np.linalg.norm(p - p.mean(0), axis=1))[:6]]
+            how[r] = "small piece: an L2 chunk's representative coordinate"
+    # check: point -> supervoxel -> root now == the cell (the pool root, or its successor if the cell was edited)
+    c = cave_client()
+    t = throttle(t)
+    latest = dict(zip(roots, np.asarray(c.chunkedgraph.is_latest_roots([int(r) for r in roots])).astype(bool)))
+    t = time.time()
+    succ = {}
+    for r in [r for r in roots if not latest[r]]:  # edited since the checkpoint: its current pieces
+        t = throttle(t)
+        succ[r] = {str(int(x)) for x in np.atleast_1d(c.chunkedgraph.get_latest_roots(int(r)))}
+        t = time.time()
+    done, out = set(), {}
+    for k in range(6):
+        trial = {r: vox_text(cand[r][k]) for r in cand if r not in done and k < len(cand[r])}
+        if not trial:
+            break
+        sv = dict(zip(trial, supervoxels_at_xyz(list(trial.values()))))
+        keys = [r for r in trial if sv[r]]
+        now = {}
+        for b in range(0, len(keys), 1000):
+            t = throttle(t)
+            now.update(zip(keys[b:b + 1000], (str(int(x)) for x in c.chunkedgraph.get_roots([sv[r] for r in keys[b:b + 1000]]))))
+            t = time.time()
+        for r, x in trial.items():
+            rn = now.get(r, "0")
+            ok = rn == r or rn in succ.get(r, ())  # an edited cell: one of its current pieces
+            if ok or k == len(cand[r]) - 1:
+                out[r] = dict(root=r, xyz=x, how=how[r] + ("" if k == 0 else f" (node {k + 1}: the first ones were "
+                                                                            "not on the cell)"), root_now=rn, ok=ok)
+                done.add(r)
+        print(f"  check pass {k + 1}: {len(trial)} points, on the cell {sum(out[r]['ok'] for r in trial if r in out)}",
+              flush=True)
+    O = pd.DataFrame(out.values())
+    O.to_csv(POINTS_TSV, sep="\t", index=False)
+    print(f"points {len(O)} of {len(roots)}; on the cell {int(O.ok.sum())}; how:\n{O.how.str.replace(r' ~\d+ um', ' ~N um', regex=True).value_counts().to_string()}"
+          f"\nwritten {POINTS_TSV}", flush=True)
 
 
 def sheet_rows(book):
@@ -296,13 +368,11 @@ def sheet_rows(book):
 def cmd_build(a):
     import datetime
     import re
-    from faab.clients.cave import client as cave_client, throttle
     stamp = utc_stamp()
     P = pd.read_csv(a.pool, sep="\t", dtype={"root": str})
     K_ = pd.read_csv(a.knn, sep="\t", dtype={"root": str})
     T = P.merge(K_, on="root", how="left")
-    N = pd.read_csv(NUCLEI, sep="\t", dtype={"pt_root_id": str})
-    nuc = N.groupby("pt_root_id").xyz_nm.agg(list).to_dict()
+    nuc = nuclei_nm()
     st = pd.read_csv(a.seatable, sep="\t", dtype=str).fillna("")
     st = st[st.root_now.str.fullmatch(r"\d{15,}")].drop_duplicates("root_now").set_index("root_now")
     from faab.partners.sheet import seatable_label
@@ -312,21 +382,12 @@ def cmd_build(a):
     lo_in, hi_in = core.n_in.quantile(0.05), core.n_in.quantile(0.95)
     print(f"typical T4/T5 (rule + shape 6-7 of 7, {len(core)} cells): outputs {lo_out:.0f}-{hi_out:.0f}, inputs "
           f"{lo_in:.0f}-{hi_in:.0f} (5-95%)", flush=True)
-    # points on the cells' own synapse sites (supervoxel known) and their roots now: get_roots in batches, throttled
-    nuc1 = {r: np.array(json.loads(v[0]) if isinstance(v[0], str) else v[0], float) for r, v in nuc.items()}
-    tag = str(T.checkpoint.dropna().iloc[0])
-    pts = synapse_points(list(T.root), tag, nuc1)
-    seed_sv_cache(pts)
-    xyz = {r: p[0] for r, p in pts.items()}
-    c, t = cave_client(), 0.0
-    keys = list(pts)
-    root_now = {}
-    for b in range(0, len(keys), 1000):
-        t = throttle(t)
-        rr = c.chunkedgraph.get_roots([pts[k][1] for k in keys[b:b + 1000]])
-        t = time.time()
-        root_now.update({k: str(int(v)) for k, v in zip(keys[b:b + 1000], rr)})
-    print(f"points on {len(pts)} of {len(T)} cells (synapse sites, cache seeded); roots changed since {tag}: "
+    # points from the points step (primary neurite / backbone, checked on the cell) and their roots now
+    O = pd.read_csv(POINTS_TSV, sep="\t", dtype={"root": str, "root_now": str})
+    O = O[O.ok.astype(str) == "True"]
+    xyz = dict(zip(O.root, O.xyz))
+    root_now = dict(zip(O.root, O.root_now))
+    print(f"points on {len(O)} of {len(T)} cells; roots changed since the checkpoint: "
           f"{sum(root_now[k] != k for k in root_now)}", flush=True)
     SR = sheet_rows(a.book)
     recs = []
@@ -338,10 +399,10 @@ def cmd_build(a):
         label = seatable_label(s_) if s_ is not None else ""
         typed = bool(re.search(r"\bT4|\bT5", label))
         notes, why = [], []
-        nn = len(nuc.get(r, []))
-        if nn == 0:
-            notes.append("no nucleus on this root (cell body cut off, or a fragment)")
-        elif nn > 1:
+        if r not in xyz:
+            notes.append("no point found on the cell")
+        nn = len(nuc.get(r, []))  # no 'no nucleus' note (David 2026-11-12: drop it on T4T5s and LMCs)
+        if nn > 1:
             notes.append("several nuclei on this root: merge?")
         big = max((x.n_out or 0) / hi_out, (x.n_in or 0) / hi_in) if pd.notna(x.n_out) else 0
         small = pd.notna(x.n_out) and (x.n_out < lo_out / 2 or x.n_in < lo_in / 2)
@@ -518,6 +579,8 @@ def main():
     p = sub.add_parser("knn")
     p.add_argument("pool")
     p.add_argument("--cores", type=int, default=6)
+    p = sub.add_parser("points")
+    p.add_argument("pool")
     p = sub.add_parser("build")
     p.add_argument("pool")
     p.add_argument("knn")
@@ -527,7 +590,8 @@ def main():
     p.add_argument("book")
     p.add_argument("tsv")
     a = ap.parse_args()
-    {"pool": cmd_pool, "fetch": cmd_fetch, "knn": cmd_knn, "build": cmd_build, "xlsx": cmd_xlsx}[a.cmd](a)
+    {"pool": cmd_pool, "fetch": cmd_fetch, "knn": cmd_knn, "points": cmd_points, "build": cmd_build,
+     "xlsx": cmd_xlsx}[a.cmd](a)
 
 
 if __name__ == "__main__":

@@ -56,6 +56,7 @@ def parse_xyz(s):
 
 
 SV_CACHE = os.path.join(TMP, "sv_at_xyz.json")
+SV_PART = 200
 
 
 def supervoxels_at_xyz(points, datastack=DATASTACK):
@@ -67,13 +68,18 @@ def supervoxels_at_xyz(points, datastack=DATASTACK):
     keys = [",".join(f"{float(x):g}" for x in v) if v is not None else None for v in vox]
     cache = json.load(open(SV_CACHE)) if os.path.exists(SV_CACHE) else {}
     new = sorted({k for k in keys if k is not None and k not in cache})
-    if new:
-        found = flywire.locs_to_supervoxels(np.array([[float(x) for x in k.split(",")] for k in new]) * np.array(VOX),
+    # in parts of SV_PART points, each saved at once: a long read can hang (2026-11-12, ~3,000 points), and a rerun
+    # then only reads what is still missing
+    for b in range(0, len(new), SV_PART):
+        part = new[b:b + SV_PART]
+        found = flywire.locs_to_supervoxels(np.array([[float(x) for x in k.split(",")] for k in part]) * np.array(VOX),
                                             coordinates="nm", backend="cloudvolume", dataset=datastack)
-        cache.update({k: int(sv) for k, sv in zip(new, np.asarray(found).astype(np.int64))})
+        cache.update({k: int(sv) for k, sv in zip(part, np.asarray(found).astype(np.int64))})
         tmp = SV_CACHE + ".tmp"
         json.dump(cache, open(tmp, "w"))
         os.replace(tmp, SV_CACHE)
+        if len(new) > SV_PART:
+            print(f"  supervoxels at points: {min(b + SV_PART, len(new))}/{len(new)} read", flush=True)
     return [cache[k] if k is not None else 0 for k in keys]
 
 

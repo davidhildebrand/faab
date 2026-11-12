@@ -103,6 +103,8 @@ th{color:var(--ink2);font-weight:600}
 <div class="row" id="tiles"></div>
 <div class="row"><label for="tz">Time zone</label><select id="tz"></select>
 <span class="note" style="margin:0">Edit times are stored in UTC. Pick the proofreader's own offset to see their local day.</span></div>
+<div class="row"><label for="gap">Session window</label><select id="gap"></select>
+<span class="note" style="margin:0">Edits closer together than this count as one stretch of work; a longer pause ends the session and is not counted.</span></div>
 <div class="card"><h2>Every day: when the sessions were</h2>
 <p class="note">One row per calendar day (weekends shaded). Bars = editing sessions across the 24 hours. Right: that day's hours, and each week's total.</p>
 <svg id="days"></svg></div>
@@ -146,14 +148,25 @@ function hover(node, lines) {
   node.addEventListener("pointerleave", hideTip);
 }
 
-// sessions (absolute ms), as user_activity_ops.py: a gap > D.gap minutes starts a new session; + D.pad minutes
-const S = [];
-{ let a = D.ops[0], b = D.ops[0], n = 1;
+// sessions (absolute ms), as user_activity_ops.py: a gap > gap minutes starts a new session; + D.pad minutes
+function sessions(gap) {
+  const S = [];
+  let a = D.ops[0], b = D.ops[0], n = 1;
   for (let i = 1; i < D.ops.length; i++) {
-    if (D.ops[i] - b > D.gap * MIN) { S.push({ a, b: b + D.pad * MIN, n }); a = b = D.ops[i]; n = 1; }
+    if (D.ops[i] - b > gap * MIN) { S.push({ a, b: b + D.pad * MIN, n }); a = b = D.ops[i]; n = 1; }
     else { b = D.ops[i]; n++; }
   }
-  S.push({ a, b: b + D.pad * MIN, n }); }
+  S.push({ a, b: b + D.pad * MIN, n });
+  return S;
+}
+const gapSel = document.getElementById("gap");
+[5, 10, 15, 20, 30, 45, 60, 90, 120].forEach(g => {
+  const op = document.createElement("option");
+  op.value = g; op.textContent = g + " min" + (g === 30 ? " (report default)" : "");
+  if (g === D.gap) op.selected = true;
+  gapSel.appendChild(op);
+});
+gapSel.addEventListener("change", render);
 
 const tzSel = document.getElementById("tz");
 for (let o = -12; o <= 14; o += 0.5) {
@@ -168,6 +181,8 @@ tzSel.addEventListener("change", render);
 
 function render() {
   const tz = parseFloat(tzSel.value) * H;
+  const gap = parseFloat(gapSel.value);
+  const S = sessions(gap);
   const L = ms => ms + tz;                       // local clock as a UTC-read ms value
   const day0 = ms => Math.floor(L(ms) / DAY) * DAY; // local midnight (local ms)
   const firstDay = day0(D.ops[0]);
@@ -206,7 +221,7 @@ function render() {
 
   document.getElementById("h1").textContent = D.name + ": editing time";
   document.getElementById("sub").textContent = `${D.ops.length.toLocaleString()} CAVE edits from ${dayLabel(L(D.ops[0]))} to ${dayLabel(L(D.ops[D.ops.length - 1]))}, 2026. ` +
-    `Time counts editing sessions only: edits less than ${D.gap} minutes apart form one session, timed from the first to the last edit plus ${D.pad} minutes. ` +
+    `Time counts editing sessions only: edits less than ${gap} minutes apart form one session, timed from the first to the last edit plus ${D.pad} minutes. ` +
     `Looking at cells without editing is not counted, so these hours are a lower bound.`;
   const tiles = document.getElementById("tiles"); tiles.replaceChildren();
   [[fmtH(total / nWeeks), `per week (${nWeeks} weeks)`], [fmtH(total), "in total"], [String(active), "days with edits"],

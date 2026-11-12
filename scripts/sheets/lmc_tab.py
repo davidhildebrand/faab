@@ -275,9 +275,7 @@ def cmd_build(a):
         src = C if r in C.index else L5 if r in L5.index else None
         if src is not None and e["confidence"] != "annotated":
             x = src.loc[r]
-            if x.soma_by == "":
-                e["notes"].append("no nucleus on this root (cell body cut off, or a fragment)")
-            elif x.soma_by == "merge?":
+            if x.soma_by == "merge?":  # no 'no nucleus on this root' remark (David 2026-11-12)
                 e["notes"].append("several nuclei on this root: merge?")
             if src is C and not bool(x.complete):
                 e["notes"].append("medulla part short or missing: proofread before typing")
