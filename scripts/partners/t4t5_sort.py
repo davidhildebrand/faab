@@ -252,14 +252,20 @@ def main():
     ok = np.concatenate([np.asarray(c.chunkedgraph.is_latest_roots([int(x) for x in every[i:i + 5000]])).astype(bool)
                          for i in range(0, len(every), 5000)])
     last = time.time()
-    cur = {}
+    cur, bad = {}, []
     for x, good in zip(every, ok):
         if good:
             cur[x] = [int(x)]
         else:
             last = throttle(last)
-            cur[x] = [int(y) for y in np.atleast_1d(c.chunkedgraph.get_latest_roots(int(x)))]
+            try:
+                cur[x] = [int(y) for y in np.atleast_1d(c.chunkedgraph.get_latest_roots(int(x)))]
+            except ValueError:  # no creation time: not a root id of this datastack (a typo in the sheet?)
+                cur[x] = []
+                bad.append(x)
     print(f"{len(every)} ids, {int((~ok).sum())} stale -> current pieces", flush=True)
+    if bad:
+        print(f"  not a root id (no creation time; typo?), left out of the sort: {', '.join(bad)}", flush=True)
     now = lambda ids: sorted({y for x in ids for y in cur.get(str(x), [])})
     lmc_now = {}
     for k, part in lmc.items():
