@@ -1,14 +1,17 @@
-"""One proofreader's editing time as a self-contained HTML page (David 2026-11-12: "How are the 2.9 hr distributed
-throughout the days? Could you find a nice way to plot this?"). Network-free: reads the newest
-figures/misc/*_user_activity_ops.csv (scripts/admin/user_activity_ops.py) and *_cave_user_names.csv.
+"""Proofreaders' editing time as a self-contained HTML page (David 2026-11-12: "How are the 2.9 hr distributed
+throughout the days? Could you find a nice way to plot this?"; 2026-11-13: the same page for several people).
+Network-free: reads the newest figures/misc/*_user_activity_ops.csv (scripts/admin/user_activity_ops.py) and
+*_cave_user_names.csv. One argument per person; a person with several CAVE accounts = ids joined by commas (1019,7220),
+their edits pooled before sessions are cut.
 Sessions as in user_activity_ops.py: edits less than --gap (30) minutes apart form one session, timed first to last edit
 + 2 minutes (a lower bound: looking without editing is not counted). The page computes everything in the browser so
 its time-zone menu (UTC offset) re-splits sessions at local midnight:
+  - with several people: a comparison table (click a row) and a person menu
   - stat tiles (hours per week, total, active days, sessions, median session)
   - every calendar day as a row: its sessions across the 24 h, its total, and each week's total
   - hours by time of day and by weekday; a weekly table
-Writes figures/misc/<stamp>_user_activity_<user>.html.
-Usage: user_activity_plot.py USER_ID [--ops CSV] [--gap 30] [--tz HOURS]"""
+Writes figures/misc/<stamp>_user_activity_<first id of each person, joined by _>.html.
+Usage: user_activity_plot.py USER_ID[,USER_ID] [USER_ID ...] [--ops CSV] [--gap 30] [--tz HOURS]"""
 import argparse
 import glob
 import html
@@ -32,29 +35,35 @@ def newest(pattern):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("user", type=int)
+    ap.add_argument("users", nargs="+", help="one per person; several accounts of one person joined by commas")
     ap.add_argument("--ops")
     ap.add_argument("--gap", type=float, default=30.0)
     ap.add_argument("--tz", type=float, default=0.0, help="initial UTC offset in hours (the page has a menu)")
     a = ap.parse_args()
     ops_csv = a.ops or newest("*_user_activity_ops.csv")
     d = pd.read_csv(ops_csv)
-    d = d[d.user == a.user].copy()
-    if d.empty:
-        raise SystemExit(f"user {a.user} has no edits in {ops_csv}")
-    t = pd.to_datetime(d.timestamp, format="ISO8601", utc=True).sort_values()
     names = pd.read_csv(newest("*_cave_user_names.csv"))
     ncol = [c for c in names.columns if "name" in c.lower()][0]
     ucol = [c for c in names.columns if c.lower() in ("user", "user_id", "id")][0]
-    name = str(names.set_index(ucol)[ncol].get(a.user, f"user {a.user}"))
+    name_of = names.set_index(ucol)[ncol]
+    people = []
+    for spec in a.users:
+        ids = [int(x) for x in spec.split(",") if x.strip()]
+        t = pd.to_datetime(d[d.user.isin(ids)].timestamp, format="ISO8601", utc=True).sort_values()
+        if t.empty:
+            raise SystemExit(f"user {spec} has no edits in {ops_csv}")
+        name = str(name_of.get(ids[0], f"user {ids[0]}"))
+        people.append(dict(users=ids, name=name, ops=[int(x.timestamp() * 1000) for x in t]))
+        print(f"{name} ({', '.join(map(str, ids))}): {len(t)} edits {t.iloc[0]:%Y-%m-%d} .. {t.iloc[-1]:%Y-%m-%d}")
     data_end = os.path.basename(ops_csv)[:19]  # the run's stamp = end of the scanned window
     end_ms = int(pd.Timestamp(data_end.replace("d", "T", 1).replace("tUTC", ""), tz="UTC").timestamp() * 1000)
-    payload = dict(user=a.user, name=name, gap=a.gap, pad=2.0, tz=a.tz, end=end_ms,
-                   ops=[int(x.timestamp() * 1000) for x in t], src=os.path.basename(ops_csv))
-    out = os.path.join(MISC, f"{utc_stamp()}_user_activity_{a.user}.html")
-    page = PAGE.replace("__TITLE__", html.escape(f"{name} editing time")).replace("__DATA__", json.dumps(payload))
+    payload = dict(people=people, gap=a.gap, pad=2.0, tz=a.tz, end=end_ms, src=os.path.basename(ops_csv))
+    tag = "_".join(str(p["users"][0]) for p in people)
+    out = os.path.join(MISC, f"{utc_stamp()}_user_activity_{tag}.html")
+    title = f"{people[0]['name']} editing time" if len(people) == 1 else "Proofreader editing time"
+    page = PAGE.replace("__TITLE__", html.escape(title)).replace("__DATA__", json.dumps(payload))
     open(out, "w", encoding="utf-8").write(page)
-    print(f"{name}: {len(t)} edits {t.iloc[0]:%Y-%m-%d} .. {t.iloc[-1]:%Y-%m-%d}; written {out}")
+    print(f"written {out}")
 
 
 PAGE = r"""<!doctype html>
@@ -98,6 +107,10 @@ table{border-collapse:collapse;margin-top:8px;font-variant-numeric:tabular-nums;
 th,td{padding:3px 12px 3px 0;text-align:right;border-bottom:1px solid var(--grid)}th:first-child,td:first-child{text-align:left}
 th{color:var(--ink2);font-weight:600}
 </style></head><body><main>
+<div id="cmp" class="card" hidden><h2>Editing time, side by side</h2>
+<p class="note">Same rules for everyone (session window and time zone below). Click a row to show that person.</p>
+<table id="cmpTbl"></table></div>
+<div class="row" id="whoRow" hidden><label for="who">Proofreader</label><select id="who"></select></div>
 <h1 id="h1"></h1>
 <p class="sub" id="sub"></p>
 <div class="row" id="tiles"></div>
@@ -149,16 +162,33 @@ function hover(node, lines) {
 }
 
 // sessions (absolute ms), as user_activity_ops.py: a gap > gap minutes starts a new session; + D.pad minutes
-function sessions(gap) {
+function sessions(ops, gap) {
   const S = [];
-  let a = D.ops[0], b = D.ops[0], n = 1;
-  for (let i = 1; i < D.ops.length; i++) {
-    if (D.ops[i] - b > gap * MIN) { S.push({ a, b: b + D.pad * MIN, n }); a = b = D.ops[i]; n = 1; }
-    else { b = D.ops[i]; n++; }
+  let a = ops[0], b = ops[0], n = 1;
+  for (let i = 1; i < ops.length; i++) {
+    if (ops[i] - b > gap * MIN) { S.push({ a, b: b + D.pad * MIN, n }); a = b = ops[i]; n = 1; }
+    else { b = ops[i]; n++; }
   }
   S.push({ a, b: b + D.pad * MIN, n });
   return S;
 }
+// one person's totals under the current rules (for the side-by-side table)
+function summary(p, gap, tz) {
+  const S = sessions(p.ops, gap);
+  const hrs = s => (s.b - s.a) / H;
+  const total = S.reduce((u, s) => u + hrs(s), 0);
+  const day0 = ms => Math.floor((ms + tz) / DAY) * DAY;
+  const first = day0(p.ops[0]), start = first - ((new Date(first).getUTCDay() + 6) % 7) * DAY;
+  const endDay = day0(Math.max(D.end, p.ops[p.ops.length - 1]));
+  const nWeeks = Math.ceil((Math.round((endDay - start) / DAY) + 1) / 7);
+  const recent = S.filter(s => s.a >= D.end - 28 * DAY).reduce((u, s) => u + hrs(s), 0) / 4;
+  return { total, nWeeks, perWeek: total / nWeeks, recent, days: new Set(p.ops.map(day0)).size, n: S.length };
+}
+let P = D.people[0];
+const whoSel = document.getElementById("who");
+D.people.forEach((p, i) => { const op = document.createElement("option"); op.value = i; op.textContent = p.name; whoSel.appendChild(op); });
+whoSel.addEventListener("change", render);
+if (D.people.length > 1) { document.getElementById("whoRow").hidden = false; document.getElementById("cmp").hidden = false; }
 const gapSel = document.getElementById("gap");
 [5, 10, 15, 20, 30, 45, 60, 90, 120].forEach(g => {
   const op = document.createElement("option");
@@ -179,16 +209,38 @@ for (let o = -12; o <= 14; o += 0.5) {
 }
 tzSel.addEventListener("change", render);
 
+function compare(gap, tz) {
+  const tb = document.getElementById("cmpTbl"); tb.replaceChildren();
+  const rows = D.people.map((p, i) => ({ p, i, ...summary(p, gap, tz) })).sort((x, y) => y.perWeek - x.perWeek);
+  const mx = Math.max(...rows.map(r => Math.max(r.perWeek, r.recent)), 0.1);
+  const hr = tb.insertRow();
+  ["proofreader", "hours per week since the first edit", "", "last 28 days, per week", "", "total", "weeks", "days with edits", "first edit", "last edit"].forEach(h => {
+    const th = document.createElement("th"); th.textContent = h; hr.appendChild(th); });
+  const bar = (cell, v) => { const b = document.createElement("div");
+    b.style.cssText = `height:8px;border-radius:2px;background:var(--s1);width:${Math.max(2, 90 * v / mx)}px`; cell.appendChild(b); };
+  rows.forEach(r => {
+    const tr = tb.insertRow(); tr.style.cursor = "pointer";
+    if (r.i === +whoSel.value) tr.style.fontWeight = 650;
+    tr.addEventListener("click", () => { whoSel.value = r.i; render(); });
+    tr.insertCell().textContent = r.p.name;
+    tr.insertCell().textContent = fmtH(r.perWeek); bar(tr.insertCell(), r.perWeek);
+    tr.insertCell().textContent = fmtH(r.recent); bar(tr.insertCell(), r.recent);
+    [fmtH(r.total), r.nWeeks, r.days, dayLabel(r.p.ops[0] + tz), dayLabel(r.p.ops[r.p.ops.length - 1] + tz)].forEach(v => { tr.insertCell().textContent = v; });
+  });
+}
+
 function render() {
   const tz = parseFloat(tzSel.value) * H;
   const gap = parseFloat(gapSel.value);
-  const S = sessions(gap);
+  P = D.people[+whoSel.value];
+  if (D.people.length > 1) compare(gap, tz);
+  const S = sessions(P.ops, gap);
   const L = ms => ms + tz;                       // local clock as a UTC-read ms value
   const day0 = ms => Math.floor(L(ms) / DAY) * DAY; // local midnight (local ms)
-  const firstDay = day0(D.ops[0]);
+  const firstDay = day0(P.ops[0]);
   const wd0 = (new Date(firstDay).getUTCDay() + 6) % 7;
   const start = firstDay - wd0 * DAY;            // the Monday of the first week
-  const endDay = day0(Math.max(D.end, D.ops[D.ops.length - 1]));
+  const endDay = day0(Math.max(D.end, P.ops[P.ops.length - 1]));
   const nDays = Math.round((endDay - start) / DAY) + 1;
   const nWeeks = Math.ceil(nDays / 7);
   const days = Array.from({ length: nDays }, (_, i) => ({ t: start + i * DAY, h: 0, edits: 0, ses: [] }));
@@ -219,8 +271,8 @@ function render() {
   const lens = S.map(s => (s.b - s.a) / MIN).sort((p, q) => p - q);
   const med = lens[Math.floor((lens.length - 1) / 2)];
 
-  document.getElementById("h1").textContent = D.name + ": editing time";
-  document.getElementById("sub").textContent = `${D.ops.length.toLocaleString()} CAVE edits from ${dayLabel(L(D.ops[0]))} to ${dayLabel(L(D.ops[D.ops.length - 1]))}, 2026. ` +
+  document.getElementById("h1").textContent = P.name + ": editing time";
+  document.getElementById("sub").textContent = `${P.ops.length.toLocaleString()} CAVE edits from ${dayLabel(L(P.ops[0]))} to ${dayLabel(L(P.ops[P.ops.length - 1]))}, 2026. ` +
     `Time counts editing sessions only: edits less than ${gap} minutes apart form one session, timed from the first to the last edit plus ${D.pad} minutes. ` +
     `Looking at cells without editing is not counted, so these hours are a lower bound.`;
   const tiles = document.getElementById("tiles"); tiles.replaceChildren();
@@ -304,8 +356,8 @@ function render() {
   const tb = document.getElementById("tbl"); tb.replaceChildren();
   const hr = tb.insertRow(); ["week of", "hours", "days with edits", "sessions", "edits"].forEach(h => { const th = document.createElement("th"); th.textContent = h; hr.appendChild(th); });
   weeks.forEach(w => { const r = tb.insertRow(); [dayLabel(w.t), w.h.toFixed(1), w.active, w.ses, w.edits].forEach(v => { r.insertCell().textContent = v; }); });
-  const r = tb.insertRow(); ["mean", (total / nWeeks).toFixed(1), (active / nWeeks).toFixed(1), (S.length / nWeeks).toFixed(1), Math.round(D.ops.length / nWeeks)].forEach(v => { const c = r.insertCell(); c.textContent = v; c.style.fontWeight = 650; });
-  document.getElementById("src").textContent = `CAVE user ${D.user}. Source: ${D.src} (edit log through ${new Date(D.end).toISOString().slice(0, 16).replace("T", " ")} UTC).`;
+  const r = tb.insertRow(); ["mean", (total / nWeeks).toFixed(1), (active / nWeeks).toFixed(1), (S.length / nWeeks).toFixed(1), Math.round(P.ops.length / nWeeks)].forEach(v => { const c = r.insertCell(); c.textContent = v; c.style.fontWeight = 650; });
+  document.getElementById("src").textContent = `CAVE ${P.users.length > 1 ? "accounts" : "user"} ${P.users.join(", ")}${P.users.length > 1 ? " (one person, edits pooled)" : ""}. Source: ${D.src} (edit log through ${new Date(D.end).toISOString().slice(0, 16).replace("T", " ")} UTC).`;
 }
 render();
 </script></body></html>
