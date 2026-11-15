@@ -33,6 +33,7 @@ spec.json format (all fields optional except at least one of meshes/neurons):
   "background": "#050505",      # 3D panel background (default dark)
   "neuropil_alpha_scale": 0.25, # factor on every mesh layer's opacity (default NEUROPIL_ALPHA_SCALE: fainter neuropils)
   "position": [x, y, z], "scale": 12000,   # open on a region (voxels; whole brain = 31785)
+  "compact": false,             # true = leave out the hidden mesh layers (a short link for a message)
   "out":    "figures/foo_ng.txt"
 }
 """
@@ -206,6 +207,9 @@ def build(spec):
                     L.pop("segmentColors", None)
         layers.append(L)
     layers += [mesh_layer(m["kind"], m.get("alpha"), m.get("color"), m.get("segments")) for m in asked.values()]
+    if spec.get("compact"):  # short links for messages (David 2026-11-15: a Slack link was "too long"): the hidden
+        # mesh layers go; the EM, the README segmentation (live SeaTable annotations) and asked-for meshes stay
+        layers = [L for L in layers if L["type"] == "image" or L is seg or L.get("visible")]
     # neuropil meshes fainter in every link (David 2026-11-10: "make the opacity of the neuropils lower"): every
     # mesh layer's opacity, default or asked for, times NEUROPIL_ALPHA_SCALE (spec "neuropil_alpha_scale" overrides)
     k = spec.get("neuropil_alpha_scale", NEUROPIL_ALPHA_SCALE)
