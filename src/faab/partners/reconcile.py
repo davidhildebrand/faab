@@ -406,6 +406,8 @@ def delete_rows(wb, B, drop, rec_of):
         heights = {r: ws.row_dimensions[r].height for r in range(1, ws.max_row + 1) if ws.row_dimensions[r].height}
         for r in sorted(rs, reverse=True):
             ws.delete_rows(r)
+        if hasattr(B, "forget"):
+            B.forget(tab)  # rows moved: the Book's header map of this tab is stale
         dead = sorted(rs)
         shift = lambda r: r - sum(1 for d in dead if d < r)
         m = {}

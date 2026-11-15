@@ -85,6 +85,7 @@ def seatable_mark(cur):
 class Book:
     def __init__(self, wb):
         self.wb, self.log, self.touched = wb, [], set()
+        self._hdr = {}  # tab -> (max_row when mapped, {row: header row at or above it})
 
     def put(self, tab, r, c, new, why):
         cell = self.wb[tab].cell(r, c)
@@ -102,13 +103,35 @@ class Book:
                              old=s(old), new=s(new), why=why))
         self.touched.add(tab)
 
+    @staticmethod
+    def _is_header(names):
+        return "xyz" in names and ("root_id_curr" in names or "root_id_orig" in names)
+
     def header_row(self, tab, r):
+        """the header row at or above row r (a row naming xyz and a root id column), else r. One pass per tab builds a
+        map (2026-11-15: scanning upward cell by cell for every row took over an hour once the 3,500-row T4T5s tab sat
+        under one header); the map is rebuilt when the tab's row count changed, the mapped header is no header any
+        more (rows moved), or forget() was called"""
         ws = self.wb[tab]
-        for rr in range(r, 0, -1):
-            names = [s(ws.cell(rr, c).value) for c in range(1, ws.max_column + 1)]
-            if "xyz" in names and ("root_id_curr" in names or "root_id_orig" in names):
-                return rr
-        return r
+        got = self._hdr.get(tab)
+        if got is not None and got[0] == ws.max_row and r in got[1]:
+            h = got[1][r]  # 0 = no header above r
+            if h == 0 or self._is_header([s(ws.cell(h, c).value) for c in range(1, ws.max_column + 1)]):
+                return h or r
+        m, h = {}, 0
+        for i, row in enumerate(ws.iter_rows(values_only=True), 1):
+            if self._is_header([s(v) for v in row]):
+                h = i
+            m[i] = h
+        self._hdr[tab] = (ws.max_row, m)
+        return m.get(r, 0) or r
+
+    def forget(self, tab=None):
+        """drop the header map(s) after rows were deleted, inserted or moved"""
+        if tab is None:
+            self._hdr.clear()
+        else:
+            self._hdr.pop(tab, None)
 
     def fill(self, tab, r, cols, how, why):
         """highlight the named columns, or clear the highlight from every cell of the row (older highlights span it)"""
