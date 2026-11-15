@@ -7,12 +7,16 @@ apart, point lookups cached in tmp/sv_at_xyz.json), and Slack only receives mess
 Checks (every tab except backup copies named '<tab>_bYYMMDDd'):
   xyz_off_cell  root_id_curr is a current root but the xyz is on another cell, or on no cell (stale ids are not
                 reported: every sheet update replaces them with the root at the xyz)
-  status        one cell on several rows with different statuses (blank, NEW and NEW-DUP are ignored: the update
-                copies the best status onto every row of a cell)
-  proofreaders  one cell on several rows naming different proofreaders (names compared by initials: 'Nandita D' =
-                'ND'); not reported when every row lists the same people
-  bad_id        root_id_orig / root_id_curr filled with something that is not an 18-digit id ('d', a digit missing)
-  bad_xyz       a row with a root id whose xyz is not three numbers
+  status        one cell on several rows with different statuses, one of them a word the update's ranking does not
+                know (a typo, say). Differences between known statuses are not reported: the update copies the best
+                status onto every row (faab.partners.reconcile.RANK, checked > proofread > ... > review > ... >
+                stopped; David 2026-11-15: "checked > proofread. checked > review."). Blank, NEW, NEW-DUP and
+                candidate are ignored
+  proofreaders  two rows of one cell each naming someone the other row does not (names compared by initials:
+                'Nandita D' = 'ND'); a row listing everyone on another row plus a new name is not reported
+  bad_id        a number in root_id_orig / root_id_curr that is not an 18-digit id (a digit missing, 6.48518E+17);
+                text rows (block titles, group lines, notes) are skipped
+  bad_xyz       a row with an 18-digit root id whose xyz is not three numbers
 A row's cell = its root_id_curr while that is current, else the root at its xyz. Cells are named by full root ids and
 tabs, never row numbers (rows move).
 New vs old: tmp/faab_ol_bot/state.json keeps the issues already reported; only new ones are listed (the counts always
@@ -52,6 +56,7 @@ import pandas as pd
 
 from faab.clients.cave import client as cave_client, roots_at_xyz, throttle
 from faab.config import TMP
+from faab.partners.reconcile import RANK, rank
 from faab.partners.sheet import cell_text as s, utc_stamp
 
 OUT = os.path.join(TMP, "faab_ol_bot")
@@ -60,11 +65,11 @@ CONFIG = os.path.expanduser("~/.config/faab-ol-bot/env")
 BACKUP_TAB = re.compile(r"_b\d{6}d$")
 ID = re.compile(r"\d{18}")
 XYZ = re.compile(r"-?\d+(?:\.\d+)?")
-IGNORED_STATUS = {"", "new", "new-dup"}
+IGNORED_STATUS = {"", "new", "new-dup", "candidate"}
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 TITLES = {  # plain labels for the proofreaders (no internal jargon)
     "xyz_off_cell": "xyz is not on the row's cell",
-    "status": "one cell, different statuses on different rows",
+    "status": "one cell, different statuses on different rows, one of them not a known status",
     "proofreaders": "one cell, different people on different rows",
     "bad_id": "root id that is not an 18-digit id",
     "bad_xyz": "row with a root id but no usable xyz",
@@ -194,12 +199,14 @@ def check(rows):
         st = {x["v"].get("status", "").strip().lower() for x in g} - IGNORED_STATUS
         names = "; ".join(sorted({x["v"]["proofreader"].strip() for x in g if x["v"].get("proofreader", "").strip()}))
         tabs = ", ".join(sorted({x["tab"] for x in g}))
-        if len(st) > 1:
+        unknown = sorted(t for t in st if rank(t) >= len(RANK))  # known ones: the update keeps the best
+        if len(st) > 1 and unknown:
             parts = sorted({f"{x['tab']} {x['v'].get('status', '').strip()}"
                             + (f" ({x['v']['proofreader'].strip()})" if x["v"].get("proofreader", "").strip() else "")
                             for x in g if x["v"].get("status", "").strip().lower() not in IGNORED_STATUS})
             out.append(dict(check="status", key=f"status|{cell}|{'/'.join(sorted(st))}", cell=cell, tab=tabs,
-                            who=names, text=f"{cell}: " + " · ".join(parts)))
+                            who=names, text=f"{cell}: " + " · ".join(parts)
+                            + f" (not a known status: {', '.join(repr(t) for t in unknown)})"))
         # two rows each naming someone the other row does not ({A} vs {B}, {A, B} vs {A, C}); a row that lists
         # everyone on another row ({A} vs {A, B}) means that person saw who else is on the cell, so it is not flagged
         sets = list({people(x["v"].get("proofreader", "")) for x in g if x["v"].get("proofreader", "").strip()})

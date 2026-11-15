@@ -9,7 +9,7 @@ What it reports (cells are named by full root ids and tab names, never row numbe
 | check | what it means |
 |---|---|
 | xyz is not on the row's cell | `root_id_curr` is a current root, but the `xyz` lands on another cell (or on empty space) |
-| one cell, different statuses on different rows | the same cell is listed on several rows (any tabs) with different statuses (blank, NEW, and NEW-DUP are ignored) |
+| one cell, different statuses on different rows, one of them not a known status | the same cell is listed on several rows (any tabs) with different statuses, and one is a word the update's ranking doesn't know (a typo, say). Differences between known statuses are not reported, because every update copies the best one onto all rows of the cell (checked > proofread > complete > adequate > review > in progress > stopped). Blank, NEW, NEW-DUP, and candidate are ignored |
 | one cell, different people on different rows | two rows of the same cell each name someone the other row does not (names compared by initials). A row that lists everyone on the other row plus a new name is not reported, since that person saw who else was on the cell |
 | root id that is not an 18-digit id | a number in a root id column that is not 18 digits, e.g. an id with a digit missing or one shown as `6.48518E+17`. Text such as block titles, group lines, and notes is skipped |
 | row with a root id but no usable xyz | the row has an 18-digit root id, but the xyz is empty or not three numbers |
