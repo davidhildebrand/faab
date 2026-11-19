@@ -163,7 +163,11 @@ mkdir -p ~/faab-ol-bot/tmp && git clone https://github.com/davidhildebrand/faab.
 ```
 
 ```bash
-python3 -m venv ~/faab-ol-bot/venv && ~/faab-ol-bot/venv/bin/pip install -e ~/faab-ol-bot/faab openpyxl google-auth requests
+python3 -m venv ~/faab-ol-bot/venv && ~/faab-ol-bot/venv/bin/python -m pip install -U pip
+```
+
+```bash
+~/faab-ol-bot/venv/bin/python -m pip install -e ~/faab-ol-bot/faab openpyxl google-auth requests
 ```
 
 The code puts its scratch files in `~/faab-ol-bot/tmp` (the folder next to the repository), as on the Mac.
