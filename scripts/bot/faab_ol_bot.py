@@ -16,6 +16,8 @@ Checks (every tab except backup copies named '<tab>_bYYMMDDd'):
                 'Nandita D' = 'ND'); a row listing everyone on another row plus a new name is not reported
   bad_id        a number in root_id_orig / root_id_curr that is not an 18-digit id (a digit missing, 6.48518E+17);
                 text rows (block titles, group lines, notes) are skipped
+  rounded_id    root_id_orig / root_id_curr stored as a NUMBER: Google Sheets keeps 15 significant digits, so the id
+                read back is not the one pasted (the sheet update repairs root_id_curr when the xyz confirms it)
   bad_xyz       a row with an 18-digit root id whose xyz is not three numbers
 A row's cell = its root_id_curr while that is current, else the root at its xyz. Cells are named by full root ids and
 tabs, never row numbers (rows move).
@@ -56,7 +58,7 @@ import pandas as pd
 
 from faab.clients.cave import client as cave_client, roots_at_xyz, throttle
 from faab.config import TMP
-from faab.partners.reconcile import RANK, rank
+from faab.partners.reconcile import RANK, SEATABLE_STATUSES, rank
 from faab.partners.sheet import cell_text as s, utc_stamp
 
 OUT = os.path.join(TMP, "faab_ol_bot")
@@ -72,6 +74,7 @@ TITLES = {  # plain labels for the proofreaders (no internal jargon)
     "status": "one cell, different statuses on different rows, one of them not a known status",
     "proofreaders": "one cell, different people on different rows",
     "bad_id": "root id that is not an 18-digit id",
+    "rounded_id": "root id stored as a number (Google Sheets keeps only 15 digits)",
     "bad_xyz": "row with a root id but no usable xyz",
 }
 
@@ -137,7 +140,11 @@ def scan(wb):
                 continue
             v = {n: names[i] if i < len(names) else "" for n, i in cols.items()}
             if any(ID.fullmatch(v.get(k, "")) or numlike(v.get(k, "")) for k in ("root_id_orig", "root_id_curr")):
-                rows.append(dict(tab=ws.title, v=v))
+                # id cells stored as numbers: Google Sheets keeps 15 significant digits, so the id read back is not
+                # the one pasted (2026-11-19: 648518347491044000 -> 648518347491043968, another real cell)
+                num = [k for k in ("root_id_orig", "root_id_curr") if k in cols and cols[k] < len(vals)
+                       and isinstance(vals[cols[k]], (int, float)) and abs(vals[cols[k]]) > 1e15]
+                rows.append(dict(tab=ws.title, v=v, num=num))
     return rows
 
 
@@ -162,6 +169,11 @@ def check(rows):
                                 who=v.get("proofreader", ""),
                                 text=f"{k} is '{v[k]}'" + (f" ({len(v[k])} digits)" if v[k].isdigit() else "")
                                 + (f" on the row of {ref}" if ref else "")))
+        for k in x.get("num", []):
+            out.append(dict(check="rounded_id", key=f"rounded_id|{x['tab']}|{k}|{v[k]}", cell=v[k], tab=x["tab"],
+                            who=v.get("proofreader", ""),
+                            text=f"{k} reads {v[k]}, but it is stored as a number, so its last digits may have "
+                                 "changed. Format the column as plain text and paste the id again"))
         x["ok_xyz"] = len(XYZ.findall(v.get("xyz", ""))) == 3
         ref = next((v[k] for k in ("root_id_curr", "root_id_orig") if ID.fullmatch(v.get(k, ""))), "")
         if not x["ok_xyz"] and ref:
@@ -199,7 +211,8 @@ def check(rows):
         st = {x["v"].get("status", "").strip().lower() for x in g} - IGNORED_STATUS
         names = "; ".join(sorted({x["v"]["proofreader"].strip() for x in g if x["v"].get("proofreader", "").strip()}))
         tabs = ", ".join(sorted({x["tab"] for x in g}))
-        unknown = sorted(t for t in st if rank(t) >= len(RANK))  # known ones: the update keeps the best
+        # known words (the ranking's and SeaTable's): the update settles them (SeaTable's status, else the best)
+        unknown = sorted(t for t in st if rank(t) >= len(RANK) and t not in SEATABLE_STATUSES)
         if len(st) > 1 and unknown:
             parts = sorted({f"{x['tab']} {x['v'].get('status', '').strip()}"
                             + (f" ({x['v']['proofreader'].strip()})" if x["v"].get("proofreader", "").strip() else "")

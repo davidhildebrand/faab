@@ -11,7 +11,8 @@
     the rows' own lists). cable_um / neuropils come from the collapsed row with the most cable (the merged cell is at
     least that big). Not collapsed: the PRs tab (groups have their own rules), yellow MISMATCH rows, and cells whose
     notes mention a false merge / merge error.
-  - Every other row of the cell (other blocks, other tabs) carries the same tracking: the best status (RANK: checked >
+  - Every other row of the cell (other blocks, other tabs) carries the same tracking: the cell's SeaTable status when it
+    has one (David 2026-11-18), else the best status (RANK: checked >
     proofread > complete > adequate > review > to_review > needs_extending > missing soma > in progress > stopped),
     proofreader and checker names merged (each person once; full name over initials), the newest pr_date of the
     best-status rows, the newest chk_date, blank annotation / link filled, and one SeaTable mark. Cells
@@ -22,7 +23,7 @@
     pointers to other rows ('duplicate of r12', 'merged into r5', 'merged into PRg1hop1 r5'), remarks that only say the
     row is a repeat ('duplicate', 'same id appeared in multiple column', 'this ID is repeated throughout, ...'),
     near-duplicates, fragment wording on cells that are whole now (>= WHOLE_L2 L2 chunks; 'fragment of a L5 neuron'
-    -> 'L5') and 'please review' on checked cells go; row-specific notes ('xyz off the cell ...', merge history
+    -> 'L5') and 'please review' on checked cells (a checker and a chk_date) go; row-specific notes ('xyz off the cell ...', merge history
     'merged to/into/with ...', PRs bundle / pairing notes) are kept as written.
   - A row whose cell is now the block's own upstream cell (a fragment of that cell, merged into it: e.g. R8 pieces in
     the R8's partner block, David 2026-10-31) is not a partner any more and is removed; references to it are dropped
@@ -40,6 +41,10 @@ from faab.pr.prs_tab import as_date
 
 RANK = ["checked", "proofread", "complete", "adequate", "review", "to_review", "needs_extending", "missing soma",
         "in progress", "stopped"]  # complete / to_review / needs_extending / missing soma: SeaTable's words
+# every status word SeaTable uses (aedes_main fetch of 2026-11-15, lowercased): the sheet takes these as they are
+SEATABLE_STATUSES = ("adequate", "to_review", "to review", "needs_extending", "secondpass", "duplicate", "incomplete",
+                     "missing soma", "fragment", "merge_error", "not_a_neuron", "proofread", "hard", "large_fragment",
+                     "tiny", "outlier_bio", "check", "complete", "damaged", "outlier_seg")
 WHOLE_L2 = 100
 NO_COLLAPSE = ("PRs",)
 UPSTREAM = ("hop1_root_id", "upstream_PR")
@@ -226,13 +231,16 @@ def no_row_numbers(wb, B, rows, cell_of, yellow, self_keys, val):
                 B.put(tab, r, x["cols"]["notes"], "; ".join(keep), why)
 
 
-def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, latest_of=None, recount_out=None, log=print):
+def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, latest_of=None, recount_out=None, log=print,
+              seatable_status=None):
     """rows: scan_book rows of the tracking tabs (row numbers before any deletion); cell_of(x) -> live cell id or '';
     sizes: cell -> L2 chunks (cells not listed are never called whole); yellow(x) -> True for MISMATCH rows;
     recount(pairs) -> {(upstream id, cell): synapses now} for [(upstream id as written, cell)], or None (then the
     collapsed rows' nsyn are summed); latest_of(ids) -> {id: [current roots]} for upstream ids as written, or None
     (then rows whose cell became the block's own upstream cell are not looked for); recount_out(cell, ids) -> {id:
-    synapses now from cell onto it} for downstream ids as written, or None (then per-partner sums of the rows' lists)."""
+    synapses now from cell onto it} for downstream ids as written, or None (then per-partner sums of the rows' lists);
+    seatable_status(x) -> the row's SeaTable status or '': when a row of the cell has one, every row of the cell gets
+    it (David 2026-11-18: the sheet follows SeaTable's status); the RANK only decides for cells without one."""
     val = lambda x, n: wb[x["tab"]].cell(x["row"], x["cols"][n]).value if n in x["cols"] else None
     up_of = {}
     for x in rows:
@@ -259,12 +267,13 @@ def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, latest_of=None,
     for c, g in groups.items():
         g.sort(key=lambda x: (rank(val(x, "status")), x["tab"], x["row"]))
         best_r = rank(val(g[0], "status"))
-        if best_r >= len(RANK):
+        sea_st = next((t for t in (seatable_status(x) for x in g) if t), "") if seatable_status else ""
+        if best_r >= len(RANK) and not sea_st:
             continue  # no row has a status: nothing to carry over
         stats["carried"] += 1
         why = f"reconcile: one cell on {len(g)} rows"
         best = [x for x in g if rank(val(x, "status")) == best_r]
-        status = s(val(g[0], "status")).lower()
+        status = sea_st or s(val(g[0], "status")).lower()
         names = {n: merge_names(val(x, n) for x in g) for n in ("proofreader", "checker")}
         dates = lambda xs, n: [d for d in (val(x, n) if hasattr(val(x, n), "year") else as_date(s(val(x, n))) for x in xs) if d]
         pr_date = max(dates(best, "pr_date") or dates([x for x in g if rank(val(x, "status")) < len(RANK)], "pr_date") or [None])
@@ -298,7 +307,9 @@ def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, latest_of=None,
                 # pointers, repeat remarks, fragment wording on whole cells and 'please review' on checked cells go
                 mine = []
                 for p in parts(val(x, "notes")):
-                    q = p if OWN.search(p) and not POINTER.search(p) else shared_part(p, whole, status == "checked", c)
+                    # checked = a checker and a chk_date (2026-11-18: 'checked' is no status any more)
+                    q = p if OWN.search(p) and not POINTER.search(p) else shared_part(
+                        p, whole, status == "checked" or bool(names["checker"] and chk_date), c)
                     if q:
                         mine.append(q)
                 B.put(tab, r, cols["notes"], "; ".join(dedupe(mine)), why)

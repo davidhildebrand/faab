@@ -9,9 +9,10 @@ What it reports (cells are named by full root ids and tab names, never row numbe
 | check | what it means |
 |---|---|
 | xyz is not on the row's cell | `root_id_curr` is a current root, but the `xyz` lands on another cell (or on empty space) |
-| one cell, different statuses on different rows, one of them not a known status | the same cell is listed on several rows (any tabs) with different statuses, and one is a word the update's ranking doesn't know (a typo, say). Differences between known statuses are not reported, because every update copies the best one onto all rows of the cell (checked > proofread > complete > adequate > review > in progress > stopped). Blank, NEW, NEW-DUP, and candidate are ignored |
+| one cell, different statuses on different rows, one of them not a known status | the same cell is listed on several rows (any tabs) with different statuses, and one is a word neither SeaTable nor the update's ranking uses (a typo, say). Differences between known statuses are not reported, because every update gives all rows of a cell its SeaTable status, or the best one (proofread > complete > adequate > review > in progress > stopped) when the cell isn't in SeaTable. Blank, NEW, NEW-DUP, and candidate are ignored |
 | one cell, different people on different rows | two rows of the same cell each name someone the other row does not (names compared by initials). A row that lists everyone on the other row plus a new name is not reported, since that person saw who else was on the cell |
 | root id that is not an 18-digit id | a number in a root id column that is not 18 digits, e.g. an id with a digit missing or one shown as `6.48518E+17`. Text such as block titles, group lines, and notes is skipped |
+| root id stored as a number (Google Sheets keeps only 15 digits) | an id was pasted into a cell formatted as a number, so Sheets kept 15 of its 18 digits and the id now names another cell, or none. Fix: format the column as plain text and paste the id again |
 | row with a root id but no usable xyz | the row has an 18-digit root id, but the xyz is empty or not three numbers |
 
 Stale `root_id_curr` values are not reported, because every sheet update replaces them with the root at the xyz.
@@ -42,10 +43,10 @@ cd /Users/davidh/Data/Vibe/FAAB
 ```
 
 ```bash
-venv/bin/python faab/scripts/bot/faab_ol_bot.py --book faab/figures/sheets/20261115d043000tUTC_FAAB_OpticLobeTargets_Backup.xlsx --all --no-state
+venv/bin/python faab/scripts/bot/faab_ol_bot.py --book "$(ls -t faab/figures/sheets/*_Backup.xlsx | head -n 1)" --all --no-state
 ```
 
-It prints the summary and the path of the message file (`tmp/faab_ol_bot/<stamp>_message.md`), which shows exactly what
+The `$(ls -t …)` part picks the newest backup in `faab/figures/sheets`. It prints the summary and the path of the message file (`tmp/faab_ol_bot/<stamp>_message.md`), which shows exactly what
 would be posted. `--all` lists every open issue, and `--no-state` keeps test runs from touching the memory of what was
 posted.
 
@@ -90,7 +91,7 @@ FAAB_OL_BOT_CHANNEL=C0123456789
 A first real post to the test channel, from a backup (the summary goes to the channel, the details into its thread):
 
 ```bash
-venv/bin/python faab/scripts/bot/faab_ol_bot.py --book faab/figures/sheets/20261115d043000tUTC_FAAB_OpticLobeTargets_Backup.xlsx --post --no-state
+venv/bin/python faab/scripts/bot/faab_ol_bot.py --book "$(ls -t faab/figures/sheets/*_Backup.xlsx | head -n 1)" --post --no-state
 ```
 
 (`--no-state` keeps this test from counting as "already posted", so the Ubuntu bot's first post will still list

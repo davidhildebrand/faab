@@ -4,7 +4,11 @@ add the left-eye PRs to the PRs tab; writes one .xlsx per changed tab (import vi
 Rules (David, 2026-10-30):
   - a row is 'in SeaTable' when the live root at its xyz (or, failing that, its root_id_curr) is the live root of a
     SeaTable row (figures/*_seatable_match.tsv from seatable_match.py);
-  - status: SeaTable's, except that our 'checked' and 'proofread' are kept (both count as SeaTable 'adequate');
+  - status: SeaTable's, always, written as SeaTable writes it (David 2026-11-18: "coerce the sheet to match the
+    SeaTable, particularly for status"; until then our 'checked' and 'proofread' were kept). 'checked' is retired as a
+    status ("Checked is redundant with there being a checker and check date"): rows whose cell is not in SeaTable
+    (or has no SeaTable status) go from 'checked' to 'adequate', and the checker / chk_date columns keep the check.
+    --reconcile gives every row of a cell its SeaTable status (the best-status ranking only for cells without one);
   - proofreader: the sheet's names, plus every SeaTable proofreader not already credited, as SeaTable writes them
     (initials matching a credited sheet name, e.g. KT for Kristo T., count as credited);
   - SeaTable column: '<mark>: <SeaTable label>' (label = superclass / class / subclass / subsubclass / type), mark
@@ -60,7 +64,6 @@ from faab.pr import prs_tab as T
 from faab.config import fig
 
 HL = "FFFFF9C4"
-KEEP = ("checked", "proofread")
 STATUSES = ("checked", "proofread", "adequate", "review", "in progress", "stopped", "candidate")
 SPELL = {"stoppped": "stopped"}
 TABS = ("PRg1toT4T5", "PRs", "PRg1hop1", "PRg1hop2", "PRg2hop1", "Mi1s", "LMCs",  # LMCs: 2026-11-07, proofreaders work there
@@ -276,21 +279,33 @@ def main():
                     B.put(tab, r, cc, new, why)
         # --- roots
         curr, at = v.get("root_id_curr", ""), mm.get("root_at_xyz", "")
-        if curr and not re.fullmatch(r"\d{15,}", curr) and re.fullmatch(r"\d{15,}", at or ""):
+        raw = wb[tab].cell(r, cols["root_id_curr"]).value if "root_id_curr" in cols else None
+        off_cell = False
+        if (isinstance(raw, float) and re.fullmatch(r"\d{15,}", at or "")
+                and f"{raw:.14e}" == f"{float(at):.14e}" and curr != at):
+            # an id pasted into a number cell: Google Sheets keeps 15 significant digits (2026-11-19: 648518347491044000
+            # came back as 648518347491043968, another real cell, and was flagged as off its cell); the root at the
+            # xyz has the same 15 digits, so it is the id that was pasted - written back as text
+            B.put(tab, r, cols["root_id_curr"], at, "root id rounded by Google Sheets (number cell): root at xyz")
+            curr = at
+        elif curr and not re.fullmatch(r"\d{15,}", curr) and re.fullmatch(r"\d{15,}", at or ""):
             # stray text typed over the id (2026-11-12: 'd'): the root at the row's xyz
             B.put(tab, r, cols["root_id_curr"], at, "root_id_curr was not an id: root at xyz")
         elif re.fullmatch(r"\d{15,}", curr) and at and at != "0" and at != curr:
             if not latest.get(curr, True):
                 B.put(tab, r, cols["root_id_curr"], at, "root update (root at xyz)")
             else:
+                off_cell = True
                 B.fill(tab, r, cols.values(), "highlight", "MISMATCH")
                 if f"xyz off the cell (on {at})" not in v.get("notes", ""):  # flagged by an earlier sync already
                     notes_add.append(f"xyz off the cell (on {at})")
-        # --- SeaTable
-        if mm.get("via"):
+        # --- SeaTable (not on a row whose point is off its cell when SeaTable was matched through that point: that
+        # SeaTable row is the OTHER cell's - 2026-11-19, 'proofread' became the other cell's 'needs_extending')
+        if mm.get("via") and not (off_cell and mm["via"] == "xyz"):
             sts = [t for t in dict.fromkeys(x.strip() for x in mm["st_status"].split(";")) if t]
-            if "status" in cols and sts and st not in KEEP and st != "; ".join(sts):
+            if "status" in cols and sts and st != "; ".join(sts):
                 B.put(tab, r, cols["status"], "; ".join(sts), "SeaTable status")
+                st = "; ".join(sts)
             if "proofreader" in cols and mm["st_proofreader"]:
                 B.put(tab, r, cols["proofreader"], merge_people(v.get("proofreader", ""), mm["st_proofreader"]),
                       "SeaTable proofreaders added")
@@ -298,6 +313,9 @@ def main():
                 label = "; ".join(t for t in dict.fromkeys(x.strip() for x in mm["st_label"].split(";")) if t)
                 mark = seatable_mark(s(wb[tab].cell(r, col("SeaTable")).value))
                 B.put(tab, r, col("SeaTable"), mark + (f": {label}" if label else ""), "SeaTable mark + label")
+        if "status" in cols and st == "checked":  # no SeaTable status to take: 'checked' is retired (2026-11-18)
+            B.put(tab, r, cols["status"], "adequate", "checked -> adequate (checker and chk_date keep the check)")
+            st = "adequate"
         # --- stale notes (faab.partners.stale_notes): fixed off-cell points, somata found since
         if nuc is not None and "notes" in cols:
             ok_at = at if at and at != "0" else ""
@@ -406,7 +424,14 @@ def main():
             n = {int(q): int(k) for q, k in zip(e.post, e.n)}
             return {u: sum(n.get(v, 0) for v in cur[u]) for u in ids}
 
-        reconcile(wb, B, rows, cell_of, sizes, yellow, recount=recount, latest_of=latest_of, recount_out=recount_out)
+        def seatable_status(x):
+            """the row's SeaTable status ('' when its cell is not in SeaTable or has none): it wins for the cell"""
+            mm = M.get((x["tab"], x["row"]), {})
+            sts = [t for t in dict.fromkeys(v.strip() for v in mm.get("st_status", "").split(";")) if t]
+            return "; ".join(sts) if mm.get("via") else ""
+
+        reconcile(wb, B, rows, cell_of, sizes, yellow, recount=recount, latest_of=latest_of, recount_out=recount_out,
+                  seatable_status=seatable_status)
 
     # --- left-eye PRs section
     if a.left_rows:

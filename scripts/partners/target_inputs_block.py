@@ -54,7 +54,6 @@ SS = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(SS)
 
 HL = SS.HL
-KEEP = SS.KEEP
 RANK = ["checked", "proofread", "adequate", "review", "in progress", "stopped"]
 STYLE_ALIAS = {"PR_root_id": "upstream_PR", "hop": "PR_root_id", "hop2_root_id": "hop1_root_id",
                "T4T5_root_id": "hop1_root_id", "T4T5-1_root_id": "hop1_root_id", "nsyn_out": "nsyn", "T4T5_reached": "h1_conv", "cable_um": "syn_pct",
@@ -140,7 +139,7 @@ def tracking(cells, rows, tab):
         seatable = next((s(x["values"].get("SeaTable")) for x in rs if s(x["values"].get("SeaTable"))), "")
         if sr:
             sts = "; ".join(dict.fromkeys(s(x["status"]) for x in sr if s(x["status"])))
-            if sts and status not in KEEP:
+            if sts:  # SeaTable's status, always (David 2026-11-18; our checked / proofread were kept until then)
                 status = sts
             prs = "; ".join(dict.fromkeys(s(x["proofreader"]) for x in sr if s(x["proofreader"])))
             if prs:
