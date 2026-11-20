@@ -1,7 +1,8 @@
 """The PRs tab of the 'FAAB optic lobe targets' Google sheet, downloaded as .xlsx: layout, member order, formatting.
 
-Layout (column A): a title line; the proofreading targets (groups 1-8); a 'NOT PROOFREADING TARGETS (YET)' line; the
-leads (groups 9+). Each group is a 'group N' line, a header row starting with 'root_id_orig', member rows (column A is
+Layout (column A): a title line; the groups, each 'targets' (the first proofreading targets, groups 1-8) or 'leads'
+(groups 9+). A 'NOT PROOFREADING TARGETS (YET)' line used to separate them; David removed it on 2026-11-20 so that it
+does not deter the new proofreaders, and without it the split falls back to the group numbers (1-8 = targets). Each group is a 'group N' line, a header row starting with 'root_id_orig', member rows (column A is
 a root id) and a blank line. Columns are found by header name (the targets have an extra 'ring_check (...)' column).
 
 David's conventions, applied by the writers in scripts/pr_groups/prs_tab.py and checked by lint():
@@ -26,7 +27,8 @@ from faab.partners.sheet import utc_stamp
 from faab.config import fig
 
 TAB = "PRs"
-LEADS = "NOT PROOFREADING"  # the line that starts the leads section
+LEADS = "NOT PROOFREADING"  # the line that started the leads section (removed from the sheet 2026-11-20)
+TARGET_GROUPS = 8  # without that line: groups 1-8 are the targets
 PAIR_RANK = {"R1/R6": 0, "R2/R5": 1, "R3/R4": 2, "R1/R6 or R3/R4": 3}
 ASIDE = ("OFF-BUNDLE", "SECOND BUNDLE")  # rows with these notes are not members of the bundle
 ID_COLS = ("root_id_orig", "root_id_curr", "partner_root_id_orig", "partner_root_id_curr")
@@ -88,6 +90,9 @@ def blocks(ws):
             cur.rows.append(r)
         elif cur is not None and cur.rows:
             cur = None
+    if section == "targets":  # no LEADS line (removed 2026-11-20): the historical split by group number
+        for b in res:
+            b.section = "targets" if b.group is not None and b.group <= TARGET_GROUPS else "leads"
     return res
 
 
@@ -95,13 +100,22 @@ def get(ws, b, r, name):
     return text(ws, r, b.cols.get(name))
 
 
-VETTED_STATUS = ("proofread", "checked", "adequate")
+VETTED_STATUS = ("proofread", "checked", "adequate", "complete")
+
+
+def in_seatable(ws, b, r):
+    """the row's cell is in SeaTable: its SeaTable column carries the sync's mark ('present: ...' / 'added ...')"""
+    return get(ws, b, r, "SeaTable").lower().startswith(("present", "added"))
 
 
 def vetted(ws, b):
-    """a vetted group: a proofreading target (above the LEADS line, groups 1-8 on the R side) or one whose every member
-    is proofread, checked or adequate. David 2026-11-01: ask before adding anything (rows, notes, links) to it."""
-    return b.section == "targets" or bool(b.rows) and all(get(ws, b, r, "status").lower() in VETTED_STATUS for r in b.rows)
+    """a vetted group: EVERY member row is in SeaTable with a finished status (proofread / adequate / complete; checked
+    is retired). David 2026-11-20: "anything not added to SeaTable is in progress and even those should always be
+    treated with some small dose of suspicion in case they are wrong" - so not the section (groups 1-8 are no longer
+    vetted just for being targets), and vetted only means: ask David before adding rows, notes or links; checks still
+    run on these groups and doubts are reported. (David 2026-11-01: ask before adding anything to a vetted group.)"""
+    return bool(b.rows) and all(in_seatable(ws, b, r) and get(ws, b, r, "status").lower() in VETTED_STATUS
+                                for r in b.rows)
 
 
 def member_order(items, fields):

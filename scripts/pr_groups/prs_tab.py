@@ -126,8 +126,8 @@ def cmd_strip_notes(a):
 
 
 def guard_vetted(ws, blocks, a, what):
-    """stop before adding to a vetted group (faab.pr.prs_tab.vetted: groups 1-8, or every member proofread / checked /
-    adequate) unless --allow-vetted - David 2026-11-01: ask before adding anything to a vetted group"""
+    """stop before adding to a vetted group (faab.pr.prs_tab.vetted: every member in SeaTable with a finished status,
+    since 2026-11-20) unless --allow-vetted - David 2026-11-01: ask before adding anything to a vetted group"""
     hit = sorted({b.group for b in blocks if T.vetted(ws, b)})
     if hit and not a.allow_vetted:
         sys.exit(f"{what} would add to vetted group{'s' * (len(hit) > 1)} {', '.join(map(str, hit))}: ask David first, "
