@@ -84,8 +84,10 @@ def mutual_pairs(S):
     return sorted({tuple(sorted((i, j))) for i, j in bm.items() if bm.get(j) == i})
 
 
-def analyse(outer, inner, sk, presyn):
-    """pairing of the R1-R6 cells `outer` (roots with skeletons); returns per-cell dict and a group note"""
+def analyse(outer, inner, sk, presyn, kinds=None):
+    """pairing of the R1-R6 cells `outer` (roots with skeletons); returns per-cell dict and a group note. `kinds`
+    ({root: 'R7' | 'R8'}) overrides the R7/R8 call from the output sites, e.g. with an annotator's R7 when the R7's
+    medulla part is not traced (2026-11-20: LRS's left cartridges; averaging R7 and R8 swapped the end pairs)"""
     neu = {r: prep(sk[int(r)]) for r in outer + inner}
     pts = np.vstack([neu[r].nodes[["x", "y", "z"]].values for r in outer])
     c = pts.mean(0)
@@ -160,6 +162,10 @@ def analyse(outer, inner, sk, presyn):
             kind[r] = "R7" if s_pre > s_end - 10.0 else "R8"
         else:
             kind[r] = "R?"
+    for r, k in (kinds or {}).items():
+        if r in kind and k != kind[r]:
+            notes.append(f"{r} taken as {k} (given; its output sites say {kind[r]})")
+            kind[r] = k
     ref = [r for r in inner if kind[r] == "R7"] or [r for r in inner if kind[r] == "R?"] or [r for r in inner if kind[r] == "R8"]
     t78 = float(np.mean([pos(r)[0] for r in ref])) if ref else np.nan
     if ref:

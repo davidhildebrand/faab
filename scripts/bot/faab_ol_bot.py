@@ -19,6 +19,12 @@ Checks (every tab except backup copies named '<tab>_bYYMMDDd'):
   rounded_id    root_id_orig / root_id_curr stored as a NUMBER: Google Sheets keeps 15 significant digits, so the id
                 read back is not the one pasted (the sheet update repairs root_id_curr when the xyz confirms it)
   bad_xyz       a row with an 18-digit root id whose xyz is not three numbers
+  annotation    the row's annotation and the SeaTable label in its own SeaTable column ('present: <label>', written
+                by the sheet update) name different types ('L5' vs 'ol_intrinsic / visual / Mi'): the annotator is asked
+                which is right (David 2026-11-20: conflicts are resolved by people, never overwritten)
+  annotation_finer  the annotation names a type SeaTable lacks ('Tm' where SeaTable says 'ol_intrinsic / visual', 'L2?'
+                under SeaTable's 'LMC'): add it to SeaTable? An older or shorter copy of SeaTable's label is not
+                reported (faab.partners.annotation)
 A row's cell = its root_id_curr while that is current, else the root at its xyz. Cells are named by full root ids and
 tabs, never row numbers (rows move).
 New vs old: tmp/faab_ol_bot/state.json keeps the issues already reported; only new ones are listed (the counts always
@@ -58,6 +64,7 @@ import pandas as pd
 
 from faab.clients.cave import client as cave_client, roots_at_xyz, throttle
 from faab.config import TMP
+from faab.partners import annotation as AN
 from faab.partners.reconcile import RANK, SEATABLE_STATUSES, rank
 from faab.partners.sheet import cell_text as s, utc_stamp
 
@@ -76,6 +83,8 @@ TITLES = {  # plain labels for the proofreaders (no internal jargon)
     "bad_id": "root id that is not an 18-digit id",
     "rounded_id": "root id stored as a number (Google Sheets keeps only 15 digits)",
     "bad_xyz": "row with a root id but no usable xyz",
+    "annotation": "annotation differs from SeaTable's: which one is right?",
+    "annotation_finer": "annotation names a type that SeaTable does not have yet: add it to SeaTable?",
 }
 
 
@@ -180,6 +189,15 @@ def check(rows):
             out.append(dict(check="bad_xyz", key=f"bad_xyz|{x['tab']}|{ref}|{v.get('xyz', '')}", cell=ref,
                             tab=x["tab"], who=v.get("proofreader", ""),
                             text=f"{ref}: xyz is '{v.get('xyz', '')}'"))
+        # annotation vs the label in the row's own SeaTable column (written by the sheet update): the update never
+        # overwrites an annotation, so differences are asked about here (David 2026-11-20)
+        ann, lab = v.get("annotation", "").strip(), AN.label_of_mark(v.get("SeaTable", ""))
+        k = AN.kind(ann, lab) if ref and ann and lab else ""
+        if k in (AN.CONFLICT, "finer"):
+            chk = "annotation" if k == AN.CONFLICT else "annotation_finer"
+            out.append(dict(check=chk, key=f"{chk}|{x['tab']}|{ref}|{ann}|{lab}", cell=ref, tab=x["tab"],
+                            who=v.get("proofreader", ""),
+                            text=f"{ref}: annotation '{ann}', SeaTable '{lab}'"))
 
     # live roots: is root_id_curr current (1 call), and the root at every xyz (cached points + 1 call)
     c = cave_client()

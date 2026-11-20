@@ -13,9 +13,14 @@ Rules (David, 2026-10-30):
     (initials matching a credited sheet name, e.g. KT for Kristo T., count as credited);
   - SeaTable column: '<mark>: <SeaTable label>' (label = superclass / class / subclass / subsubclass / type), mark
     'added' (or 'added (AK)') where the sheet said our team added it, else 'present' (also for NEW / NEW-DUP rows);
-  - nothing from SeaTable goes into notes, and the annotation / class columns keep the sheet's values (David,
-    2026-10-30: notes were too verbose and repeated the sheet; the label lives in the SeaTable column only). Replaced
-    values are in the change log;
+  - annotation (David 2026-11-20): a BLANK annotation gets SeaTable's label, as the SeaTable column shows it; an
+    annotation the sheet already has is never overwritten ("rather than overwriting the sheet based on the SeaTable,
+    let's ask the annotator to clarify"; "conflicts should be checked and resolved by users"). Differences are
+    classified by faab.partners.annotation and printed; conflicts go to the annotators (messages, the bot's
+    'annotation' check). The SeaTable column always carries SeaTable's current label. The PRs tab's class column
+    (R1-R6 / R7 / R8) stays ours;
+  - nothing from SeaTable goes into notes (David, 2026-10-30: notes were too verbose and repeated the sheet).
+    Replaced values are in the change log;
 Always: root_id_curr -> the root at the xyz when root_id_curr is no longer current; rows whose root_id_curr is current
 but elsewhere (MISMATCH) are highlighted and get the short note 'xyz off the cell (on <root at xyz>)', nothing moved
 (notes are for the proofreaders: generated notes stay short, David 2026-10-30); notes our scripts wrote earlier are
@@ -57,6 +62,7 @@ from openpyxl.styles import Font, PatternFill
 from faab import synsnap
 from faab.clients.cave import client as cave_client, throttle
 from faab.config import FIGURES, TMP
+from faab.partners import annotation as AN
 from faab.partners import stale_notes as SN
 from faab.partners.sheet import cell_text as s, scan_book, utc_stamp
 from faab.partners.short_notes import shorten
@@ -201,6 +207,7 @@ def main():
     wb = openpyxl.load_workbook(a.book)
     B = Book(wb)
     rows = [x for x in scan_book(wb) if x["tab"] in TABS]
+    ann_diffs = []  # annotations that differ from SeaTable's label: listed, never overwritten (David 2026-11-20)
 
     # stale vs MISMATCH: one CAVE call
     curr_of = lambda x: s(x["values"].get("root_id_curr"))
@@ -309,8 +316,19 @@ def main():
             if "proofreader" in cols and mm["st_proofreader"]:
                 B.put(tab, r, cols["proofreader"], merge_people(v.get("proofreader", ""), mm["st_proofreader"]),
                       "SeaTable proofreaders added")
+            label = "; ".join(t for t in dict.fromkeys(x.strip() for x in mm["st_label"].split(";")) if t)
+            if "annotation" in cols:  # only a blank annotation is filled; differences are listed (David 2026-11-20)
+                cur_ann = s(wb[tab].cell(r, cols["annotation"]).value)
+                k = AN.kind(cur_ann, label)
+                if k == "sheet blank":
+                    B.put(tab, r, cols["annotation"], label, "SeaTable annotation (blank filled)")
+                elif k not in ("same", "no label"):
+                    ann_diffs.append(dict(tab=tab, row=r, root_id_curr=s(wb[tab].cell(r, cols["root_id_curr"]).value) or curr,
+                                          xyz=v.get("xyz", ""), annotation=cur_ann,
+                                          seatable_label=label, kind=k, proofreader=v.get("proofreader", ""),
+                                          st_annotator=mm.get("st_annotator", ""),
+                                          st_proofreader=mm.get("st_proofreader", ""), st_serial=mm.get("st_serial", "")))
             if col("SeaTable"):
-                label = "; ".join(t for t in dict.fromkeys(x.strip() for x in mm["st_label"].split(";")) if t)
                 mark = seatable_mark(s(wb[tab].cell(r, col("SeaTable")).value))
                 B.put(tab, r, col("SeaTable"), mark + (f": {label}" if label else ""), "SeaTable mark + label")
         if "status" in cols and st == "checked":  # no SeaTable status to take: 'checked' is retired (2026-11-18)
@@ -445,6 +463,11 @@ def main():
     wb.save(full)
     log = pd.DataFrame(B.log)
     log.to_csv(fig(f"{stamp}_seatable_sync_changes.tsv"), sep="\t", index=False)
+    ad = pd.DataFrame(ann_diffs, columns=["tab", "row", "root_id_curr", "xyz", "annotation", "seatable_label", "kind",
+                                          "proofreader", "st_annotator", "st_proofreader", "st_serial"])
+    ad.to_csv(fig(f"{stamp}_annotation_discrepancies.tsv"), sep="\t", index=False)
+    print(f"annotations that differ from SeaTable (left as they are): {ad.kind.value_counts().to_dict()}; "
+          f"listed in figures/{stamp}_annotation_discrepancies.tsv (row numbers before collapsing)")
     for tab in [t for t in TABS if t in B.touched or t in a.export]:
         w2 = openpyxl.load_workbook(full)
         for other in list(w2.worksheets):

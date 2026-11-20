@@ -32,6 +32,9 @@ read-only CAVE, calls >= 5 s apart
   refresh-roots IN          root_id_curr / partner_root_id_curr <- the root at xyz / partner_xyz now
   verify IN                 every root pair lies on its point, is current and descends from root_id_orig
   fix-points IN G:ROOT ...  move these rows' xyz onto their own axon (nearest L2 chunk); mirror into partner columns
+  pair IN G ...             R1-R6 pairing of these groups on today's roots (the October mirror + terminal analysis,
+                            faab.pr.bundles_pairs.analyse) into the pairing columns; --include-aside pairs OFF-BUNDLE
+                            rows too; 'manual fly_pair check' (Anish's) is never touched
 
 Usual update: update, then verify. After a groups 9+ refinement: apply-refine, then verify.
 Example: venv/bin/python scripts/pr_groups/prs_tab.py order figures/<stamp>_FAABopticlobetargets-PRs.xlsx"""
@@ -758,6 +761,120 @@ def cmd_verify(a):
     print("\n".join(lines[:40]) if lines else "all root pairs lie on their points, are current and descend from root_id_orig")
 
 
+PAIR_COLS = ("pair_type", "fly_pair", "partner_root_id_orig", "partner_root_id_curr", "partner_xyz", "confidence",
+             "mirror_score", "mirror_margin", "terminal_score")
+
+
+def cmd_pair(a):
+    """R1-R6 pairing of chosen groups on their rows' current roots (David 2026-11-20: group 13 never got it). The
+    analysis is the October bundle pairing (faab.pr.bundles_pairs.analyse: mirror plane + NBLAST on the full skeletons,
+    mutual terminal-zone pairs named from the R7/R8 reference). R1-R6 rows get pair_type, fly_pair, partner ids / xyz,
+    confidence and the scores (old values replaced); R7/R8 rows are left blank; 'manual fly_pair check' is the
+    proofreaders' (Anish's) and is never touched. --include-aside also pairs rows noted OFF-BUNDLE / SECOND BUNDLE and
+    clears that tag from their notes (for a group whose members are known, e.g. a SeaTable cartridge). Members are then
+    put in order. Read-only CAVE: missing L2 skeletons (one throttled call) and the synapse snapshot's catch-up."""
+    import pickle
+    from faab.clients.cave import DATASTACK, client as cave_client, throttle
+    from faab import synsnap
+    from faab.pr import bundles_pairs as BP
+    wb, ws = T.load(a.book)
+    want = [b for b in T.blocks(ws) if b.group in set(a.groups)]
+    missing = set(a.groups) - {b.group for b in want}
+    if missing:
+        sys.exit(f"no group {', '.join(map(str, sorted(missing)))} in the tab")
+    guard_vetted(ws, want, a, "pair")
+    sk = pickle.load(open(BP.SCACHE, "rb"))
+    rows_of = {}
+    for b in want:
+        aside = {r for r in b.rows if any(t in T.get(ws, b, r, "notes") for t in T.ASIDE)}
+        use = [r for r in b.rows if a.include_aside or r not in aside]
+        outer = [r for r in use if T.get(ws, b, r, "class") == "R1-R6"]
+        inner = [r for r in use if T.get(ws, b, r, "class") in ("R7", "R8", "R7/R8")]
+        rows_of[b.group] = (b, outer, inner, aside & set(use))
+    roots = sorted({T.get(ws, b, r, "root_id_curr") for b, o, i, _ in rows_of.values() for r in o + i})
+    need = [int(x) for x in roots if x.isdigit() and int(x) not in sk]
+    t = throttle(0)
+    if need:
+        from fafbseg import flywire
+        t = throttle(t)
+        for s in flywire.get_l2_skeleton(need, dataset=DATASTACK, max_threads=1, omit_failures=True, progress=False):
+            sk[int(s.id)] = s
+        pickle.dump(sk, open(BP.SCACHE, "wb"))
+        print(f"{len(need)} skeletons fetched ({sum(int(x) in sk for x in need)} ok)")
+    syn = synsnap.Snapshot().synapses(pre=[int(x) for x in roots], when="now", positions=True, client=cave_client())
+    presyn = {str(k): g[["pre_x", "pre_y", "pre_z"]].to_numpy(float) * np.array(VOX) / 1000.0
+              for k, g in syn[syn.pre_root != syn.post_root].groupby("pre_root")}
+    for g, (b, outer, inner, aside) in rows_of.items():
+        root = {r: T.get(ws, b, r, "root_id_curr") for r in outer + inner}
+        o = [root[r] for r in outer if root[r].isdigit() and int(root[r]) in sk]
+        i = [root[r] for r in inner if root[r].isdigit() and int(root[r]) in sk]
+        if len(o) < 3:
+            print(f"group {g}: only {len(o)} R1-R6 rows with a skeleton: not paired")
+            continue
+        kinds = {}
+        if a.seatable_r7r8:  # the annotator's R7 / R8 (SeaTable column label ending in R7 or R8)
+            for r in inner:
+                m = re.search(r"/\s*(R7|R8)\s*$", T.get(ws, b, r, "SeaTable"))
+                if m:
+                    kinds[root[r]] = m.group(1)
+        cells, note = BP.analyse(o, i, sk, presyn, kinds=kinds)
+        print(f"group {g}: {len(o)} R1-R6, {len(i)} R7/R8; {note}")
+        row_of_root = {root[r]: r for r in outer}
+        for r in outer:
+            for c in PAIR_COLS:
+                if c in b.cols:
+                    ws.cell(r, b.cols[c]).value = None
+            cl = cells.get(root[r])
+            if not cl:
+                continue
+            p = cl["mirror_partner"]
+            pc = BP.conf(cl)
+            if p and cells.get(p):
+                rank = {"": -1, "weak": 0, "ok": 1, "good": 2}
+                pc = min([pc, BP.conf(cells[p])], key=lambda x: rank[x])
+            pr = row_of_root.get(p)
+            vals = dict(pair_type=BP.NAMES.get(cl["fly_pair"], ""), fly_pair=cl["fly_pair"],
+                        partner_root_id_orig=T.get(ws, b, pr, "root_id_orig") if pr else p, partner_root_id_curr=p,
+                        partner_xyz=T.get(ws, b, pr, "xyz") if pr else "", confidence=pc,
+                        mirror_score="" if np.isnan(cl["mirror_score"]) else f"{cl['mirror_score']:.2f}",
+                        mirror_margin="" if np.isnan(cl["mirror_score"]) or np.isnan(cl["mirror_next"])
+                        else f"{cl['mirror_score'] - cl['mirror_next']:.2f}",
+                        terminal_score="" if np.isnan(cl["terminal_score"]) else f"{cl['terminal_score']:.2f}")
+            for c, v in vals.items():
+                if c in b.cols:
+                    ws.cell(r, b.cols[c]).value = v or None
+            extra = []
+            if not p:
+                extra.append("no mutual mirror partner")
+            elif cl["terminal_partner"] and cl["terminal_partner"] != p:
+                extra.append(f"terminal-zone partner differs ({cl['terminal_partner']})")
+            manual = T.get(ws, b, r, "manual fly_pair check")
+            st_name = re.search(r"(R\d/R\d)\s*$", T.get(ws, b, r, "SeaTable"))
+            if st_name:
+                extra.append("SeaTable " + st_name.group(1) + (" agrees" if st_name.group(1) == vals["fly_pair"] else " DIFFERS"))
+            print(f"  {root[r]}  {vals['fly_pair'] or '-':15s} partner {p or '-':18s} {pc or '-':5s} "
+                  f"mirror {vals['mirror_score'] or '-'} margin {vals['mirror_margin'] or '-'} terminal "
+                  f"{vals['terminal_score'] or '-'}" + (f"  ({'; '.join(extra)})" if extra else "")
+                  + (f"  [manual check: {manual}]" if manual else ""))
+        for r in inner:
+            k = cells.get(root[r], {}).get("kind", "")
+            print(f"  {root[r]}  {T.get(ws, b, r, 'class')} row: {k}-like by its output sites" if k else
+                  f"  {root[r]}  {T.get(ws, b, r, 'class')} row: no skeleton / not analysed")
+        for r in sorted(aside):
+            c = ws.cell(r, b.cols["notes"])
+            old = T.text(ws, r, b.cols["notes"])
+            new = "; ".join(x for x in (y.strip() for y in old.split(";")) if x and x not in T.ASIDE)
+            c.value = new or None
+            print(f"  {T.get(ws, b, r, 'root_id_curr')}: notes '{old}' -> '{new}' (paired as a member)")
+        new = T.ordered_rows(ws, b)
+        if new != b.rows:
+            snap = {r: T.snapshot(ws, r) for r in b.rows}
+            for dst, src in zip(b.rows, new):
+                T.restore(ws, dst, snap[src])
+            print(f"  members reordered ({sum(d != s for d, s in zip(b.rows, new))} rows moved)")
+    finish(wb, ws, a)
+
+
 def cmd_fix_points(a):
     from faab.clients.cave import client as cave_client, roots_at_xyz, throttle
     wb, ws = T.load(a.book)
@@ -867,6 +984,13 @@ def main():
     cmd("refresh-roots", cmd_refresh_roots)
     cmd("verify", cmd_verify, writes=False)
     cmd("fix-points", cmd_fix_points).add_argument("cells", nargs="+", metavar="G:ROOT")
+    p = cmd("pair", cmd_pair)
+    p.add_argument("groups", type=int, nargs="+", metavar="G")
+    p.add_argument("--include-aside", action="store_true",
+                   help="also pair OFF-BUNDLE / SECOND BUNDLE rows and clear that tag from their notes")
+    p.add_argument("--seatable-r7r8", action="store_true",
+                   help="R7 / R8 of the inner rows from their SeaTable label (annotator), not from their output sites")
+    p.add_argument("--allow-vetted", **allow)
     a = ap.parse_args()
     if a.cmd == "strip-notes":
         a.tag = tuple(a.tag or ["regroup"])

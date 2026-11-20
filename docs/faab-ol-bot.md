@@ -14,6 +14,8 @@ What it reports (cells are named by full root ids and tab names, never row numbe
 | root id that is not an 18-digit id | a number in a root id column that is not 18 digits, e.g. an id with a digit missing or one shown as `6.48518E+17`. Text such as block titles, group lines, and notes is skipped |
 | root id stored as a number (Google Sheets keeps only 15 digits) | an id was pasted into a cell formatted as a number, so Sheets kept 15 of its 18 digits and the id now names another cell, or none. Fix: format the column as plain text and paste the id again |
 | row with a root id but no usable xyz | the row has an 18-digit root id, but the xyz is empty or not three numbers |
+| annotation differs from SeaTable's: which one is right? | the row's `annotation` and the SeaTable label in its own `SeaTable` column name different types, e.g. `L5` vs `ol_intrinsic / visual / Mi`. The sheet update never overwrites an annotation, so the annotator settles it |
+| annotation names a type that SeaTable does not have yet: add it to SeaTable? | the annotation is more specific than SeaTable, e.g. `Tm` where SeaTable says only `ol_intrinsic / visual`, or `L2?` where SeaTable says `LMC`. An older or shorter copy of SeaTable's label (e.g. `Mi` for `ol_intrinsic / visual / Mi`) is not reported |
 
 Stale `root_id_curr` values are not reported, because every sheet update replaces them with the root at the xyz.
 Each issue is posted once. The bot remembers what it posted (`tmp/faab_ol_bot/state.json`) and lists only new issues;
