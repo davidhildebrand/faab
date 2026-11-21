@@ -511,7 +511,9 @@ def main():
     B.touched.add(a.tab)
 
     # ---- the new layout: every block in its place; T4T5 blocks ordered; moved rows in their main block; added rows
-    tier = lambda x, lmc_first: 0 if x["on_path"] else (1 if (lmc_first and x["lmc"]) else 2)
+    def below(x):  # rows the membership step moved down ('now below block criteria' note) stay at the bottom
+        return "notes" in x["cols"] and "now below block criteria" in s(ws.cell(x["row"], x["cols"]["notes"]).value)
+    tier = lambda x, lmc_first: 9 if below(x) else (0 if x["on_path"] else (1 if (lmc_first and x["lmc"]) else 2))  # noqa: E731
     key_of = {}
     for b in sort_blocks:
         xs = [x for x in cell_rows if x["b"] is b]
