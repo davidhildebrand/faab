@@ -1,13 +1,14 @@
 """Sheet annotation vs SeaTable label (superclass / class / subclass / subsubclass / type), shared by the sheet sync
 (scripts/sheets/seatable_sync.py) and the sheet checker (scripts/bot/faab_ol_bot.py).
 
-Rule (David 2026-11-20): the sync never overwrites an annotation the sheet already has. It only fills a BLANK
-annotation with SeaTable's label. Every other difference is left for the annotators to clarify: real conflicts are
-asked about (messages, the bot's 'annotation' check), and nothing is replaced automatically.
+Rule (David 2026-11-20/21): the sheet shows SeaTable's annotation where it exists and agrees - a blank annotation, a
+short form or an older, coarser copy becomes SeaTable's label ("we want to show SeaTable annotations when they exist").
+A real conflict is never overwritten (the annotators settle it: messages, the bot's 'annotation' check), and an
+annotation naming a type SeaTable lacks is kept (the bot asks to add it to SeaTable).
 
 kind(sheet, label) ->
   'same'          the same text (spaces around '/' and case ignored)
-  'sheet blank'   the sheet has no annotation, SeaTable has a label (the only case the sync writes)
+  'sheet blank'   the sheet has no annotation, SeaTable has a label
   'no label'      SeaTable has no label
   'labels differ' the cell has several SeaTable rows with different labels
   'coarser'       the sheet holds an older, coarser copy of SeaTable's label ('ol_intrinsic / LMC / visual' while
@@ -26,6 +27,7 @@ GENERIC = {"ol_intrinsic", "visual", "ol_sensory", "olsn", "visual_projection", 
 SUBTYPES = {"lmc": r"l[1-5]", "l-like": r"l[1-5]", "tm": r"tm", "mi": r"mi", "t4": r"t4", "t5": r"t5", "dm": r"dm",
             "metu": r"metu"}
 CONFLICT = "conflict"
+SHOW_SEATABLE = {"sheet blank": "blank filled", "short form": "sheet had a short form", "coarser": "sheet had an older copy"}
 
 
 def parts(x):
@@ -75,5 +77,5 @@ def kind(sheet, label):
 
 
 def fill_from_seatable(sheet, label):
-    """the annotation the sync writes, or None to leave the cell alone: SeaTable's label for a blank annotation only"""
-    return str(label).strip() if kind(sheet, label) == "sheet blank" else None
+    """the annotation the sync writes, or None to leave the cell alone: SeaTable's label where it agrees (SHOW_SEATABLE)"""
+    return str(label).strip() if kind(sheet, label) in SHOW_SEATABLE else None

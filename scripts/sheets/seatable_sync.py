@@ -13,12 +13,13 @@ Rules (David, 2026-10-30):
     (initials matching a credited sheet name, e.g. KT for Kristo T., count as credited);
   - SeaTable column: '<mark>: <SeaTable label>' (label = superclass / class / subclass / subsubclass / type), mark
     'added' (or 'added (AK)') where the sheet said our team added it, else 'present' (also for NEW / NEW-DUP rows);
-  - annotation (David 2026-11-20): a BLANK annotation gets SeaTable's label, as the SeaTable column shows it; an
-    annotation the sheet already has is never overwritten ("rather than overwriting the sheet based on the SeaTable,
-    let's ask the annotator to clarify"; "conflicts should be checked and resolved by users"). Differences are
-    classified by faab.partners.annotation and printed; conflicts go to the annotators (messages, the bot's
-    'annotation' check). The SeaTable column always carries SeaTable's current label. The PRs tab's class column
-    (R1-R6 / R7 / R8) stays ours;
+  - annotation: SeaTable's label, as the SeaTable column shows it, where SeaTable agrees with the sheet - a blank
+    annotation, a short form ('Mi', 'LO ME, CT1') or an older, coarser copy of the label (David 2026-11-21: "we want to
+    show SeaTable annotations when they exist"). Never overwritten: a real conflict ('L5' vs '.. / Mi'; "conflicts
+    should be checked and resolved by users", 2026-11-20) and an annotation naming a type SeaTable lacks ('Tm' vs
+    'ol_intrinsic / visual'; kept, 2026-11-20). Those are listed (faab.partners.annotation kinds) for the annotators
+    (messages, the bot's 'annotation' checks). The SeaTable column always carries SeaTable's current label. The PRs
+    tab's class column (R1-R6 / R7 / R8) stays ours;
   - nothing from SeaTable goes into notes (David, 2026-10-30: notes were too verbose and repeated the sheet).
     Replaced values are in the change log;
 Always: root_id_curr -> the root at the xyz when root_id_curr is no longer current; rows whose root_id_curr is current
@@ -317,11 +318,11 @@ def main():
                 B.put(tab, r, cols["proofreader"], merge_people(v.get("proofreader", ""), mm["st_proofreader"]),
                       "SeaTable proofreaders added")
             label = "; ".join(t for t in dict.fromkeys(x.strip() for x in mm["st_label"].split(";")) if t)
-            if "annotation" in cols:  # only a blank annotation is filled; differences are listed (David 2026-11-20)
+            if "annotation" in cols:  # SeaTable's label shown where it agrees; differences listed (David 2026-11-20/21)
                 cur_ann = s(wb[tab].cell(r, cols["annotation"]).value)
                 k = AN.kind(cur_ann, label)
-                if k == "sheet blank":
-                    B.put(tab, r, cols["annotation"], label, "SeaTable annotation (blank filled)")
+                if k in AN.SHOW_SEATABLE:
+                    B.put(tab, r, cols["annotation"], label, f"SeaTable annotation ({AN.SHOW_SEATABLE[k]})")
                 elif k not in ("same", "no label"):
                     ann_diffs.append(dict(tab=tab, row=r, root_id_curr=s(wb[tab].cell(r, cols["root_id_curr"]).value) or curr,
                                           xyz=v.get("xyz", ""), annotation=cur_ann,
