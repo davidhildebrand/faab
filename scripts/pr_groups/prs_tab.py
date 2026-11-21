@@ -5,7 +5,9 @@ Every writer reads IN.xlsx, changes only what it says, keeps each cell's formatt
 (the conventions are listed in src/faab/pr/prs_tab.py). Import the output with File > Import > "Insert new sheet(s)".
 
 network-free
-  tidy IN                   every mechanical convention fix at once: dates, strip-notes, order, bold
+  tidy IN                   every mechanical convention fix at once: dates, strip-notes, order, the 'type' column
+                            (between link and pair_type: pair_type when the manual check says match, else the manual
+                            decision, blank without a check; David 2026-11-20), bold
   dates IN                  text dates in pr_date / chk_date -> real dates shown as yy-mm-dd
   order IN                  members in David's order (R1-R6 by pairing, R7, R8, rest); rows move with their formatting
   bold IN                   'group N' lines and header rows bold
@@ -89,7 +91,10 @@ def report_tidy(s):
     print(f"tidy: {s['dates_converted']} text dates converted"
           f"{' (left as text, not a date: ' + ', '.join(s['date_text_left']) + ')' if s['date_text_left'] else ''}; "
           f"tagged notes removed from {s['notes_stripped']} cells; members reordered in {s['groups_reordered']} groups "
-          f"({s['rows_moved']} rows moved); {s['cells_bolded']} title/header cells made bold")
+          f"({s['rows_moved']} rows moved); 'type' column: {s.get('type_filled', 0)} rows from the manual check "
+          f"({s.get('type_corrected', 0)} differ from pair_type)"
+          f"{', blocks skipped ' + str(s['type_blocks_skipped']) if s.get('type_blocks_skipped') else ''}; "
+          f"{s['cells_bolded']} title/header cells made bold")
 
 
 def cmd_tidy(a):

@@ -250,13 +250,61 @@ def convert_text_dates(ws):
     return n, left
 
 
+TYPE_COL = "type"
+MANUAL = "manual fly_pair check"
+
+
+def manual_type(pair_type, manual):
+    """the 'type' column's value (David 2026-11-20): the row's pair_type when the manual check (Anish's column) says
+    'match', the manual decision when it names one ('pair_type = near7/8; fly_pair = R1/R6', with or without
+    'mismatch:'), else blank (no manual check, or one that names no pair_type)"""
+    m = (manual or "").strip()
+    if not m:
+        return ""
+    if m.lower() == "match":
+        return pair_type or ""
+    hit = re.search(r"pair_type\s*=\s*([A-Za-z0-9/]+)", m)
+    return hit.group(1) if hit else ""
+
+
+def fill_type(ws):
+    """the 'type' column in the blank column between link and pair_type of every block (header 'type', bold like the
+    other headers; David 2026-11-20): manual_type() of each member row, recomputed on every update. A block whose
+    column there holds anything else is left alone and reported. Returns (rows filled, rows that differ from
+    pair_type, blocks skipped)."""
+    filled = differ = 0
+    skipped = []
+    for b in blocks(ws):
+        link, pt = b.cols.get("link"), b.cols.get("pair_type")
+        if not link or not pt or pt - link != 2 or text(ws, b.header_row, link + 1) not in ("", TYPE_COL):
+            if b.cols.get(TYPE_COL) is None:
+                skipped.append(b.group)
+                continue
+        c = b.cols.get(TYPE_COL) or link + 1
+        h = ws.cell(b.header_row, c)
+        if text(ws, b.header_row, c) != TYPE_COL:
+            h.value = TYPE_COL
+            h._style = copy.copy(ws.cell(b.header_row, pt)._style)
+            b.cols[TYPE_COL] = c
+        for r in b.rows:
+            v = manual_type(get(ws, b, r, "pair_type"), get(ws, b, r, MANUAL))
+            if text(ws, r, c) != v:
+                ws.cell(r, c).value = v or None
+            filled += bool(v)
+            differ += bool(v) and v != get(ws, b, r, "pair_type")
+    return filled, differ, skipped
+
+
 def tidy(ws, tags=("regroup",)):
-    """apply every convention that can be fixed mechanically: dates, tagged notes, member order, bold titles"""
+    """apply every convention that can be fixed mechanically: dates, tagged notes, member order, the 'type' column
+    (from the manual fly_pair check, 2026-11-20), bold titles"""
     n_dates, left = convert_text_dates(ws)
     n_notes = strip_tagged_notes(ws, tags) if tags else 0
     nb, nr = order_blocks(ws)
+    n_type, n_corr, t_skip = fill_type(ws)
     return dict(dates_converted=n_dates, date_text_left=left, notes_stripped=n_notes, groups_reordered=nb,
-                rows_moved=nr, cells_bolded=bold_titles(ws))
+                rows_moved=nr, type_filled=n_type, type_corrected=n_corr, type_blocks_skipped=t_skip,
+                cells_bolded=bold_titles(ws))
 
 
 def lint(ws, tags=("regroup",)):
