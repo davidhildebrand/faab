@@ -45,9 +45,15 @@ in a fresh subprocess (so code updated with --pull, git pull --ff-only before ea
 failed run is retried after 15, 30 and 60 minutes; tmp/faab_ol_bot/last_run.txt keeps the date of the last run, so a
 restart does not repeat that day's post; started after the day's time, it waits for the next day unless --run-now.
 Everything it does goes to the screen and to tmp/faab_ol_bot/serve.log.
+Time-spent page (David 2026-11-21: "Generate on Ubuntu server and have it host the page"; daily, everyone; nothing
+posted): --activity regenerates the proofreaders' editing-time page after each daily check (run_activity: CAVE edit
+log, read-only, cached so a day costs a few calls; scripts/admin/user_activity_plot.py --all), --host serves it at
+http://127.0.0.1:8765/ (--bind / --port), --activity-now builds it once. Per-person hours are sensitive: keep the
+default bind and open it through an SSH tunnel.
 Setup walkthrough: faab/docs/faab-ol-bot.md.
 Usage: faab_ol_bot.py (--book BACKUP.xlsx | --live) [--post] [--all] [--no-state] [--max-lines 40]
-       faab_ol_bot.py --serve [--post] [--pull] [--at 06:30] [--run-now] [--book BACKUP.xlsx (testing)]"""
+       faab_ol_bot.py --serve [--post] [--pull] [--at 06:30] [--run-now] [--activity] [--host] [--book BACKUP.xlsx]
+       faab_ol_bot.py --activity-now"""
 import argparse
 import collections
 import datetime
@@ -306,6 +312,60 @@ def slack(method, **payload):
     return d
 
 
+ACTIVITY = os.path.join(OUT, "activity")  # the time-spent page's data (CAVE edit log cache) and the page itself
+WWW = os.path.join(ACTIVITY, "www")
+
+
+def run_activity(log=print):
+    """the proofreaders' time-spent page (David 2026-11-21: generated on the Ubuntu machine, hosted there, nothing
+    posted): scripts/admin/user_activity_ops.py reads the CAVE edit log since the last run (read-only view key; the
+    cache in ACTIVITY makes daily runs a few calls), scripts/admin/user_activity_plot.py --all writes WWW/index.html.
+    Names: FAAB_OL_BOT_NAMES or ACTIVITY/cave_user_names.csv (copied from David's cave_user_names.py run; the edit key
+    never comes here, so a new account shows as 'user <id>' until that file is refreshed). Returns True when done."""
+    import subprocess
+    admin = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "admin")
+    import glob
+    misc = sorted(glob.glob(os.path.join(os.path.dirname(OUT), "..", "faab", "figures", "misc", "*_cave_user_names.csv")))
+    cands = [os.environ.get("FAAB_OL_BOT_NAMES"), os.path.join(ACTIVITY, "cave_user_names.csv")] + misc[-1:]
+    names = next((c for c in cands if c and os.path.exists(c)), os.path.join(ACTIVITY, "cave_user_names.csv"))
+    nm = ["--names", names] if os.path.exists(names) else []
+    os.makedirs(WWW, exist_ok=True)
+    steps = [("edit log", [sys.executable, os.path.join(admin, "user_activity_ops.py"), "--cache", "faab_ol_bot",
+                           "--out-dir", ACTIVITY] + nm),
+             ("page", [sys.executable, os.path.join(admin, "user_activity_plot.py"), "--all", "--ops",
+                       os.path.join(ACTIVITY, "user_activity_ops.csv"), "--out", os.path.join(WWW, "index.html")] + nm)]
+    for what, cmd in steps:
+        try:
+            p = subprocess.run(cmd, capture_output=True, text=True, timeout=2 * 3600)
+        except subprocess.TimeoutExpired:
+            log(f"time-spent page: {what} gave no result after 2 h, stopped")
+            return False
+        out = [ln for ln in (p.stdout + p.stderr).splitlines() if ln.strip() and not re.search(r"it/s\]|s/it\]", ln)]
+        if p.returncode:
+            log(f"time-spent page: {what} FAILED (exit {p.returncode}): " + " / ".join(out[-3:]))
+            return False
+        log(f"time-spent page: {what} done; " + (out[-1] if out else ""))
+    if not nm:
+        log(f"time-spent page: no names file at {names} - people are shown as 'user <id>' (see the guide)")
+    return True
+
+
+def host(bind, port, log=print):
+    """serve WWW (the time-spent page) over HTTP in a background thread; bind 127.0.0.1 (default) = this machine only,
+    reach it through an SSH tunnel (see the guide)"""
+    import functools
+    import http.server
+    import threading
+    os.makedirs(WWW, exist_ok=True)
+    class Quiet(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, *args):  # keep the bot's screen quiet
+            pass
+    srv = http.server.ThreadingHTTPServer((bind, port), functools.partial(Quiet, directory=WWW))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    log(f"time-spent page served at http://{bind}:{port}/ (directory {WWW})")
+    return srv
+
+
 def serve(a):
     """persistent mode: the daily check at a.at UTC, each run a fresh subprocess; retries; never twice a day"""
     import subprocess
@@ -346,9 +406,11 @@ def serve(a):
         last = ""
     elif not last and now >= slot(now.date()):
         last = now.date().isoformat()  # first start after today's time: the first run is tomorrow
+    if a.host:
+        host(a.bind, a.port, log)
     log(f"faab-ol-bot serving: the check runs every day at {a.at} UTC ("
         + ("posts to Slack" if a.post else "dry runs: nothing is posted") + ("; pulls the code first" if a.pull else "")
-        + f"); log {log_path}; stop with Ctrl+C")
+        + ("; then the time-spent page" if a.activity else "") + f"); log {log_path}; stop with Ctrl+C")
     waits, attempt, retry_at, beat = [15, 30, 60], 0, None, None
     try:
         while True:
@@ -357,6 +419,8 @@ def serve(a):
                 retry_at is None and (a.run_now and not last or now >= slot(now.date())) and last != now.date().isoformat())
             if due:
                 ok = run_once()
+                if a.activity and (ok or attempt >= len(waits)):  # once a day, after the check
+                    run_activity(log)
                 if ok or attempt >= len(waits):
                     if not ok:
                         log("giving up for today")
@@ -390,8 +454,17 @@ def main():
     ap.add_argument("--at", default="06:30", help="daily check time, UTC HH:MM (with --serve)")
     ap.add_argument("--pull", action="store_true", help="git pull --ff-only before each daily check (with --serve)")
     ap.add_argument("--run-now", action="store_true", help="also run once right away (with --serve)")
+    ap.add_argument("--activity", action="store_true", help="after each daily check, regenerate the proofreaders' "
+                    "time-spent page on this machine (with --serve; nothing is posted)")
+    ap.add_argument("--activity-now", action="store_true", help="regenerate the time-spent page once and stop")
+    ap.add_argument("--host", action="store_true", help="serve the time-spent page over HTTP (with --serve)")
+    ap.add_argument("--bind", default="127.0.0.1", help="address for --host (default 127.0.0.1 = this machine only)")
+    ap.add_argument("--port", type=int, default=8765, help="port for --host (default 8765)")
     a = ap.parse_args()
     load_config()
+    if a.activity_now:
+        os.makedirs(OUT, exist_ok=True)
+        return None if run_activity() else sys.exit(1)
     if a.post:
         need("SLACK_BOT_TOKEN", "FAAB_OL_BOT_CHANNEL")
     if a.serve:

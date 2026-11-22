@@ -15,7 +15,8 @@ days, work sessions (consecutive ops less than --gap minutes apart; a session = 
 estimated hours; per user per ISO week. CAVE logs edits only, not viewing or navigation, so hours are a LOWER bound
 of time spent and say nothing about review-only work.
 Writes figures/misc/<stamp>_user_activity_ops.csv (one row per operation), _user_activity_users.csv, _weeks.csv.
-Usage: user_activity_ops.py [--months 4] [--gap 30] [--batch 400] [--resume RUN]"""
+Usage: user_activity_ops.py [--months 4] [--gap 30] [--batch 400] [--resume RUN] [--cache NAME --out-dir DIR]
+       [--names CSV]   (--cache + --out-dir: the daily faab-ol-bot run, reading only the ids since the last run)"""
 import argparse
 import datetime as dt
 import glob
@@ -38,9 +39,16 @@ def main():
     ap.add_argument("--gap", type=float, default=30.0, help="minutes between ops that start a new session")
     ap.add_argument("--batch", type=int, default=400)
     ap.add_argument("--resume", help="run stamp of an earlier, interrupted run")
+    ap.add_argument("--cache", help="a fixed name for the operation cache, so every run reads only the new ids "
+                                    "(faab-ol-bot: daily runs, 2026-11-21)")
+    ap.add_argument("--out-dir", help="write user_activity_ops.csv / _users.csv / _weeks.csv (and the cache) here, "
+                                      "replacing the previous ones, instead of stamped files in figures/misc")
+    ap.add_argument("--names", help="cave_user_names.csv to use (default: the newest figures/misc/*_cave_user_names.csv)")
     a = ap.parse_args()
-    run = a.resume or utc_stamp()
-    raw_path = os.path.join(TMP, f"{run}_ops_raw.parquet")
+    run = a.cache or a.resume or utc_stamp()
+    raw_path = os.path.join(a.out_dir or TMP, f"{run}_ops_raw.parquet")
+    if a.out_dir:
+        os.makedirs(a.out_dir, exist_ok=True)
     end = dt.datetime.now(UTC)
     start = (pd.Timestamp(end) - pd.DateOffset(months=a.months)).to_pydatetime()
     c = cave_client()  # default key = the view-only account
@@ -131,7 +139,7 @@ def main():
 
     # 4. names (may be refused for the view account) and the report
     names = {}
-    known = sorted(glob.glob(fig("*_cave_user_names.csv")))  # from cave_user_names.py (David's key)
+    known = [a.names] if a.names else sorted(glob.glob(fig("*_cave_user_names.csv")))  # cave_user_names.py (David's key)
     if known:
         names = dict(zip(*pd.read_csv(known[-1])[["user", "name"]].T.values))
     try:
@@ -158,13 +166,15 @@ def main():
     wk = wk.merge((ses.reset_index().assign(week=lambda t: t["min"].dt.strftime("%G-W%V"))
                    .groupby(["user", "week"]).hours.sum().round(1).rename("est_hours").reset_index()), on=["user", "week"], how="left")
     stamp = utc_stamp()
-    d.drop(columns=["session"]).to_csv(fig(f"{stamp}_user_activity_ops.csv"), index=False)
-    per.to_csv(fig(f"{stamp}_user_activity_users.csv"), index=False)
-    wk.to_csv(fig(f"{stamp}_user_activity_weeks.csv"), index=False)
+    out = (lambda k: os.path.join(a.out_dir, f"user_activity_{k}.csv")) if a.out_dir else \
+        (lambda k: fig(f"{stamp}_user_activity_{k}.csv"))
+    d.drop(columns=["session"]).to_csv(out("ops"), index=False)
+    per.to_csv(out("users"), index=False)
+    wk.to_csv(out("weeks"), index=False)
     print(f"\n{len(d)} operations by {d.user.nunique()} users, {start:%Y-%m-%d} .. {end:%Y-%m-%d} "
           f"(sessions split at gaps > {a.gap:g} min; hours = edit time only, a lower bound):")
     print(per.drop(columns=["first", "last"]).to_string(index=False))
-    print(f"written {fig(f'{stamp}_user_activity_users.csv')} (+ _ops.csv, _weeks.csv)")
+    print(f"written {out('users')} (+ _ops.csv, _weeks.csv)")
 
 
 if __name__ == "__main__":

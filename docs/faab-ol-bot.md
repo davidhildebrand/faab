@@ -327,6 +327,65 @@ The next daily check uses it; no restart needed.
 
 ---
 
+## Part 7 (optional): the proofreaders' time-spent page (10 minutes)
+
+The bot can rebuild the editing-time page (hours per person per day and week, by time of day, with a comparison table)
+every day after the check, for everyone who edited in the last 4 months, and serve it from the Ubuntu machine. Nothing
+is posted to Slack. The hours come from CAVE's edit log, so they are a lower bound: looking without editing is not
+counted. Per-person work hours are sensitive, so the page is only served to the machine itself; you open it through an
+SSH tunnel.
+
+**Names.** The edit log has user ids. Looking up names needs your edit key, which never goes on the bot, so copy the
+names file from the Mac once (and again whenever new people join, after running `scripts/admin/cave_user_names.py`
+with your edit key there). On the Ubuntu machine, make the folder:
+
+```bash
+mkdir -p ~/faab-ol-bot/tmp/faab_ol_bot/activity
+```
+
+On the Mac, copy the newest names file (with your Ubuntu user and host name):
+
+```bash
+scp "$(ls -t ~/Data/Vibe/FAAB/faab/figures/misc/*_cave_user_names.csv | head -n 1)" USER@UBUNTU:faab-ol-bot/tmp/faab_ol_bot/activity/cave_user_names.csv
+```
+
+Without it, people show up as `user <id>`.
+
+**Skip the slow first read (optional).** The first build reads 4 months of the edit log (about 300 CAVE calls at the
+2-second rate limit, 10 to 15 minutes); building the page itself takes seconds, and later runs only read the new
+edits. If the Mac has built the page already, copy its cache over and the Ubuntu machine's first run is quick too:
+
+```bash
+scp ~/Data/Vibe/FAAB/tmp/faab_ol_bot/activity/faab_ol_bot_ops_raw.parquet ~/Data/Vibe/FAAB/tmp/faab_ol_bot/activity/faab_ol_bot_ops_scanned.txt USER@UBUNTU:faab-ol-bot/tmp/faab_ol_bot/activity/
+```
+
+**First build.** On the Ubuntu machine, build the page once:
+
+```bash
+~/faab-ol-bot/venv/bin/python ~/faab-ol-bot/faab/scripts/bot/faab_ol_bot.py --activity-now
+```
+
+**Daily, and served.** Add `--activity --host` to the command that runs in tmux (Part 5) and to the `@reboot` line:
+
+```bash
+~/faab-ol-bot/venv/bin/python ~/faab-ol-bot/faab/scripts/bot/faab_ol_bot.py --serve --post --pull --activity --host
+```
+
+The bot prints `time-spent page served at http://127.0.0.1:8765/` and, after each daily check, `time-spent page: page
+done`.
+
+**Opening it.** On the Ubuntu machine itself, open `http://127.0.0.1:8765/` in a browser. From the Mac, open a tunnel
+(leave this running in a terminal; Ctrl+C closes it):
+
+```bash
+ssh -N -L 8765:127.0.0.1:8765 USER@UBUNTU
+```
+
+then open `http://localhost:8765/` in the Mac's browser. Leave `--bind` at its default (127.0.0.1): with
+`--bind 0.0.0.0` anyone who can reach the machine on the network could read everyone's hours.
+
+---
+
 ## Day-to-day
 
 - Each check writes `tmp/faab_ol_bot/<stamp>_message.md` (the text) and `<stamp>_issues.tsv` (all open issues) on the

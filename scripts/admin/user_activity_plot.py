@@ -11,7 +11,8 @@ its time-zone menu (UTC offset) re-splits sessions at local midnight:
   - every calendar day as a row: its sessions across the 24 h, its total, and each week's total
   - hours by time of day and by weekday; a weekly table
 Writes figures/misc/<stamp>_user_activity_<first id of each person, joined by _>.html.
-Usage: user_activity_plot.py USER_ID[,USER_ID] [USER_ID ...] [--ops CSV] [--gap 30] [--tz HOURS]"""
+Usage: user_activity_plot.py USER_ID[,USER_ID] [USER_ID ...] [--ops CSV] [--gap 30] [--tz HOURS]
+       user_activity_plot.py --all [--min-ops N] [--ops CSV] [--names CSV] [--out PAGE.html]   (faab-ol-bot's daily page)"""
 import argparse
 import glob
 import html
@@ -35,17 +36,32 @@ def newest(pattern):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("users", nargs="+", help="one per person; several accounts of one person joined by commas")
+    ap.add_argument("users", nargs="*", help="one per person; several accounts of one person joined by commas")
+    ap.add_argument("--all", action="store_true", help="everyone with edits in the ops table (accounts with the same "
+                    "name pooled as one person), most edits first")
+    ap.add_argument("--min-ops", type=int, default=1, help="with --all: leave out people with fewer edits")
     ap.add_argument("--ops")
+    ap.add_argument("--names", help="cave_user_names.csv (default: the newest figures/misc/*_cave_user_names.csv)")
+    ap.add_argument("--out", help="the page's path (default: a stamped file in figures/misc)")
     ap.add_argument("--gap", type=float, default=30.0)
     ap.add_argument("--tz", type=float, default=0.0, help="initial UTC offset in hours (the page has a menu)")
     a = ap.parse_args()
     ops_csv = a.ops or newest("*_user_activity_ops.csv")
     d = pd.read_csv(ops_csv)
-    names = pd.read_csv(newest("*_cave_user_names.csv"))
+    names = pd.read_csv(a.names or newest("*_cave_user_names.csv"))
     ncol = [c for c in names.columns if "name" in c.lower()][0]
     ucol = [c for c in names.columns if c.lower() in ("user", "user_id", "id")][0]
     name_of = names.set_index(ucol)[ncol]
+    if a.all:  # one spec per person: accounts with the same (non-empty) name together
+        counts = d.user.value_counts()
+        groups = {}
+        for u in counts.index:
+            nm = str(name_of.get(u, "")).strip()
+            groups.setdefault(nm.lower() if nm and nm.lower() != "nan" else f"#{u}", []).append(int(u))
+        a.users = [",".join(map(str, ids)) for ids in sorted(groups.values(), key=lambda ids: -sum(counts[i] for i in ids))
+                   if sum(counts[i] for i in ids) >= a.min_ops]
+    if not a.users:
+        raise SystemExit("give user ids or --all")
     people = []
     for spec in a.users:
         ids = [int(x) for x in spec.split(",") if x.strip()]
@@ -56,10 +72,15 @@ def main():
         people.append(dict(users=ids, name=name, ops=[int(x.timestamp() * 1000) for x in t]))
         print(f"{name} ({', '.join(map(str, ids))}): {len(t)} edits {t.iloc[0]:%Y-%m-%d} .. {t.iloc[-1]:%Y-%m-%d}")
     data_end = os.path.basename(ops_csv)[:19]  # the run's stamp = end of the scanned window
-    end_ms = int(pd.Timestamp(data_end.replace("d", "T", 1).replace("tUTC", ""), tz="UTC").timestamp() * 1000)
+    try:
+        end_ms = int(pd.Timestamp(data_end.replace("d", "T", 1).replace("tUTC", ""), tz="UTC").timestamp() * 1000)
+    except ValueError:  # a fixed file name (faab-ol-bot's daily run): the scan ended when the file was written
+        end_ms = int(os.path.getmtime(ops_csv) * 1000)
     payload = dict(people=people, gap=a.gap, pad=2.0, tz=a.tz, end=end_ms, src=os.path.basename(ops_csv))
     tag = "_".join(str(p["users"][0]) for p in people)
-    out = os.path.join(MISC, f"{utc_stamp()}_user_activity_{tag}.html")
+    out = a.out or os.path.join(MISC, f"{utc_stamp()}_user_activity_{tag}.html")
+    if a.out:
+        os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     title = f"{people[0]['name']} editing time" if len(people) == 1 else "Proofreader editing time"
     page = PAGE.replace("__TITLE__", html.escape(title)).replace("__DATA__", json.dumps(payload))
     open(out, "w", encoding="utf-8").write(page)
