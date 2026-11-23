@@ -154,6 +154,10 @@ def analyze(book):
     cab = [first_int(x["v"].get("cable_um")) for x in in1 if first_int(x["v"].get("cable_um"))]
     wide = {cell(x) for x in in1 if cab and first_int(x["v"].get("cable_um")) >= 3 * statistics.median(cab)}
     seeds = {cell(x) for x in in1} - excl - wide
+    # the tab's other cells one connection upstream of a target: the wide-field T4T5-1 cells and the PR+2 cells. A
+    # T4T5-2 row on a photoreceptor path feeds one of these, not a seed; its list shows them (2026-11-23: listing seeds
+    # only blanked 11 such rows' nsyn)
+    upstream_other = (excl | wide | {cell(x) for x in t5 if hop(x) == "PR+2"}) - seeds
     not_t = {cell(x) for x in t5 if hop(x).startswith("PR+3, not")}
     hop1_U = {}
     for x in tabs["PRg1hop2"]:
@@ -185,7 +189,7 @@ def analyze(book):
     E2 = snap.edges(pre=[int(i) for i in (X | xrows | set(new_h1)) - pre1], when=when, client=client)
     for e in E2.itertuples():
         out_n[str(e.pre)][str(e.post)] = int(e.n)
-    Ein = snap.edges(post=[int(i) for i in targets | seeds | not_t], when=when, client=client)
+    Ein = snap.edges(post=[int(i) for i in targets | seeds | not_t | upstream_other], when=when, client=client)
     in_n = collections.defaultdict(dict)
     for e in Ein.itertuples():
         in_n[str(e.post)][str(e.pre)] = int(e.n)
@@ -193,7 +197,8 @@ def analyze(book):
     print(f"snapshot caught up to {when:%Y-%m-%d %H:%M} UTC: {len(E) + len(E2)} output edges, {len(Ein)} input edges; "
           f"{len(targets)} targets, {len(seeds)} T4T5-2 seeds ({len(excl | wide)} wide-field left out)", flush=True)
 
-    A = dict(book=book, when=when, out_n=out_n, in_n=in_n, targets=targets, seeds=seeds, own=own, pr_now=pr_now,
+    A = dict(book=book, when=when, out_n=out_n, in_n=in_n, targets=targets, seeds=seeds, upstream_other=upstream_other,
+             own=own, pr_now=pr_now,
              pr_orig_of=pr_orig_of, pr_class=pr_class, now_of=now_of, hop1_U=hop1_U, sel=sel, rows=[], adds=[],
              blocks=[], titles={})
     day = f"{when:%Y-%m-%d}"
@@ -346,6 +351,19 @@ def note_with_below(old, day, txt, below):
     return "; ".join(parts)
 
 
+def lists_t4t5_2(c, A, in_n):
+    """a T4T5-2 row's list: the seeds it feeds with >= 3; when none, the tab's other cells one connection upstream of
+    a target (PR+2, wide-field T4T5-1) it feeds with >= 3 (rows on a photoreceptor path); when none, its strongest
+    contacts among both (never an empty list while it has any)"""
+    ids, ns, tot = lists_t4t5(c, A["seeds"], in_n, top_below=0)
+    if ids:
+        return ids, ns, tot
+    ids, ns, tot2 = lists_t4t5(c, A["upstream_other"], in_n, top_below=0)
+    if ids:
+        return ids, ns, tot + tot2
+    return lists_t4t5(c, A["seeds"] | A["upstream_other"], in_n)
+
+
 def lists_t4t5(c, S, in_n, top_below=3):
     """(ids strongest first, counts, total): the cells of S that c feeds with >= THR; when none, its strongest
     contacts (>= 1, at most top_below) so a row below the criteria still shows what it has"""
@@ -426,7 +444,7 @@ def apply(A, out_path):
                     setv(r, "nsyn_out", tot)
                     setv(r, "T4T5_reached", len([v for v in ns if v >= THR]))
                 elif h == "T4T5-2":
-                    ids, ns, tot = lists_t4t5(cc, A["seeds"], in_n)
+                    ids, ns, tot = lists_t4t5_2(cc, A, in_n)
                     reach = sorted({t for s_ in ids for t in A["targets"] if in_n[t].get(s_, 0) >= THR})
                     setv(r, "T4T5-1_root_id", ", ".join(ids))
                     setv(r, "nsyn", ", ".join(map(str, ns)))
@@ -517,7 +535,7 @@ def apply(A, out_path):
                     ids, ns, tot = lists_t4t5(k, A["targets"], in_n)
                     d.update(T4T5_root_id=", ".join(ids), nsyn=", ".join(map(str, ns)), nsyn_out=tot, T4T5_reached=len(ids))
                 elif a["block"].endswith("T4T5-2"):
-                    ids, ns, tot = lists_t4t5(k, A["seeds"], in_n)
+                    ids, ns, tot = lists_t4t5_2(k, A, in_n)
                     reach = sorted({t for s_ in ids for t in A["targets"] if in_n[t].get(s_, 0) >= THR})
                     d.update(**{"T4T5-1_root_id": ", ".join(ids)}, nsyn=", ".join(map(str, ns)), nsyn_out=tot,
                              T4T5_root_id=", ".join(reach), T4T5_reached=len(reach))
