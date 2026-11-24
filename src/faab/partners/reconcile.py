@@ -36,6 +36,7 @@
 Every change goes through seatable_sync.Book (logged with the reason)."""
 import re
 
+from faab.partners import annotation as ANN
 from faab.partners.sheet import cell_text as s, scan_book
 from faab.pr.prs_tab import as_date
 
@@ -56,7 +57,8 @@ FALSE_MERGE = re.compile(r"false(ly)? merge|merge error|wrongly merged", re.I)
 POINTER = re.compile(r"^(duplicate( target)? of\b|merged into (r\d+|[A-Za-z0-9_]+ r\d+)\b)", re.I)
 REPEAT = re.compile(r"^(duplicate|same (id|neuron) appeared in multiple columns?|multiple ent(e)?ries|this id is repeated "
                     # 'this ID is repeated again later' (2026-11-07: the lead alone was cut, leaving 'again later')
-                    r"(throughout|in the document|(again )?(later|below|above)))[.\s]*$", re.I)
+                    # 'this ID is repeated in the file' (2026-11-24: only the lead was cut, leaving 'in the file')
+                    r"(throughout|in the (document|file|sheet|spreadsheet|tab)|(again )?(later|below|above)))[.\s]*$", re.I)
 OWN = re.compile(r"^(xyz off the cell|census bundle|second bundle|off-bundle|moved to group|split from group|added by "
                  r"bundle tracking|pair|terminal|names differ|probable merge error|extra axon|check that|"
                  r"(branch |fragment )?merged (to|into|with)\b|"
@@ -73,7 +75,8 @@ STALE = re.compile(r"small chunk (of|connecte?d? to) a (big|larger) neuron|in be
                    r"(tiny )?chunk connected to (a )?neuron|small fragment, belonging to a neuron|orphan (fragment|segment)\??",
                    re.I)
 FRAG_OF = re.compile(r"^fragment of an? (\S+) neuron$", re.I)
-REPEAT_LEAD = re.compile(r"^this id (appears|is repeated)( multiple times| throu?ghout| throoughout| in the document)?[,.]?\s*", re.I)
+REPEAT_LEAD = re.compile(r"^this id (appears|is repeated)( multiple times| throu?ghout| throoughout"
+                         r"| in the (?:document|file|sheet|spreadsheet|tab))?[,.]?\s*", re.I)
 
 
 def rank(st):
@@ -149,20 +152,59 @@ def first_n(v):
     return int(m.group()) if m else 0
 
 
+def twin_annotation(anns):
+    """(annotation, clashes) for rows of one cell collapsed into one: the most specific of their annotations, so a
+    twin's 'L1' is not lost under the kept row's 'ol_intrinsic / visual' (2026-11-24: Dorfam's L1 on
+    648518347548174469 went with its row). Comparison as faab.partners.annotation.kind (sheet vs label): a 'finer'
+    one wins, a short form / older copy gives way to the fuller text. On a conflict ('L1' vs 'L2') the first (kept)
+    row's annotation stays and the pair is returned, for the change log."""
+    best, clash = "", []
+    for a in (s(x).strip() for x in anns):
+        if not a or a == best:
+            continue
+        if not best:
+            best = a
+            continue
+        k, back = ANN.kind(a, best), ANN.kind(best, a)
+        if k == "finer" or back in ("short form", "coarser"):
+            best = a
+        elif back == "finer" or k in ("short form", "coarser", "same"):
+            continue
+        else:
+            clash.append((best, a))
+    return best, clash
+
+
 def retitle(wb, B, rows, hdr, drop):
     """a block title that states the block's size ('101 cells' over 101 rows; title = the row above the header) follows
     the rows dropped from it (2026-11-11: two T4T5-1 pairs merged, the title kept saying 101). Before delete_rows, on
-    the original row numbers; a title whose number is not the block's row count is left alone."""
+    the original row numbers; a title whose number is not the block's row count is left alone. Rows noted 'now below
+    block criteria' are the title's '(+ k now below the criteria ...)', not part of its 'N cells' (2026-11-24)."""
+    by = {(y["tab"], y["row"]): y for y in rows}
+
+    def below(y):
+        return y is not None and "notes" in y["cols"] and \
+            "now below block criteria" in s(wb[y["tab"]].cell(y["row"], y["cols"]["notes"]).value)
     gone = {}
     for tab, rs in drop.items():
         for r in rs:
-            gone[(tab, hdr[(tab, r)])] = gone.get((tab, hdr[(tab, r)]), 0) + 1
-    for (tab, h), k in gone.items():
-        n = sum(1 for y in rows if y["tab"] == tab and hdr[(tab, y["row"])] == h)
+            g = gone.setdefault((tab, hdr[(tab, r)]), [0, 0])
+            g[1 if below(by.get((tab, r))) else 0] += 1
+    for (tab, h), (k, k_dn) in gone.items():
+        mine = [y for y in rows if y["tab"] == tab and hdr[(tab, y["row"])] == h]
+        n_dn = sum(1 for y in mine if below(y))
+        n = len(mine) - n_dn
         t = s(wb[tab].cell(h - 1, 1).value) if h > 1 else ""
-        if re.search(rf"\b{n} cells\b", t):
-            B.put(tab, h - 1, 1, re.sub(rf"\b{n} cells\b", f"{n - k} cells", t, count=1),
-                  f"block title: {n} -> {n - k} cells after collapsing")
+        if not re.search(rf"\b{n} cells\b", t):
+            continue
+        t2 = re.sub(rf"\b{n} cells\b", f"{n - k} cells", t, count=1)
+        if k_dn:
+            left = n_dn - k_dn
+            t2 = re.sub(r"\s*\(\+ \d+ now below the criteria[^)]*\)", "", t2)
+            if left:
+                t2 = re.sub(rf"\b({n - k} cells\b)", rf"\1 (+ {left} now below the criteria, noted, at the bottom)", t2, count=1)
+        if t2 != t:
+            B.put(tab, h - 1, 1, t2, f"block title: {n} -> {n - k} cells after collapsing")
 
 
 ROW_POINTER = re.compile(r"^(duplicate( target)? of|merged into)\s+(\w+ )?(r|row )\d+\.?$", re.I)
@@ -382,6 +424,13 @@ def reconcile(wb, B, rows, cell_of, sizes, yellow, recount=None, latest_of=None,
                 for n in ("cable_um", "neuropils"):
                     if n in cols:
                         B.put(tab, rec["row"], cols[n], val(big, n), f"{why_c}: {n} of its largest piece")
+        if "annotation" in cols:  # the most specific annotation of the rows survives (twin_annotation)
+            ann, clash = twin_annotation([val(rec, "annotation"), *(val(x, "annotation") for x in others)])
+            if ann and ann != s(val(rec, "annotation")).strip():
+                B.put(tab, rec["row"], cols["annotation"], ann, f"{why_c}: the most specific annotation of the rows")
+            for a, b in clash:
+                B.log.append(dict(tab=tab, row=rec["row"], column="annotation", old=b, new=a,
+                                  why=f"{why_c}: annotations differ, the kept row's stays - please check"))
         if "notes" in cols:  # pointers to the twins go with them
             B.put(tab, rec["row"], cols["notes"], "; ".join(p for p in parts(val(rec, "notes")) if not POINTER.search(p)),
                   "collapsed rows of one cell")

@@ -602,11 +602,21 @@ def main():
         if b["kind"] not in COUNTED:
             continue
         want = COUNTED[b["kind"]]
-        n = sum(1 for q in range(b["first"] + 2, b["last"] + 1) if s(ws.cell(q, 1).value) in (want if isinstance(want, tuple) else (want,)))
-        t = s(ws.cell(b["first"], 1).value)
+        rows_b = [q for q in range(b["first"] + 2, b["last"] + 1) if s(ws.cell(q, 1).value) in (want if isinstance(want, tuple) else (want,))]
+        # rows the membership step noted 'now below block criteria' are the title's '(+ k now below the criteria ...)',
+        # not part of its 'N cells' (2026-11-24: counting them too turned '99 cells (+ 4 ...)' back into '103 cells (+ 4 ...)')
+        nc = next((j for j in range(1, width0 + 1) if s(ws.cell(b["first"] + 1, j).value) == "notes"), None)
+        n_dn = sum(1 for q in rows_b if nc and "now below block criteria" in s(ws.cell(q, nc).value))
+        n = len(rows_b) - n_dn
+        t0 = t = s(ws.cell(b["first"], 1).value)
         m0 = re.search(r"(?<![\w+-])(\d+) cells\b", t)  # not the '2' of 'T4T5-2 cells'
         if m0 and int(m0.group(1)) != n:
             t = t[:m0.start()] + f"{n} cells" + t[m0.end():]
+        if m0:
+            t = re.sub(r"\s*\(\+ \d+ now below the criteria[^)]*\)", "", t)
+            if n_dn:
+                t = re.sub(r"(?<![\w+-])(\d+ cells\b)", rf"\1 (+ {n_dn} now below the criteria, noted, at the bottom)", t, count=1)
+        if t != t0:
             B.put(a.tab, b["first"], 1, t, "block title: cell count")
         if b["kind"] in KIND_HOP:
             m = re.search(r"; order: .*?; within each group (.*)$", t)
