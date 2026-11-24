@@ -1,8 +1,8 @@
 # faab-ol-bot: setup walkthrough
 
 faab-ol-bot checks the FAAB optic-lobe tracking sheet once a day and posts what it finds to a Slack channel. It only
-reads: the sheet (read-only access), CAVE (the default view key), and nothing is written anywhere except Slack
-messages. The code is `faab/scripts/bot/faab_ol_bot.py`.
+reads: the sheet (read-only access), SeaTable (a read-only token), CAVE (the default view key), and nothing is
+written anywhere except Slack messages. The code is `faab/scripts/bot/faab_ol_bot.py`.
 
 What it reports (cells are named by full root ids and tab names, never row numbers):
 
@@ -16,6 +16,7 @@ What it reports (cells are named by full root ids and tab names, never row numbe
 | row with a root id but no usable xyz | the row has an 18-digit root id, but the xyz is empty or not three numbers |
 | annotation differs from SeaTable's: which one is right? | the row's `annotation` and the SeaTable label in its own `SeaTable` column name different types, e.g. `L5` vs `ol_intrinsic / visual / Mi`. The sheet update never overwrites an annotation, so the annotator settles it |
 | annotation names a type that SeaTable does not have yet: add it to SeaTable? | the annotation is more specific than SeaTable, e.g. `Tm` where SeaTable says only `ol_intrinsic / visual`, or `L2?` where SeaTable says `LMC`. An older or shorter copy of SeaTable's label (e.g. `Mi` for `ol_intrinsic / visual / Mi`) is not reported |
+| adequate or proofread on the sheet, but no SeaTable row is on the cell: add it to SeaTable? | a cell marked adequate, complete, proofread, or checked on any row (also inside a list such as `needs_extending; adequate`) that has no SeaTable row: no row's supervoxel is on the cell today. A SeaTable row that stores an old root id, or whose supervoxel sits on a piece that was split off, belongs to another cell, so it does not count. When the row's own `SeaTable` column still says `present` or `added`, the message quotes it, because that mark is out of date. Needs read access to SeaTable (Part 3b); without it this check is skipped and the summary says so |
 
 Stale `root_id_curr` values are not reported, because every sheet update replaces them with the root at the xyz.
 Each issue is posted once. The bot remembers what it posted (`tmp/faab_ol_bot/state.json`) and lists only new issues;
@@ -31,7 +32,8 @@ did 0.2% of theirs between 06:00 and 07:00 UTC. It also comes after the evening 
 and the report is waiting before the European proofreaders start (from about 08:00 UTC). The busiest time is
 13:00-16:00 UTC.
 
-The setup has six parts. Parts 1-3 happen on your Mac (try it, create the Slack app, give it read access to the sheet),
+The setup has six parts. Parts 1-3 happen on your Mac (try it, create the Slack app, give it read access to the sheet
+and to SeaTable),
 parts 4 and 5 on the Ubuntu machine (install it, keep it running), and part 6 is optional (@mentions).
 
 ---
@@ -149,6 +151,34 @@ an exception; until then the bot can only check backups you download (Part 2).
 
 ---
 
+## Part 3b: let the bot read SeaTable (5 minutes)
+
+The check "adequate or proofread on the sheet, but no SeaTable row is on the cell" reads SeaTable's `aedes_main` table
+once a day (one query for the supervoxel ids, then one CAVE call). Give the bot a read-only API token for the base
+that holds `aedes_main`, not your own account token.
+
+1. Open FlyTable (https://flytable.mrc-lmb.cam.ac.uk/) and open the base with the `aedes_main` table.
+2. Open the base's menu (the **⋯** or the arrow next to the base name), then **Advanced**, **API Token**.
+3. Click **Add token**. Name it `faab-ol-bot`, set the permission to **Read-only**, and click **Submit**. Copy the
+   token. Treat it like a password. If you don't see **API Token**, you are not an admin of the base: ask the base's
+   owner for a read-only token.
+4. Add a line to `~/.config/faab-ol-bot/env`:
+
+```text
+FAAB_SEATABLE_TOKEN=the-read-only-token
+```
+
+Test it on the Mac (a dry run from a backup; the summary has no "SeaTable could not be read" line when it works):
+
+```bash
+venv/bin/python faab/scripts/bot/faab_ol_bot.py --book "$(ls -t faab/figures/sheets/*_Backup.xlsx | head -n 1)" --all --no-state
+```
+
+On the Mac the check also runs without this line, through your own SeaTable login, still opened read-only. The Ubuntu
+machine needs the token.
+
+---
+
 ## Part 4: set up the Ubuntu machine (20 minutes)
 
 Below, `USER@HOST` is your login on that machine.
@@ -169,8 +199,10 @@ python3 -m venv ~/faab-ol-bot/venv && ~/faab-ol-bot/venv/bin/python -m pip insta
 ```
 
 ```bash
-~/faab-ol-bot/venv/bin/python -m pip install -e ~/faab-ol-bot/faab openpyxl google-auth requests
+~/faab-ol-bot/venv/bin/python -m pip install -e "$HOME/faab-ol-bot/faab[flytable]" openpyxl google-auth requests
 ```
+
+(`[flytable]` adds `seaserpent`, the SeaTable reader. On a machine set up before 2026-11-24, run this line once more.)
 
 The code puts its scratch files in `~/faab-ol-bot/tmp` (the folder next to the repository), as on the Mac.
 

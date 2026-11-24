@@ -1,8 +1,9 @@
 """faab-ol-bot: a daily check of the FAAB optic-lobe tracking sheet, reported to Slack (David 2026-11-15: "build
 faab-ol-bot that initially just points out common errors such as xyz not matching root_id_curr, mismatches in status
 across sheets, two users assigned the same cell on different sheets"). Read-only everywhere: the sheet (an xlsx backup,
-or the live Google Sheet exported with a read-only service account), CAVE (the default view key; 2-3 calls >= 2 s
-apart, point lookups cached in tmp/sv_at_xyz.json), and Slack only receives messages, and only with --post.
+or the live Google Sheet exported with a read-only service account), SeaTable (one query, opened read-only), CAVE (the
+default view key; 3-4 calls >= 2 s apart, point lookups cached in tmp/sv_at_xyz.json), and Slack only receives
+messages, and only with --post.
 
 Checks (every tab except backup copies named '<tab>_bYYMMDDd'):
   xyz_off_cell  root_id_curr is a current root but the xyz is on another cell, or on no cell (stale ids are not
@@ -25,6 +26,12 @@ Checks (every tab except backup copies named '<tab>_bYYMMDDd'):
   annotation_finer  the annotation names a type SeaTable lacks ('Tm' where SeaTable says 'ol_intrinsic / visual', 'L2?'
                 under SeaTable's 'LMC'): add it to SeaTable? An older or shorter copy of SeaTable's label is not
                 reported (faab.partners.annotation)
+  not_in_seatable  a cell with a done status on the sheet (adequate, complete, proofread, checked; also inside a
+                list such as 'needs_extending; adequate') that no SeaTable row is on: no aedes_main row's supervoxel
+                resolves to the cell now (David 2026-11-24). A SeaTable row with an old root id, or one whose
+                supervoxel is on a split-off piece, does not count, since it shows another cell. A sheet SeaTable
+                column that says 'present' / 'added' is quoted (the mark is stale). Needs read access to SeaTable
+                (FAAB_SEATABLE_TOKEN, below); without it the check is skipped and the summary says so
 A row's cell = its root_id_curr while that is current, else the root at its xyz. Cells are named by full root ids and
 tabs, never row numbers (rows move).
 New vs old: tmp/faab_ol_bot/state.json keeps the issues already reported; only new ones are listed (the counts always
@@ -38,6 +45,9 @@ Config (read from the environment, or from ~/.config/faab-ol-bot/env lines KEY=v
   FAAB_SHEET_ID                   the id in the sheet's URL (/spreadsheets/d/<id>/edit)      needed for --live
   GOOGLE_APPLICATION_CREDENTIALS  service-account JSON key (sheet shared with it as Viewer)  needed for --live
   FAAB_OL_BOT_PEOPLE              optional JSON {"initials or name": "Slack user id U..."} for @mentions
+  FAAB_SEATABLE_TOKEN             read-only API token of the base holding aedes_main         needed for not_in_seatable
+                                  (without it, seaserpent's own SEATABLE_TOKEN is tried, still opened read-only)
+  FAAB_SEATABLE_SERVER            optional, default https://flytable.mrc-lmb.cam.ac.uk/
 Printed output is counts only (no names, no root ids).
 Persistent mode (--serve, David 2026-11-15: run inside screen / tmux on the Ubuntu machine, like banc-bot): the process
 stays up and runs the check every day at --at (UTC, default 06:30 = the quietest hour of the CAVE edit log), each run
@@ -81,6 +91,8 @@ BACKUP_TAB = re.compile(r"_b\d{6}d$")
 ID = re.compile(r"\d{18}")
 XYZ = re.compile(r"-?\d+(?:\.\d+)?")
 IGNORED_STATUS = {"", "new", "new-dup", "candidate"}
+DONE = set(RANK[:RANK.index("adequate") + 1])  # checked, proofread, complete, adequate: should be in SeaTable
+SEATABLE_SERVER = "https://flytable.mrc-lmb.cam.ac.uk/"
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 TITLES = {  # plain labels for the proofreaders (no internal jargon)
     "xyz_off_cell": "xyz is not on the row's cell",
@@ -91,6 +103,7 @@ TITLES = {  # plain labels for the proofreaders (no internal jargon)
     "bad_xyz": "row with a root id but no usable xyz",
     "annotation": "annotation differs from SeaTable's: which one is right?",
     "annotation_finer": "annotation names a type that SeaTable does not have yet: add it to SeaTable?",
+    "not_in_seatable": "adequate or proofread on the sheet, but no SeaTable row is on the cell: add it to SeaTable?",
 }
 
 
@@ -172,8 +185,36 @@ def people(v):
     return frozenset(initials(x) for x in re.split(r"[;,/&]| and ", v) if x.strip())
 
 
-def check(rows):
-    """the issues: list of dicts (check, key, cell, tab, text, who)"""
+def done(status):
+    """a done status (DONE), alone or inside a list ('needs_extending; adequate')"""
+    return bool({w.strip().lower() for w in re.split(r"[;,]", status)} & DONE)
+
+
+def seatable_cells(c, t):
+    """(the live roots of every SeaTable aedes_main row, note): one read-only SeaTable query (supervoxel ids) and one
+    get_roots call; a row without a supervoxel keeps its stored root_id. On no access: (None, why), and the
+    not_in_seatable check is skipped"""
+    try:
+        import seaserpent as ss
+        tok = os.environ.get("FAAB_SEATABLE_TOKEN")
+        tab = ss.Table("aedes_main", server=os.environ.get("FAAB_SEATABLE_SERVER", SEATABLE_SERVER), read_only=True,
+                       progress=False, **({"base_token": tok} if tok else {}))
+        recs = tab.query("SELECT supervoxel_id, root_id FROM aedes_main", no_limit=True)
+    except Exception as e:  # no token, no network, a changed table: skip this check only
+        return None, f"SeaTable could not be read ({type(e).__name__}), so the SeaTable check was skipped"
+    # exact integers: one empty cell would make a pandas column float64 and round the 17-18 digit ids
+    sv = [int(v) if re.fullmatch(r"\d+", v := str(r.get("supervoxel_id") or "").strip()) and int(v) > 0 else 0
+          for r in recs]
+    t = throttle(t)
+    roots = {str(int(r)) for r in np.asarray(c.chunkedgraph.get_roots(np.array([v for v in sv if v], dtype=np.int64)))}
+    roots |= {str(r.get("root_id") or "").strip() for r, v in zip(recs, sv) if not v}
+    roots -= {"", "0"}
+    return roots, f"{len(recs)} SeaTable rows read"
+
+
+def check(rows, notes=None):
+    """the issues: list of dicts (check, key, cell, tab, text, who); a check that could not run appends a line to
+    `notes`"""
     out = []
     for x in rows:
         v = x["v"]
@@ -252,6 +293,30 @@ def check(rows):
             parts = sorted({f"{x['tab']} {x['v']['proofreader'].strip()}" for x in g if x["v"].get("proofreader", "").strip()})
             out.append(dict(check="proofreaders", key=f"proofreaders|{cell}|{'/'.join(sorted(union))}", cell=cell,
                             tab=tabs, who=names, text=f"{cell}: " + " · ".join(parts)))
+
+    # done on the sheet, but no SeaTable row on the cell (David 2026-11-24); every cell, also one on a single row
+    st_cells, note = seatable_cells(c, t)
+    if st_cells is None:
+        if notes is not None:
+            notes.append(note)
+        return out
+    for cell, g in by_cell.items():
+        dn = [x for x in g if done(x["v"].get("status", ""))]
+        if not dn or cell in st_cells:
+            continue
+        parts = sorted({f"{x['tab']} {x['v'].get('status', '').strip()}" for x in dn})
+        old = sorted({x["v"].get("root_id_curr", "") for x in g} - {"", cell})
+        marks = sorted({x["v"].get("SeaTable", "").strip() for x in g
+                        if re.match(r"\s*(?:added|present)", x["v"].get("SeaTable", ""), re.I)})
+        xyz = next((x["v"]["xyz"] for x in dn if x["ok_xyz"]), "")
+        out.append(dict(check="not_in_seatable", key=f"not_in_seatable|{cell}", cell=cell,
+                        tab=", ".join(sorted({x["tab"] for x in g})),
+                        who="; ".join(sorted({x["v"]["proofreader"].strip() for x in dn
+                                              if x["v"].get("proofreader", "").strip()})),
+                        text=f"{cell} (xyz {xyz}): " + " · ".join(parts)
+                        + (f"; the sheet still lists {', '.join(old)}" if old else "")
+                        + (f"; its SeaTable column says '{marks[0][:60]}', but no SeaTable row is on this cell now"
+                           if marks else "")))
     return out
 
 
@@ -268,8 +333,8 @@ def mention(text, who, people_map):
     return text + ("  " + " ".join(f"<@{u}>" for u in ids) if ids else "")
 
 
-def compose(issues, new_keys, source, when, all_=False, max_lines=40, people_map=None):
-    """(summary, [detail messages]) in Slack mrkdwn"""
+def compose(issues, new_keys, source, when, all_=False, max_lines=40, people_map=None, notes=()):
+    """(summary, [detail messages]) in Slack mrkdwn; `notes` = checks that could not run"""
     n = collections.Counter(i["check"] for i in issues)
     nn = collections.Counter(i["check"] for i in issues if i["key"] in new_keys)
     head = (f"*faab-ol-bot* sheet check ({source}, {when:%Y-%m-%d %H:%M} UTC): "
@@ -277,6 +342,7 @@ def compose(issues, new_keys, source, when, all_=False, max_lines=40, people_map
     lines = [head] + [f"• {TITLES[k]}: {n[k]}" + (f" ({nn[k]} new)" if nn[k] else "") for k in TITLES if n[k]]
     if not issues:
         lines.append("No open issues. :white_check_mark:")
+    lines += [f"• {n}" for n in notes]
     details, chunk = [], []
     for k in TITLES:
         sel = [i for i in issues if i["check"] == k and (all_ or i["key"] in new_keys)]
@@ -284,7 +350,7 @@ def compose(issues, new_keys, source, when, all_=False, max_lines=40, people_map
             continue
         block = [f"*{TITLES[k]}*" + ("" if all_ else " (new)")]
         for i in sorted(sel, key=lambda i: (i["tab"], i["text"]))[:max_lines]:
-            tab = "" if k in ("status", "proofreaders") else f"{i['tab']}: "
+            tab = "" if k in ("status", "proofreaders", "not_in_seatable") else f"{i['tab']}: "
             who = f" ({i['who']})" if i["who"] and k not in ("status", "proofreaders") else ""
             block.append(mention(f"• {tab}{i['text']}{who}", i["who"], people_map))
         if len(sel) > max_lines:
@@ -482,13 +548,15 @@ def main():
         book, source = a.book, f"backup {os.path.basename(a.book)[:19]}"
     rows = scan(openpyxl.load_workbook(book))
     print(f"{len(rows)} rows with a root id in {len({x['tab'] for x in rows})} tabs; checking", flush=True)
-    issues = check(rows)
+    notes = []
+    issues = check(rows, notes)
     seen = set() if a.no_state or not os.path.exists(STATE) else set(json.load(open(STATE))["open"])
     first = not a.no_state and not os.path.exists(STATE)
     keys = {i["key"] for i in issues}
     new_keys = keys if (first or a.no_state) else keys - seen
     pm = json.load(open(os.environ["FAAB_OL_BOT_PEOPLE"])) if os.environ.get("FAAB_OL_BOT_PEOPLE") else None
-    summary, details = compose(issues, new_keys, source, when, all_=a.all, max_lines=a.max_lines, people_map=pm)
+    summary, details = compose(issues, new_keys, source, when, all_=a.all, max_lines=a.max_lines, people_map=pm,
+                               notes=notes)
     msg_path = os.path.join(OUT, f"{stamp}_message.md")
     open(msg_path, "w", encoding="utf-8").write(summary + "\n\n---\n\n" + "\n\n---\n\n".join(details) + "\n")
     pd.DataFrame(issues, columns=["check", "cell", "tab", "who", "text", "key"]).assign(
