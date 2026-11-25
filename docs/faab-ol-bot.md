@@ -416,6 +416,45 @@ ssh -N -L 8765:127.0.0.1:8765 USER@UBUNTU
 then open `http://localhost:8765/` in the Mac's browser. Leave `--bind` at its default (127.0.0.1): with
 `--bind 0.0.0.0` anyone who can reach the machine on the network could read everyone's hours.
 
+**Behind nginx, with a password (instead of the tunnel).** If the machine already runs nginx with HTTPS, nginx can
+pass one path to the bot's page, and the bot keeps listening on 127.0.0.1 only. The page is a single self-contained
+file, so nothing else needs serving. Make a password file (it asks for the password; `-c` creates the file, leave it
+out when you add a second person):
+
+```bash
+sudo apt install -y apache2-utils
+```
+
+```bash
+sudo htpasswd -c /etc/nginx/faab-time.htpasswd david
+```
+
+Add this inside the `server { ... }` block that has `listen 443 ssl` (in `/etc/nginx/sites-available/`, the file
+your site uses):
+
+```nginx
+location /faab-time/ {
+    auth_basic "FAAB time-spent page";
+    auth_basic_user_file /etc/nginx/faab-time.htpasswd;
+    add_header Cache-Control "no-store";
+    proxy_pass http://127.0.0.1:8765/;
+}
+```
+
+Check the configuration, then reload nginx:
+
+```bash
+sudo nginx -t
+```
+
+```bash
+sudo nginx -s reload
+```
+
+The page is then at `https://YOUR-HOST/faab-time/` (user name and password from the file). Keep it on HTTPS only:
+the password travels with every request. For more safety, add `allow <your network>/24;` and `deny all;` lines to the
+block. When the bot is not running, nginx answers `502 Bad Gateway`.
+
 ---
 
 ## Day-to-day
