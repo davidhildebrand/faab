@@ -104,6 +104,7 @@ TITLES = {  # plain labels for the proofreaders (no internal jargon)
     "annotation": "annotation differs from SeaTable's: which one is right?",
     "annotation_finer": "annotation names a type that SeaTable does not have yet: add it to SeaTable?",
     "not_in_seatable": "adequate or proofread on the sheet, but no SeaTable row is on the cell: add it to SeaTable?",
+    "pr_groups": "one photoreceptor listed in more than one PR group (a photoreceptor belongs to one group only)",
 }
 
 
@@ -157,10 +158,14 @@ def scan(wb):
     for ws in wb.worksheets:
         if BACKUP_TAB.search(ws.title):
             continue
-        cols = None
+        cols, grp = None, None
         for r in range(1, ws.max_row + 1):
             vals = [ws.cell(r, c).value for c in range(1, ws.max_column + 1)]
             names = [s(v) for v in vals]
+            m = re.fullmatch(r"group (\d+)", names[0]) if ws.title == "PRs" and names else None
+            if m:  # PRs tab: the group the following rows belong to
+                grp = int(m.group(1))
+                continue
             if "xyz" in names and ("root_id_curr" in names or "root_id_orig" in names):
                 cols = {n: i for i, n in enumerate(names) if n}
                 continue
@@ -172,7 +177,7 @@ def scan(wb):
                 # the one pasted (2026-11-19: 648518347491044000 -> 648518347491043968, another real cell)
                 num = [k for k in ("root_id_orig", "root_id_curr") if k in cols and cols[k] < len(vals)
                        and isinstance(vals[cols[k]], (int, float)) and abs(vals[cols[k]]) > 1e15]
-                rows.append(dict(tab=ws.title, v=v, num=num))
+                rows.append(dict(tab=ws.title, v=v, num=num, group=grp if ws.title == "PRs" else None))
     return rows
 
 
@@ -293,6 +298,13 @@ def check(rows, notes=None):
             parts = sorted({f"{x['tab']} {x['v']['proofreader'].strip()}" for x in g if x["v"].get("proofreader", "").strip()})
             out.append(dict(check="proofreaders", key=f"proofreaders|{cell}|{'/'.join(sorted(union))}", cell=cell,
                             tab=tabs, who=names, text=f"{cell}: " + " · ".join(parts)))
+
+        # one photoreceptor, one group (David 2026-11-25: "different PR groups can't share the same exact PRs")
+        grps = sorted({x["group"] for x in g if x.get("group") is not None})
+        if len(grps) > 1:
+            cls = sorted({f"{x['v'].get('class', '').strip()} in group {x['group']}" for x in g if x.get("group")})
+            out.append(dict(check="pr_groups", key=f"pr_groups|{cell}|{'/'.join(map(str, grps))}", cell=cell, tab="PRs",
+                            who=names, text=f"{cell}: groups {', '.join(map(str, grps))} ({'; '.join(cls)})"))
 
     # done on the sheet, but no SeaTable row on the cell (David 2026-11-24); every cell, also one on a single row
     st_cells, note = seatable_cells(c, t)

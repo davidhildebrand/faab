@@ -12,7 +12,10 @@ David's conventions, applied by the writers in scripts/pr_groups/prs_tab.py and 
   - no 'regroup YYYY-MM-DD: ...' notes;
   - dates are real dates shown as yy-mm-dd, never text (David, 2026-10-18); root ids stored as text, scores as numbers;
     rows move with their styles, links and heights;
-  - outputs hold the PRs tab alone and are named with the UTC stamp (faab.partners.sheet.utc_stamp).
+  - outputs hold the PRs tab alone and are named with the UTC stamp (faab.partners.sheet.utc_stamp);
+  - ONE PHOTORECEPTOR, ONE GROUP (David 2026-11-25: "different PR groups can't share the same exact PRs. That should be
+    a clear rule"): dedupe() drops the extra rows where the sheet says which group the cell belongs to (see there);
+    cells it cannot place (one root holding several photoreceptors: a merge to split) are listed by lint().
 Network-free."""
 import copy
 import datetime
@@ -295,14 +298,93 @@ def fill_type(ws):
     return filled, differ, skipped
 
 
+def cell_of(ws, b, r):
+    """the row's cell: root_id_curr, else root_id_orig"""
+    cu = get(ws, b, r, "root_id_curr")
+    return cu if re.fullmatch(r"\d{15,}", cu) else get(ws, b, r, "root_id_orig")
+
+
+def shared_cells(ws):
+    """{cell: [(block, row), ...]} for every cell on member rows of more than one group"""
+    where = {}
+    for b in blocks(ws):
+        for r in b.rows:
+            where.setdefault(cell_of(ws, b, r), []).append((b, r))
+    return {c: v for c, v in where.items() if len({b.group for b, _ in v}) > 1}
+
+
+def worked_row(ws, b, r):
+    return get(ws, b, r, "status").lower() not in ("", "candidate") or any(
+        get(ws, b, r, k) for k in ("proofreader", "pr_date", "checker", "chk_date"))
+
+
+def dedupe_plan(ws):
+    """one photoreceptor, one group: for every cell listed in several groups, which rows go. Rules, in order:
+      1. groups worked on through their OWN rows (cells listed only there; a row the update filled from another
+         group's copy of the cell does not count) keep the cell; its rows in the other groups go;
+      2. a row noted 'SECOND BUNDLE; moved to group X' goes when the cell is in group X;
+      3. a row in group A goes when the cell's row in group B is noted 'split from group A'.
+    Returns (drops [(block, row, cell, why)], unresolved [(cell, groups)]): a cell the rules leave in more than one
+    group (usually one root holding several photoreceptors, a merge to split) stays where it is"""
+    sh = shared_cells(ws)
+    own_worked = {}
+    for b in blocks(ws):
+        own_worked[b.group] = own_worked.get(b.group, False) or any(
+            worked_row(ws, b, r) for r in b.rows if cell_of(ws, b, r) not in sh)
+    drops, unresolved = [], []
+    for cell, places in sh.items():
+        groups = {b.group for b, _ in places}
+        why = {}
+        w = {g for g in groups if own_worked.get(g)}
+        if w and w != groups:
+            why = {g: f"the cell belongs to worked-on group {', '.join(map(str, sorted(w)))}" for g in groups - w}
+        else:
+            for b, r in places:
+                m = re.search(r"SECOND BUNDLE; moved to group (\d+)", get(ws, b, r, "notes"))
+                if m and int(m.group(1)) in groups and int(m.group(1)) != b.group:
+                    why[b.group] = f"second-bundle copy; the cell was moved to group {m.group(1)}"
+                for b2, r2 in places:
+                    m2 = re.search(r"split from group (\d+)", get(ws, b2, r2, "notes"))
+                    if b2.group != b.group and m2 and int(m2.group(1)) == b.group:
+                        why[b.group] = f"the cell was split off into group {b2.group}"
+        keep = groups - set(why)
+        if len(keep) == 1:
+            drops += [(b, r, cell, why[b.group]) for b, r in places if b.group not in keep]
+        else:
+            unresolved.append((cell, sorted(groups)))
+    return drops, unresolved
+
+
+def drop_rows(ws, rows):
+    """remove these rows; the rows below move up with their styles, links and heights"""
+    last = ws.max_row
+    for d in sorted(set(rows), reverse=True):
+        for r in range(d, last):
+            restore(ws, r, snapshot(ws, r + 1))
+        for c in range(1, ws.max_column + 1):
+            x = ws.cell(last, c)
+            x.hyperlink, x.value = None, None
+        last -= 1
+
+
+def dedupe(ws):
+    """apply dedupe_plan(); returns ([(group, cell, why)] dropped, unresolved)"""
+    drops, unresolved = dedupe_plan(ws)
+    drop_rows(ws, [r for _, r, _, _ in drops])
+    return [(b.group, cell, why) for b, _, cell, why in drops], unresolved
+
+
 def tidy(ws, tags=("regroup",)):
-    """apply every convention that can be fixed mechanically: dates, tagged notes, member order, the 'type' column
-    (from the manual fly_pair check, 2026-11-20), bold titles"""
+    """apply every convention that can be fixed mechanically: one photoreceptor per group (dedupe, 2026-11-25), dates,
+    tagged notes, member order, the 'type' column (from the manual fly_pair check, 2026-11-20), bold titles"""
+    dropped, unresolved = dedupe(ws)
     n_dates, left = convert_text_dates(ws)
     n_notes = strip_tagged_notes(ws, tags) if tags else 0
     nb, nr = order_blocks(ws)
     n_type, n_corr, t_skip = fill_type(ws)
-    return dict(dates_converted=n_dates, date_text_left=left, notes_stripped=n_notes, groups_reordered=nb,
+    return dict(shared_rows_dropped=[f"{c} from group {g} ({w})" for g, c, w in dropped],
+                shared_unresolved=[f"{c} in groups {', '.join(map(str, gs))}" for c, gs in unresolved],
+                dates_converted=n_dates, date_text_left=left, notes_stripped=n_notes, groups_reordered=nb,
                 rows_moved=nr, type_filled=n_type, type_corrected=n_corr, type_blocks_skipped=t_skip,
                 cells_bolded=bold_titles(ws))
 
@@ -320,6 +402,8 @@ def lint(ws, tags=("regroup",)):
     for r in title_rows(ws):
         if any(ws.cell(r, c).value not in (None, "") and not ws.cell(r, c).font.b for c in range(1, ws.max_column + 1)):
             add("group line / header not bold", f"row {r}")
+    for c, places in shared_cells(ws).items():
+        add("photoreceptor in several groups", f"{c} (groups {', '.join(map(str, sorted({b.group for b, _ in places})))})")
     pats = [tag_pattern(t) for t in tags]
     for b in blocks(ws):
         if ordered_rows(ws, b) != b.rows:
@@ -343,7 +427,7 @@ def lint(ws, tags=("regroup",)):
 def lint_line(ws):
     issues = lint(ws)
     if not issues:
-        return ("lint: ok (members in order, group lines and headers bold, no regroup notes, dates are dates, ids text, "
+        return ("lint: ok (one group per photoreceptor, members in order, group lines and headers bold, no regroup notes, dates are dates, ids text, "
                 "xyz readable)")
     return "lint: " + "; ".join(f"{k}: {len(v)} ({', '.join(v[:4])}{', ...' if len(v) > 4 else ''})"
                                 for k, v in issues.items())

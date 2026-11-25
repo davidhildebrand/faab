@@ -23,7 +23,8 @@ terminal spacing; the other neuropils scaled to the same number of columns).
       distance of their lamina cartridge center from the PR group 1 column: center = the median of the members'
       median output-site positions in the right lamina (members with >= 3 sites there; else R7 / R8 sites in the
       medulla, measured from the medulla line); no such sites: last, in their old order. Blocks move with their rows'
-      values, styles, links and heights; the section is in number order again; 'group N' / 'groups N, M' in the PRs
+      values, styles, links and heights; the section is in number order again. First, one photoreceptor per group
+      (faab.pr.prs_tab.dedupe: rows of a cell that the sheet places in another group are dropped); 'group N' / 'groups N, M' in the PRs
       notes and 'PRs group N' / 'PR group N' elsewhere follow the new numbers. Every right group line gets
       'N.N columns from PR group 1 (lamina cartridge center)' in a far-right cell; the right section's title line
       says what was done. Writes figures/pr_groups/<stamp>_pr_group_renumber.tsv (old, new, distance, worked on).
@@ -60,7 +61,7 @@ from faab.clients.cave import client as cave_client, throttle
 from faab.config import TMP, fig
 from faab.partners import home_column as HC
 from faab.partners.sheet import cell_text as s, utc_stamp
-from faab.pr.prs_tab import restore, snapshot
+from faab.pr.prs_tab import dedupe, restore, snapshot
 
 IDS = re.compile(r"\d{15,}")
 DIST = "distance from PR group 1 column (columns apart)"
@@ -308,6 +309,13 @@ def seatable_names_group(st, ids, n):
 
 def renumber_prs(wb, lines, col_um, snap, c, date, stamp, also=(), seatable=None):
     ws = wb["PRs"]
+    # one photoreceptor, one group first (faab.pr.prs_tab.dedupe; David 2026-11-25), so the distances use clean groups
+    dropped, unresolved = dedupe(ws)
+    for g, cell, why in dropped:
+        note("PRs", "", 1, f"{cell} in group {g}", "", f"row dropped: one photoreceptor, one group ({why})")
+    print(f"PRs: one photoreceptor, one group: {len(dropped)} rows dropped "
+          f"({', '.join(f'{cell} from group {g}' for g, cell, _ in dropped)}); left in several groups (merges to split?): "
+          f"{', '.join(f'{cell} in groups {gs}' for cell, gs in unresolved) or 'none'}", flush=True)
     G, sec, L_row = pr_groups(ws)
     if sec is None:
         raise SystemExit("PRs: no '>>> additional R side' line; nothing written")
