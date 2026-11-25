@@ -12,13 +12,17 @@ to PRg1toT4T5 when the backup lacks it) or --add-in2 (scripts/partners/hop_in2_b
 first, 2026-11-10); the later steps then run on its full workbook and the sync exports PRg1toT4T5. Then, on every
 update unless --no-t4t5-sort, scripts/partners/t4t5_sort.py (2026-11-12): T4T5-1 / T4T5-2 rows ordered by distance from
 the PR group 1 column, putative-LMC notes on T4T5-2 rows, the distance column far right. Point lookups share
-the supervoxel cache (faab.clients.cave.supervoxels_at_xyz), so only the first step reads new points. Before the
+the supervoxel cache (faab.clients.cave.supervoxels_at_xyz), so only the first step reads new points. After the
+T4/T5 sort, --home-sort TAB ... (e.g. T4T5s) and --renumber-prs run scripts/sheets/home_column_sort.py (2026-11-25) with
+the lines the sort just saved: those tabs ordered by distance from the PR group 1 column, and the right-side PR groups
+nobody has worked on renumbered by their distance from PR group 1 (a one-off, David 2026-11-25). Before the
 T4/T5 sort, unless --no-membership, scripts/sheets/membership_check.py --apply (2026-11-21): every block's rule is
 applied again to today's connectivity (rows recounted; rows below the criteria moved down and noted, or removed when
 nobody worked on them; newly qualifying cells added); the tabs it changes are exported. Each step's output
 goes to tmp/<stamp>_update_<step>.log; the summaries and the exports
 (figures/sheets/<stamp>_FAABopticlobetargets-<tab>.xlsx) are printed.
-Usage: update_book.py BACKUP.xlsx [--edits E.json] [--add-inputs | --add-in2] [--no-t4t5-sort]"""
+Usage: update_book.py BACKUP.xlsx [--edits E.json] [--add-inputs | --add-in2] [--no-t4t5-sort]
+       [--home-sort T4T5s ...] [--renumber-prs]"""
 import argparse
 import os
 import re
@@ -56,6 +60,10 @@ def main():
     ap.add_argument("--no-t4t5-sort", action="store_true", help="skip scripts/partners/t4t5_sort.py")
     ap.add_argument("--no-membership", action="store_true", help="skip scripts/sheets/membership_check.py --apply")
     ap.add_argument("--export", nargs="+", default=[], help="tabs the sync exports even when it changes nothing there")
+    ap.add_argument("--home-sort", nargs="+", default=[], metavar="TAB",
+                    help="tabs scripts/sheets/home_column_sort.py orders by distance from the PR group 1 column")
+    ap.add_argument("--renumber-prs", action="store_true",
+                    help="renumber the right-side PR groups nobody has worked on by distance from PR group 1 (one-off)")
     a = ap.parse_args()
     stamp = utc_stamp()
     book = os.path.abspath(a.book)
@@ -78,6 +86,19 @@ def main():
         book = re.search(r"full workbook (\S+\.xlsx)", out).group(1)
         # the sort marks PR groups too; keep the tabs earlier steps (membership) changed
         export = ["--export", *dict.fromkeys((export[1:] if export else a.export) + ["PRg1toT4T5", "PRs"])]
+        lines = re.search(r"home-column lines saved: (\S+\.json)", out)
+    if a.home_sort or a.renumber_prs:  # 2026-11-25: tabs by distance from the PR group 1 column; PR group renumbering
+        args = [os.path.join(HERE, "home_column_sort.py"), book]
+        if a.home_sort:
+            args += ["--tabs", *a.home_sort]
+        if a.renumber_prs:
+            args.append("--renumber-prs")
+        if not a.no_t4t5_sort and lines:
+            args += ["--lines", lines.group(1)]
+        out = run("home_column_sort", args, stamp)
+        book = re.search(r"full workbook (\S+\.xlsx)", out).group(1)
+        tabs_h = re.search(r"changed tabs: ?(.*)", out).group(1).split()
+        export = ["--export", *dict.fromkeys((export[1:] if export else a.export) + tabs_h)] if tabs_h or export else export
     out = run("seatable_match", [os.path.join(HERE, "seatable_match.py"), book], stamp)
     match = re.search(r"written (\S+_seatable_match\.tsv)", out).group(1)
     out = run("cell_consistency", [os.path.join(HERE, "cell_consistency.py"), book], stamp)

@@ -41,7 +41,8 @@ Writes:
 Rows move with their values, styles, links and heights (any 'rN' left in notes follows, renumber_refs).
 Read-only toward CAVE (is_latest_roots, throttled get_latest_roots, point lookups, nucleus query, L2 skeletons for
 added cells; synapse snapshot caught up to now). Writes tmp/<stamp>_t4t5_sort_full.xlsx (printed as 'full workbook
-...' for update_book.py), figures/t4t5/<stamp>_t4t5_sort.tsv and figures/t4t5/<stamp>_t4t5_sort_changes.tsv.
+...' for update_book.py), figures/t4t5/<stamp>_t4t5_sort.tsv, figures/t4t5/<stamp>_t4t5_sort_changes.tsv and
+figures/t4t5/<stamp>_t4t5_home_column_lines.json (the lines, faab.partners.home_column; read by home_column_sort.py).
 Usage: t4t5_sort.py --book BOOK.xlsx [--tab PRg1toT4T5]"""
 import argparse
 import copy
@@ -53,13 +54,12 @@ import time
 import numpy as np
 import openpyxl
 import pandas as pd
-import trimesh
 from openpyxl.styles import Font, PatternFill
-from scipy.spatial import cKDTree
 
 from faab import ol_meshes, synsnap
 from faab.clients.cave import client as cave_client, throttle
 from faab.config import DATA, TMP, fig
+from faab.partners import home_column as HC
 from faab.partners.reconcile import renumber_refs
 from faab.partners.sheet import cell_text as s, utc_stamp
 
@@ -70,10 +70,9 @@ _spec.loader.exec_module(HIB)
 SS = HIB.SS
 TIB = HIB.TIB
 
-VOX = np.array([0.016, 0.016, 0.045])  # um per voxel
-LABELS = ["LA_R", "ME_R", "LO_R", "LOP_R"]
-TOWARD = {"LA_R": "ME_R", "ME_R": "LA_R", "LO_R": "ME_R", "LOP_R": "LO_R"}
-ME_COL_UM = 5.5
+VOX = HC.VOX  # um per voxel
+LABELS = HC.LABELS
+ME_COL_UM = HC.ME_COL_UM
 GROUPS = [(2, "up to 2"), (3, "2-3"), (4, "3-4"), (np.inf, "more than 4")]
 DIST = "distance from PR group 1 column (columns apart)"
 IDS = re.compile(r"\d{15,}")
@@ -110,23 +109,8 @@ PRS_TXT = "on photoreceptor paths to the {n_t} PRg1toT4T5 T4/T5 candidates: {n} 
 PRS_RX = re.compile(r"^on photoreceptor paths to the \d+ PRg1toT4T5")
 
 
-def faces(label):
-    """(outer points, inner points, outer face area um^2): the face toward TOWARD[label] and the opposite one"""
-    v, f = ol_meshes.mesh(label)
-    m = trimesh.Trimesh(v / 1000.0, f, process=True)
-    m.fix_normals()
-    ov = ol_meshes.mesh(TOWARD[label])[0] / 1000.0
-    to = ov[cKDTree(ov).query(m.triangles_center)[1]] - m.triangles_center
-    sg = np.einsum("ij,ij->i", m.face_normals, to / np.linalg.norm(to, axis=1, keepdims=True))
-    pts, fid = trimesh.sample.sample_surface(m, 200000, seed=0)
-    return (pts[np.isin(fid, np.where(sg > 0.2)[0])], pts[np.isin(fid, np.where(sg < -0.2)[0])],
-            float(m.area_faces[sg > 0.2].sum()))
-
-
-def thickness_dir(outer, inner, p):
-    o = outer[cKDTree(outer).query(p)[1]]
-    i = inner[cKDTree(inner).query(p)[1]]
-    return (i - o) / np.linalg.norm(i - o)
+faces = HC.faces  # the home-column geometry lives in faab.partners.home_column (shared, 2026-11-25)
+thickness_dir = HC.thickness_dir
 
 
 def lmc_calls(wb):
@@ -322,33 +306,19 @@ def main():
     pr_written = [k for k in pr_grp if set(cur.get(k, [])) & on_prs]
     ppr = syn(pr_written, [str(k) for k in role1]) if pr_written else None
 
-    # ---- the home-column lines
-    X = ["x", "y", "z"]
-    med = lambda df, L: df[df.np == L][X].median().to_numpy() if int((df.np == L).sum()) >= 10 else None
-    lines, col_um = {}, {}
-    fc = {L: faces(L) for L in LABELS}
-    D, P = med(ch_me, "ME_R"), med(tin, "ME_R")
-    if D is not None and P is not None:
-        lines["ME_R"] = (D, (P - D) / np.linalg.norm(P - D))
-    for L, anchor in (("LO_R", med(tin, "LO_R")), ("LOP_R", med(tout, "LOP_R")), ("LA_R", med(ch_la, "LA_R"))):
-        if anchor is not None:
-            lines[L] = (anchor, thickness_dir(fc[L][0], fc[L][1], anchor))
-    for L in LABELS:
-        col_um[L] = ME_COL_UM * np.sqrt(fc[L][2] / fc["ME_R"][2])
+    # ---- the home-column lines (faab.partners.home_column; saved for home_column_sort.py and the axis link)
+    lines, col_um = HC.build(ch_la, ch_me, tin, tout)
     print("home-column lines: " + "; ".join(f"{L} through {np.round(o, 1).tolist()} (column {col_um[L]:.1f} um)"
                                             for L, (o, _) in lines.items()), flush=True)
+    lines_json = HC.save(HC.path_for(stamp), lines, col_um, book=os.path.abspath(a.book), built_by="t4t5_sort.py",
+                         pr_group1=[str(x) for x in now(g1)], targets=[str(x) for x in now(path_ids["hop3"])],
+                         pr_group1_cells=len(g1), targets_cells=len(path_ids["hop3"]),
+                         n_synapses={"PRg1_to_PR+1": len(ch_la), "PR+1_to_PR+2": len(ch_me),
+                                     "target_inputs": len(tin), "target_outputs": len(tout)})
+    print(f"home-column lines saved: {lines_json}", flush=True)
 
     def dist_cols(df):
-        d = np.full(len(df), np.nan)
-        if df is None or not len(df):
-            return d
-        Q = df[X].to_numpy(float)
-        for L, (o, n) in lines.items():
-            i = np.where(df.np.to_numpy() == L)[0]
-            if len(i):
-                q = Q[i] - o
-                d[i] = np.linalg.norm(q - np.outer(q @ n, n), axis=1) / col_um[L]
-        return d
+        return HC.dist_cols(df, lines, col_um)
 
     p1 = p1.assign(d=dist_cols(p1))
     p2 = p2.assign(d=dist_cols(p2))
