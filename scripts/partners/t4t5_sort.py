@@ -43,6 +43,8 @@ Read-only toward CAVE (is_latest_roots, throttled get_latest_roots, point lookup
 added cells; synapse snapshot caught up to now). Writes tmp/<stamp>_t4t5_sort_full.xlsx (printed as 'full workbook
 ...' for update_book.py), figures/t4t5/<stamp>_t4t5_sort.tsv, figures/t4t5/<stamp>_t4t5_sort_changes.tsv and
 figures/t4t5/<stamp>_t4t5_home_column_lines.json (the lines, faab.partners.home_column; read by home_column_sort.py).
+Since 2026-11-25 the LA / LO / LOP line directions come from their layers (HC.refine: photoreceptor sites in LA, T5
+dendrite sites in LO, T4/T5 terminal sites in LOP, from the PRs and T4T5s tabs), the mesh rule only as the fallback.
 Usage: t4t5_sort.py --book BOOK.xlsx [--tab PRg1toT4T5]"""
 import argparse
 import copy
@@ -142,6 +144,22 @@ def lmc_calls(wb):
             if IDS.fullmatch(d.get(k, "")):
                 out.setdefault(d[k], part)
                 break
+    return out
+
+
+def t4t5_types(wb):
+    """T4T5s tab: {root (curr, else orig) as int: putative_type}; {} without the tab"""
+    if "T4T5s" not in wb.sheetnames:
+        return {}
+    out, hdr = {}, None
+    for row in wb["T4T5s"].iter_rows(values_only=True):
+        v = [s(x) for x in row]
+        if v and v[0] == "root_id_orig":
+            hdr = {k: i for i, k in enumerate(v) if k}
+            continue
+        if hdr and v and IDS.fullmatch(v[0]):
+            cu = v[hdr["root_id_curr"]] if "root_id_curr" in hdr else ""
+            out[int(cu if IDS.fullmatch(cu) else v[0])] = v[hdr["putative_type"]] if "putative_type" in hdr else ""
     return out
 
 
@@ -308,13 +326,30 @@ def main():
 
     # ---- the home-column lines (faab.partners.home_column; saved for home_column_sort.py and the axis link)
     lines, col_um = HC.build(ch_la, ch_me, tin, tout)
+    # directions of the LA / LO / LOP lines from their own layers (2026-11-25: the mesh rule ran along the LO layer)
+    def layer_pts(df, side, L):
+        P = df[[f"{side}_x", f"{side}_y", f"{side}_z"]].to_numpy(float) * VOX
+        P = P[np.linalg.norm(P - lines[L][0], axis=1) <= 80]
+        return P[ol_meshes.assign(P, [L]) == L] if len(P) else P
+    layer = {}
+    if "LA_R" in lines and PR:
+        layer["LA_R"] = layer_pts(snap.synapses(pre=sorted(PR), when="now", positions=True, client=c), "pre", "LA_R")
+    tt = t4t5_types(wb)
+    t5 = sorted(k for k, v in tt.items() if v == "T5")
+    if "LO_R" in lines and t5:
+        layer["LO_R"] = layer_pts(snap.synapses(post=t5, when="now", positions=True, client=c), "post", "LO_R")
+    if "LOP_R" in lines and tt:
+        layer["LOP_R"] = layer_pts(snap.synapses(pre=sorted(tt), when="now", positions=True, client=c), "pre", "LOP_R")
+    lines, line_rep = HC.refine(lines, col_um, layer)
+    for L, r in line_rep.items():
+        print(f"  {L} direction: {r}", flush=True)
     print("home-column lines: " + "; ".join(f"{L} through {np.round(o, 1).tolist()} (column {col_um[L]:.1f} um)"
                                             for L, (o, _) in lines.items()), flush=True)
     lines_json = HC.save(HC.path_for(stamp), lines, col_um, book=os.path.abspath(a.book), built_by="t4t5_sort.py",
                          pr_group1=[str(x) for x in now(g1)], targets=[str(x) for x in now(path_ids["hop3"])],
                          pr_group1_cells=len(g1), targets_cells=len(path_ids["hop3"]),
                          n_synapses={"PRg1_to_PR+1": len(ch_la), "PR+1_to_PR+2": len(ch_me),
-                                     "target_inputs": len(tin), "target_outputs": len(tout)})
+                                     "target_inputs": len(tin), "target_outputs": len(tout)}, directions=line_rep)
     print(f"home-column lines saved: {lines_json}", flush=True)
 
     def dist_cols(df):

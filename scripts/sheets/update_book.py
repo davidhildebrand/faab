@@ -22,7 +22,7 @@ nobody worked on them; newly qualifying cells added); the tabs it changes are ex
 goes to tmp/<stamp>_update_<step>.log; the summaries and the exports
 (figures/sheets/<stamp>_FAABopticlobetargets-<tab>.xlsx) are printed.
 Usage: update_book.py BACKUP.xlsx [--edits E.json] [--add-inputs | --add-in2] [--no-t4t5-sort]
-       [--home-sort T4T5s ...] [--renumber-prs]"""
+       [--home-sort T4T5s ...] [--renumber-prs [--renumber-also 55 58 71]]"""
 import argparse
 import os
 import re
@@ -64,6 +64,8 @@ def main():
                     help="tabs scripts/sheets/home_column_sort.py orders by distance from the PR group 1 column")
     ap.add_argument("--renumber-prs", action="store_true",
                     help="renumber the right-side PR groups nobody has worked on by distance from PR group 1 (one-off)")
+    ap.add_argument("--renumber-also", nargs="+", default=[], metavar="N",
+                    help="with --renumber-prs: these worked-on groups too, unless a SeaTable note names their number")
     a = ap.parse_args()
     stamp = utc_stamp()
     book = os.path.abspath(a.book)
@@ -93,6 +95,8 @@ def main():
             args += ["--tabs", *a.home_sort]
         if a.renumber_prs:
             args.append("--renumber-prs")
+            if a.renumber_also:
+                args += ["--renumber-also", *a.renumber_also]
         if not a.no_t4t5_sort and lines:
             args += ["--lines", lines.group(1)]
         out = run("home_column_sort", args, stamp)

@@ -27,17 +27,25 @@ terminal spacing; the other neuropils scaled to the same number of columns).
       notes and 'PRs group N' / 'PR group N' elsewhere follow the new numbers. Every right group line gets
       'N.N columns from PR group 1 (lamina cartridge center)' in a far-right cell; the right section's title line
       says what was done. Writes figures/pr_groups/<stamp>_pr_group_renumber.tsv (old, new, distance, worked on).
---link  (no BOOK needed) the column as a Spelunker link: one yellow line per neuropil where the line runs inside it,
-      joined lamina -> medulla -> lobula -> lobula plate, PR group 1 and the T4/T5 candidates (ids saved with the
-      lines), the optic-lobe meshes; built on the README scene (faab.nglink). Writes tmp/<stamp>_home_column_ng.txt.
+      --renumber-also N ...: these worked-on groups are renumbered too (David 2026-11-25: "also renumber 55, 58, 71
+      unless someone has written a note specifically indicating the group number in SeaTable"), unless a SeaTable row
+      on one of their cells (the newest figures/sheets/*_seatable_aedes_main.tsv, or --seatable) names that number
+      ('group N', 'grp N', 'PRgN'). Notes written 'PRs_grp N' / 'grp N' become 'PR group N' / 'group N'.
+--link  (no BOOK needed) the column as a Spelunker link: one yellow line per neuropil where the line runs inside it
+      (the only parts distances are measured from), gray joins between neighboring neuropils' lines (drawing only:
+      lamina -> medulla, medulla -> lobula and -> lobula plate, lobula -> lobula plate), PR group 1 and the T4/T5
+      candidates (ids saved with the lines), the optic-lobe meshes; built on the README scene (faab.nglink). Writes
+      tmp/<stamp>_home_column_ng.txt.
 
 Read-only toward CAVE (is_latest_roots, throttled get_latest_roots; synapse snapshot caught up to now). Writes
 tmp/<stamp>_home_column_sort_full.xlsx (printed as 'full workbook ...' for update_book.py, with 'changed tabs: ...')
 and figures/sheets/<stamp>_home_column_sort_changes.tsv.
-Usage: home_column_sort.py BOOK.xlsx [--tabs T4T5s Mi1s] [--renumber-prs] [--lines JSON] [--cap 400] [--export]
+Usage: home_column_sort.py BOOK.xlsx [--tabs T4T5s Mi1s] [--renumber-prs [--renumber-also 55 58 71]] [--lines JSON]
+       [--cap 400] [--export]
        home_column_sort.py --link [--lines JSON]"""
 import argparse
 import copy
+import glob
 import json
 import os
 import re
@@ -71,8 +79,8 @@ PR_DIST = re.compile(r"^\d+(?:\.\d+)? columns from PR group 1 \((lamina cartridg
                      r"^no lamina or medulla sites")
 PR_SECTION = ("groups not worked on yet (status 'candidate', no proofreader or dates) renumbered {date} by the distance "
               "of their lamina cartridge center from the PR group 1 column (far-right value on each group line); "
-              "worked-on groups kept their numbers")
-GROUP_REF = re.compile(r"\b(groups?)(\s+)(\d+(?:\s*(?:,|and|&|/)\s*\d+)*)", re.I)
+              "worked-on groups kept their numbers{also}")
+GROUP_REF = re.compile(r"(?<![A-Za-z])(groups?|grps?)([\s_#]+)(\d+(?:\s*(?:,|and|&|/)\s*\d+)*)", re.I)
 OTHER_REF = re.compile(r"\b(PRs?\s+groups?)(\s+)(\d+(?:\s*(?:,|and|&|/)\s*\d+)*)", re.I)
 AXIS_COLOR = "#F0E442"  # Okabe-Ito yellow
 CONF = {"annotated": 0, "high": 1, "medium": 2, "low": 3}  # T4T5s confidence tiers
@@ -275,14 +283,30 @@ def worked_on(ws, g):
                ("proofreader", "pr_date", "checker", "chk_date")) for r in g["rows"])
 
 
+GRP_FORM = re.compile(r"(?<![A-Za-z])(PRs?[\s_]*)?grps?[\s_#]*(?=\d)", re.I)
+
+
 def renumber_text(t, mapping, rx):
+    """group numbers in t through mapping; 'PRs_grp N' / 'grp N' written as 'PR group N' / 'group N' (David
+    2026-11-25: "'PRs_grp' is not right. 'PR group ##' or 'PRg##'")"""
+    t = GRP_FORM.sub(lambda m: "PR group " if m.group(1) else "group ", t)
+
     def sub(m):
         nums = re.sub(r"\d+", lambda q: str(mapping.get(int(q.group()), int(q.group()))), m.group(3))
         return m.group(1) + m.group(2) + nums
     return rx.sub(sub, t)
 
 
-def renumber_prs(wb, lines, col_um, snap, c, date, stamp):
+def seatable_names_group(st, ids, n):
+    """SeaTable rows on these cells whose text names group n: [(serial_id, text)]"""
+    rx = re.compile(rf"(?<![A-Za-z0-9])(?:PR\s*)?(?:groups?|grps?)[\s_#:]*0*{n}(?!\d)|\bPRg\s*0*{n}(?!\d)", re.I)
+    hit = st[st.root_now.isin(ids) | st.root_id.isin(ids)]
+    cols = [k for k in hit.columns if k not in ("supervoxel_id", "serial_id", "root_id", "root_now", "point_xyz",
+                                                "soma_xyz", "nucleus_id")]
+    return [(r["serial_id"], r[k]) for _, r in hit.iterrows() for k in cols if rx.search(str(r[k]))]
+
+
+def renumber_prs(wb, lines, col_um, snap, c, date, stamp, also=(), seatable=None):
     ws = wb["PRs"]
     G, sec, L_row = pr_groups(ws)
     if sec is None:
@@ -297,13 +321,33 @@ def renumber_prs(wb, lines, col_um, snap, c, date, stamp):
             cu = s(ws.cell(r, cols["root_id_curr"]).value) if "root_id_curr" in cols else ""
             root_of[(g, r)] = cu if IDS.fullmatch(cu) else s(ws.cell(r, cols["root_id_orig"]).value)
     cur = live_roots(c, root_of.values())
+    renum_worked = []
+    if also:
+        path = seatable or sorted(glob.glob(fig("*_seatable_aedes_main.tsv")))[-1]
+        st = pd.read_csv(path, sep="\t", dtype=str).fillna("")
+        print(f"SeaTable notes naming the group numbers of {sorted(also)} ({os.path.basename(path)}):", flush=True)
+        for g in sorted(also):
+            if g not in G or not work[g]:
+                print(f"  group {g}: {'not a right-side group' if g not in G else 'not worked on (renumbered anyway)'}")
+                continue
+            ids = {root_of[(g, r)] for r in G[g]["rows"]} | {str(p) for r in G[g]["rows"]
+                                                              for p in cur.get(root_of[(g, r)], [])}
+            ids |= {s(ws.cell(r, G[g]["cols"]["root_id_orig"]).value) for r in G[g]["rows"]}
+            hits = seatable_names_group(st, ids, g)
+            if hits:
+                print(f"  group {g}: kept (SeaTable {', '.join(f'serial {k}: {v[:80]!r}' for k, v in hits)})")
+            else:
+                work[g] = False
+                renum_worked.append(g)
+                print(f"  group {g}: no SeaTable note names {g}; renumbered", flush=True)
     pieces = sorted({p for v in cur.values() for p in v})
     S = synapse_sites(snap, c, pieces, "pre", None, labels=["LA_R", "ME_R"])
     cen = {L: S[S.np == L].groupby("cell").agg(n=("x", "size"), x=("x", "median"), y=("y", "median"),
                                                 z=("z", "median")) for L in ("LA_R", "ME_R")}
     rows_t = []
     for g, x in G.items():
-        rec = dict(old=g, worked_on=work[g], members=len(x["rows"]))
+        rec = dict(old=g, worked_on=work[g] or g in renum_worked, renumbered_although_worked=g in renum_worked,
+                   members=len(x["rows"]))
         for L in ("LA_R", "ME_R"):
             c_ = cen[L]
             P = [c_.loc[p, ["x", "y", "z"]].to_numpy(float) for r in x["rows"] for p in cur.get(root_of[(g, r)], [])
@@ -384,7 +428,11 @@ def renumber_prs(wb, lines, col_um, snap, c, date, stamp):
             cell.value = txt
         cell._style = copy.copy(ws.cell(rr, 1)._style)
     ws.column_dimensions[openpyxl.utils.get_column_letter(dc)].width = 40
-    sec_txt = PR_SECTION.format(date=date)
+    also_txt = (f"; worked-on groups {', '.join(str(g) for g in renum_worked[:-1])}"
+                f"{' and ' if len(renum_worked) > 1 else ''}{renum_worked[-1]} were renumbered too (now "
+                f"{', '.join(str(new_of[g]) for g in renum_worked)}; no SeaTable note names their numbers)"
+                if renum_worked else "")
+    sec_txt = PR_SECTION.format(date=date, also=also_txt)
     cell = ws.cell(sec, dc)
     if s(cell.value) != sec_txt:
         note("PRs", sec, dc, cell.value, sec_txt, "renumbering note")
@@ -394,8 +442,8 @@ def renumber_prs(wb, lines, col_um, snap, c, date, stamp):
     T = T.reset_index().sort_values("new")
     T["distance_columns"] = T.dist.round(2)
     out = fig(f"{stamp}_pr_group_renumber.tsv")
-    T[["old", "new", "worked_on", "members", "distance_columns", "measured_in", "members_LA_R", "members_ME_R",
-       "center_um"]].to_csv(out, sep="\t", index=False)
+    T[["old", "new", "worked_on", "renumbered_although_worked", "members", "distance_columns", "measured_in",
+       "members_LA_R", "members_ME_R", "center_um"]].to_csv(out, sep="\t", index=False)
     print(f"renumbering table {out}", flush=True)
     return T
 
@@ -406,10 +454,12 @@ def link(lines, meta, stamp):
     seg = {L: HC.extent(L, *lines[L]) for L in order}
     vox = lambda p: (np.asarray(p, float) / HC.VOX).round(1).tolist()  # noqa: E731
     parts = [[vox(a), vox(b)] for a, b in seg.values()]
-    for A, B in zip(order, order[1:]):  # join each neuropil's line to the next at their nearest ends
-        ends = [(np.linalg.norm(p - q), p, q) for p in seg[A] for q in seg[B]]
-        _, p, q = min(ends, key=lambda e: e[0])
-        parts.append([vox(p), vox(q)])
+    joins = []  # drawing only: the neuropils' lines joined at their nearest ends, along the cells' routes
+    for A, B in (("LA_R", "ME_R"), ("ME_R", "LO_R"), ("ME_R", "LOP_R"), ("LO_R", "LOP_R")):
+        if A in seg and B in seg:
+            ends = [(np.linalg.norm(p - q), p, q) for p in seg[A] for q in seg[B]]
+            _, p, q = min(ends, key=lambda e: e[0])
+            joins.append([vox(p), vox(q)])
     for L in order:
         a, b = seg[L]
         print(f"  {L}: {np.linalg.norm(b - a):.0f} um inside, from {np.round(a, 1).tolist()} to {np.round(b, 1).tolist()} um",
@@ -426,7 +476,10 @@ def link(lines, meta, stamp):
         neurons.append({"name": f"T4/T5 candidates of PRg1toT4T5 ({count(meta['targets'], meta.get('targets_cells'))})",
                         "color": "#009E73", "ids": meta["targets"]})
     spec = {"meshes": [{"kind": "OL", "segments": ["21", "22", "23", "24"]}], "neurons": neurons,
-            "annotations": [{"name": "PR group 1 column (line)", "color": AXIS_COLOR, "lines": parts, "width": 4},
+            "annotations": [{"name": "PR group 1 column, per neuropil (distances measured from these)",
+                             "color": AXIS_COLOR, "lines": parts, "width": 4},
+                            {"name": "joins between neuropils (drawing only)", "color": "#999999", "lines": joins,
+                             "width": 1.5},
                             {"name": "line anchors", "color": AXIS_COLOR, "points": [vox(o) for o, _ in lines.values()],
                              "visible": False}],
             "layout": "3d", "compact": True, "position": vox(centre), "scale": 12000, "view": "anterior"}
@@ -443,6 +496,9 @@ def main():
     ap.add_argument("book", nargs="?")
     ap.add_argument("--tabs", nargs="*", default=[])
     ap.add_argument("--renumber-prs", action="store_true")
+    ap.add_argument("--renumber-also", nargs="*", type=int, default=[],
+                    help="worked-on groups renumbered too unless a SeaTable note names their number")
+    ap.add_argument("--seatable", help="SeaTable snapshot TSV for --renumber-also (default: the newest)")
     ap.add_argument("--link", action="store_true")
     ap.add_argument("--lines")
     ap.add_argument("--cap", type=int, default=400, help="synapses per cell and direction (seeded sample)")
@@ -472,7 +528,7 @@ def main():
             changed.append(tab)
     if a.renumber_prs:
         n0 = len(LOG)
-        renumber_prs(wb, lines, col_um, snap, c, date, stamp)
+        renumber_prs(wb, lines, col_um, snap, c, date, stamp, also=a.renumber_also, seatable=a.seatable)
         changed += sorted({x["tab"] for x in LOG[n0:]} - set(changed))
     full = os.path.join(TMP, f"{stamp}_home_column_sort_full.xlsx")
     wb.save(full)
